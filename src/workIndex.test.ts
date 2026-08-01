@@ -151,6 +151,81 @@ test('awaiting-eyes reaches the LIVE set and leads the grouping', async () => {
   idx.stop();
 });
 
+const rel = (path: string, title: string, dependsOn: string[] = []) => ({
+  path,
+  title,
+  status: 'active' as const,
+  tags: [],
+  claim: null,
+  tasks: [],
+  dependsOn,
+  reader: 't',
+});
+const indexOfItems = (items: ReturnType<typeof rel>[]) => {
+  const idx = new WorkIndex([{ name: 't', watchRoots: () => [], read: () => items }]);
+  idx.refresh();
+  return idx;
+};
+
+test('the parent is the first depends_on entry, when it is an umbrella', () => {
+  // depends_on mixes parentage with prerequisites. The separator, consistent
+  // across 623 real plans with zero counterexamples, is that the umbrella comes
+  // first — so the prerequisite listed after it must NOT become the parent.
+  const idx = indexOfItems([
+    rel('plans/notation-umbrella.md', 'Notation — Umbrella'),
+    rel('plans/prereq.md', 'A prerequisite'),
+    rel('plans/child.md', 'Child', ['plans/notation-umbrella.md', 'plans/prereq.md']),
+  ]);
+  assert.equal(idx.byPath('plans/child.md')?.parent, 'plans/notation-umbrella.md');
+  assert.equal(idx.byPath('plans/notation-umbrella.md')?.isUmbrella, true);
+  idx.stop();
+});
+
+test('a first entry that is NOT an umbrella yields no parent', () => {
+  // beadgame's depends_on is almost entirely prerequisites. Nesting under those
+  // would invent a hierarchy that does not exist, so the rule stays conservative.
+  const idx = indexOfItems([
+    rel('plans/prereq.md', 'Just a prerequisite'),
+    rel('plans/child.md', 'Child', ['plans/prereq.md']),
+  ]);
+  assert.equal(idx.byPath('plans/child.md')?.parent, undefined);
+  idx.stop();
+});
+
+test('a parent reference resolves by filename when the path is partial', () => {
+  // beadgame writes bare filenames far more often than full paths; that fallback
+  // recovered 70 of its 117 edges.
+  const idx = indexOfItems([
+    rel('game/plans/unity/2026-07-14-141-player-ui-umbrella.md', 'Player UI umbrella'),
+    rel('game/plans/unity/2026-07-14-142-linkage.md', 'Linkage', ['2026-07-14-141-player-ui-umbrella.md']),
+  ]);
+  assert.equal(
+    idx.byPath('game/plans/unity/2026-07-14-142-linkage.md')?.parent,
+    'game/plans/unity/2026-07-14-141-player-ui-umbrella.md'
+  );
+  idx.stop();
+});
+
+test('an ambiguous filename yields no parent rather than a wrong one', () => {
+  const idx = indexOfItems([
+    rel('a/plans/dup-umbrella.md', 'Dup umbrella one'),
+    rel('b/plans/dup-umbrella.md', 'Dup umbrella two'),
+    rel('c/plans/child.md', 'Child', ['dup-umbrella.md']),
+  ]);
+  assert.equal(idx.byPath('c/plans/child.md')?.parent, undefined);
+  idx.stop();
+});
+
+test('a parent cycle is broken rather than left to hang a renderer', () => {
+  const idx = indexOfItems([
+    rel('p/a-umbrella.md', 'A umbrella', ['p/b-umbrella.md']),
+    rel('p/b-umbrella.md', 'B umbrella', ['p/a-umbrella.md']),
+  ]);
+  const parents = idx.all().map((i) => i.parent).filter(Boolean);
+  assert.ok(parents.length < 2, 'at least one edge dropped, so walking up terminates');
+  idx.stop();
+});
+
 test('the director role lock is not counted as work', async () => {
   // It is a plan only because /plans is the claim mechanism — session records key
   // on plan_path, so the lock must be a file `/plans claim` can own. By nature it

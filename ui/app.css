@@ -387,6 +387,18 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .work-item.status-active { border-left: 3px solid var(--ok); }
 .work-item.status-planning { border-left: 3px solid var(--line); }
 
+/* The umbrella a plan hangs under, when that umbrella is in another status
+   group and so cannot be its visual parent. */
+.umbrella-of {
+  margin-left: 17px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .bar { height: 2px; background: var(--line); border-radius: 2px; margin: 5px 0 1px 17px; overflow: hidden; }
 .bar .fill { height: 100%; background: var(--accent); }
 

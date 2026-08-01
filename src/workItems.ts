@@ -113,6 +113,21 @@ export type WorkItem = {
   claim: WorkClaim | null;
   /** EMPTY MEANS NO TASKS, not zero-of-zero. See taskSummary(). */
   tasks: WorkTask[];
+  /** Raw relations as the project wrote them. Format varies — see resolveParents. */
+  dependsOn: string[];
+  /**
+   * Repo-relative path of this item's UMBRELLA, when one can be proven.
+   *
+   * `depends_on` does double duty: prerequisites AND parentage. The separating
+   * convention, measured across 623 plans in both repos, is that the parent is
+   * the FIRST entry when that entry is an umbrella — with not one counterexample
+   * (tulito 40/44 plans, beadgame 4/94, zero cases of an umbrella appearing
+   * anywhere but first). So this stays conservative: no umbrella first, no parent,
+   * and the item renders exactly as it does today.
+   */
+  parent?: string;
+  /** Named as an umbrella, and therefore able to be a parent. */
+  isUmbrella?: boolean;
   /** Which reader produced this, for debugging a wrong-looking panel. */
   reader: string;
   /**

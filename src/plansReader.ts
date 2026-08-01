@@ -113,20 +113,43 @@ export function parseFrontmatter(text: string): { fm: Record<string, string | st
   const end = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
   if (end < 0) return { fm: {}, bodyLine: 0 };
 
+  const clean = (s: string) => s.trim().replace(/^["']|["']$/g, '');
   const fm: Record<string, string | string[]> = {};
-  for (const line of lines.slice(1, end)) {
-    const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
+
+  for (let i = 1; i < end; i++) {
+    const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(lines[i]);
     if (!m) continue;
-    const raw = m[2].trim();
-    if (!raw || raw === 'null' || raw === '~') continue; // absent, not empty-string
+    // Strip a trailing YAML comment. The plan TEMPLATE ships fields annotated
+    // `status: planning   # idea | planning | ...`, and a plan scaffolded from it
+    // keeping the comment would otherwise parse its status as that whole string.
+    const raw = m[2].replace(/\s+#.*$/, '').trim();
+
+    if (!raw) {
+      // A bare `key:` may head a BLOCK list — which is how tulito writes
+      // depends_on in 27 of its plans against 21 inline. Only handling `[a, b]`
+      // silently dropped more than half its relations, and with them most of the
+      // umbrella parentage.
+      const block: string[] = [];
+      for (let j = i + 1; j < end; j++) {
+        const item = /^\s+-\s+(.*)$/.exec(lines[j]);
+        if (!item) break; // the next key, or anything else, ends the list
+        const v = clean(item[1].replace(/\s+#.*$/, ''));
+        if (v) block.push(v);
+      }
+      if (block.length) {
+        fm[m[1]] = block;
+        i += block.length;
+      }
+      continue; // bare key with nothing under it is absent, not empty-string
+    }
+
+    if (raw === 'null' || raw === '~') continue; // absent, not empty-string
     if (raw.startsWith('[')) {
-      fm[m[1]] = raw
-        .replace(/^\[|\]$/g, '')
-        .split(',')
-        .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-        .filter(Boolean);
+      // Bounded match, so a trailing comment after `]` cannot leak into the last item.
+      const inner = /^\[(.*?)\]/.exec(raw)?.[1] ?? '';
+      fm[m[1]] = inner.split(',').map(clean).filter(Boolean);
     } else {
-      fm[m[1]] = raw.replace(/^["']|["']$/g, '');
+      fm[m[1]] = clean(raw);
     }
   }
   return { fm, bodyLine: end + 1 };
@@ -290,6 +313,7 @@ export function createPlansReader(opts: PlansReaderOptions) {
             started: str(fm.started),
             lastTouched: str(fm.last_touched),
             tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
+            dependsOn: Array.isArray(fm.depends_on) ? fm.depends_on : fm.depends_on ? [String(fm.depends_on)] : [],
             claim,
             tasks: parseTasks(lines, bodyLine),
             reader: 'plans',

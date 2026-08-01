@@ -280,8 +280,9 @@ function renderTask(item, task) {
   return row;
 }
 
-function renderWorkItem(item) {
+function renderWorkItem(item, depth = 0, orphanParent = null) {
   const n = el('div', `item work-item status-${item.status}`);
+  if (depth) n.style.marginLeft = `${depth * 11}px`;
   const head = el('div', 'work-head');
 
   const t = taskSummary(item);
@@ -339,6 +340,16 @@ function renderWorkItem(item) {
     n.append(bar);
   }
 
+  // A child whose umbrella sits in ANOTHER status group cannot be nested under
+  // it without breaking status-first ordering — and status-first is what keeps
+  // awaiting-eyes at the top. So it stays in its own group and carries the
+  // umbrella as a breadcrumb instead of losing the context entirely.
+  if (orphanParent) {
+    const bc = el('div', 'umbrella-of', `↳ ${orphanParent.spoken}`);
+    bc.title = `Under the umbrella "${orphanParent.spoken}" (${orphanParent.status})`;
+    n.append(bc);
+  }
+
   if (expanded.has(item.path)) {
     const list = el('div', 'tasks');
     for (const task of item.tasks) list.append(renderTask(item, task));
@@ -356,9 +367,12 @@ const ALL_ORDER = [...LIVE_ORDER, 'idea', 'review', 'unknown', 'parked', 'shippe
 /** 'in-flight' (the default) or 'all'. The panel is a work surface, not an archive. */
 let workScope = 'in-flight';
 let workTotal = 0;
+/** path → item, for resolving a parent that lives in a different group. */
+let byPathAll = new Map();
 
 function renderWork() {
   const panel = $('work-panel');
+  byPathAll = new Map(workItems.map((i) => [i.path, i]));
   // Say what is being shown AND what exists — "69" alone reads as the total.
   // "69" alone reads as the total. "69 of 571" says what is shown and what exists,
   // and still fits the 300px panel on one line.
@@ -389,7 +403,23 @@ function renderWork() {
     };
     panel.append(hdr);
 
-    if (open) for (const item of group) panel.append(renderWorkItem(item));
+    if (open) {
+      // Nest within the group: an umbrella and its children render as a tree when
+      // they share a status, which is the common case (umbrellas are active and
+      // so is most of what hangs off them).
+      const inGroup = new Set(group.map((i) => i.path));
+      const kids = new Map();
+      for (const i of group) {
+        if (!i.parent || !inGroup.has(i.parent)) continue;
+        (kids.get(i.parent) ?? kids.set(i.parent, []).get(i.parent)).push(i);
+      }
+      const emit = (item, depth) => {
+        const parentElsewhere = item.parent && !inGroup.has(item.parent) ? byPathAll.get(item.parent) : null;
+        panel.append(renderWorkItem(item, depth, depth === 0 ? parentElsewhere : null));
+        for (const k of kids.get(item.path) ?? []) emit(k, depth + 1);
+      };
+      for (const item of group) if (!item.parent || !inGroup.has(item.parent)) emit(item, 0);
+    }
   }
 }
 

@@ -19,6 +19,34 @@ test('frontmatter: scalars, lists, and null-as-absent', () => {
   assert.equal(bodyLine, 7);
 });
 
+test('frontmatter: a BLOCK list is read, not silently dropped', () => {
+  // tulito writes depends_on this way in 27 of its plans against 21 inline.
+  // Handling only `[a, b]` dropped more than half its relations — and with them
+  // most of the umbrella parentage the panel needs to nest anything.
+  const { fm } = parseFrontmatter(
+    ['---', 'status: active', 'depends_on:', '  - plans/a.md', '  - plans/b.md', 'priority: P1', '---', '', '# T'].join('\n')
+  );
+  assert.deepEqual(fm.depends_on, ['plans/a.md', 'plans/b.md']);
+  assert.equal(fm.priority, 'P1', 'the key after the block list is still read');
+  assert.equal(fm.status, 'active');
+});
+
+test('frontmatter: a bare key with nothing under it is absent', () => {
+  const { fm } = parseFrontmatter(['---', 'depends_on:', 'priority: P2', '---', '', '# T'].join('\n'));
+  assert.equal(fm.depends_on, undefined);
+  assert.equal(fm.priority, 'P2');
+});
+
+test('frontmatter: trailing YAML comments are not part of the value', () => {
+  // The plan TEMPLATE ships fields annotated this way; a plan scaffolded from it
+  // that kept the comment would otherwise get a status of "planning   # idea |…".
+  const { fm } = parseFrontmatter(
+    ['---', 'status: planning   # idea | planning | active', 'tags: [a, b]   # free-form', '---', '', '# T'].join('\n')
+  );
+  assert.equal(fm.status, 'planning');
+  assert.deepEqual(fm.tags, ['a', 'b']);
+});
+
 test('frontmatter: a plan without any is not an error', () => {
   const { fm, bodyLine } = parseFrontmatter('# Just a title\n\nprose');
   assert.deepEqual(fm, {});

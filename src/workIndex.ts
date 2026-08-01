@@ -143,6 +143,67 @@ export class WorkIndex {
     if (this.poller) clearInterval(this.poller);
   }
 
+  /**
+   * Work out which items hang under an umbrella.
+   *
+   * `depends_on` mixes two relations — prerequisites and parentage — and nothing
+   * in either repo's README separates them. What DOES separate them is a
+   * convention that turns out to be perfectly consistent: the parent is the FIRST
+   * entry, when that entry is an umbrella. Measured over 623 plans, an umbrella
+   * appears anywhere other than first exactly zero times.
+   *
+   * So the rule is deliberately conservative: only a first entry, only when it
+   * resolves to a plan named as an umbrella. Everything else keeps no parent and
+   * renders flat, which is what beadgame gets today (4 edges) and tulito does not
+   * (40). It degrades to the current behaviour rather than guessing.
+   *
+   * Paths are written inconsistently — full repo-relative in tulito, bare
+   * filenames in most of beadgame, occasionally without the `.md` — so resolution
+   * falls back to a unique basename with the extension normalised. That leaves
+   * exactly 1 unresolved edge across both repos (a target that was renamed or
+   * deleted), which is a /tidyrepo matter rather than something to paper over.
+   */
+  private resolveParents(items: WorkItem[]) {
+    const byPath = new Map(items.map((i) => [i.path, i]));
+    const byBase = new Map<string, WorkItem[]>();
+    for (const i of items) {
+      const base = i.path.split('/').pop()!;
+      (byBase.get(base) ?? byBase.set(base, []).get(base)!).push(i);
+    }
+    const resolve = (raw: string): WorkItem | undefined => {
+      const hit = byPath.get(raw);
+      if (hit) return hit;
+      const base = raw.split('/').pop()!.replace(/(\.md)?$/i, '.md');
+      const cands = byBase.get(base);
+      // An ambiguous basename is no answer at all — better flat than wrong.
+      return cands?.length === 1 ? cands[0] : undefined;
+    };
+
+    for (const i of items) i.isUmbrella = /umbrella/i.test(i.path) || /umbrella/i.test(i.title);
+    for (const i of items) {
+      const first = i.dependsOn?.[0];
+      if (!first) continue;
+      const target = resolve(first);
+      if (target && target.isUmbrella && target.path !== i.path) i.parent = target.path;
+    }
+
+    // A cycle would hang any renderer that walks upward. Break it rather than
+    // trust the data — this costs one pass and removes a whole class of hang.
+    for (const i of items) {
+      const seen = new Set<string>([i.path]);
+      let cur = i.parent;
+      while (cur) {
+        if (seen.has(cur)) {
+          console.warn(`  work: parent cycle at ${i.path} — dropping its parent`);
+          i.parent = undefined;
+          break;
+        }
+        seen.add(cur);
+        cur = byPath.get(cur)?.parent;
+      }
+    }
+  }
+
   /** Whole-corpus re-read. ~571 plans in beadgame; measured in tens of ms. */
   refresh() {
     const drafts = this.readers.flatMap((r) => {
@@ -164,6 +225,8 @@ export class WorkIndex {
       .map((d) => ({ ...d, spoken: named.get(d.path) ?? d.title, roleLock: d.path === this.roleLockPath }))
       .sort((a, b) => (b.lastTouched ?? '').localeCompare(a.lastTouched ?? '') || a.path.localeCompare(b.path));
 
+    this.resolveParents(this.items);
+
     // An explicit name that did not stick means two plans asked for the same one.
     // Say so — a silently ignored name is a reference pointing at the wrong plan.
     for (const i of this.items) {
@@ -177,7 +240,7 @@ export class WorkIndex {
     const sig = this.items
       .map((i) => {
         const t = taskSummary(i);
-        return `${i.path}|${i.spoken}|${i.status}|${i.claim?.live ? 'L' : i.claim?.owner ? 'o' : ''}|${t ? `${t.done}/${t.total}` : '-'}`;
+        return `${i.path}|${i.spoken}|${i.status}|${i.parent ?? ''}|${i.claim?.live ? 'L' : i.claim?.owner ? 'o' : ''}|${t ? `${t.done}/${t.total}` : '-'}`;
       })
       .join('\n');
     if (sig === this.signature) return;
