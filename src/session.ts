@@ -20,6 +20,7 @@ import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
+import { summarizeTool } from './activity.ts';
 
 type InputStream = AsyncIterable<SDKUserMessage> & { push(m: SDKUserMessage): void; end(): void };
 
@@ -422,7 +423,12 @@ export class SessionManager {
         this.bus.publish({ type: 'assistant', text: read, spans, voiceText: raw, links: this.links(read) });
       } else if (b.type === 'tool_use' && !String(b.name).endsWith('__say')) {
         const detail = JSON.stringify(b.input ?? {}).slice(0, 200);
-        this.bus.publish({ type: 'activity', tool: String(b.name), detail });
+        this.bus.publish({
+          type: 'activity',
+          tool: String(b.name),
+          detail,
+          summary: summarizeTool(String(b.name), b.input ?? {}, this.cfg.repo),
+        });
       }
     }
   }

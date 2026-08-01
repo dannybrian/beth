@@ -80,7 +80,9 @@ export type UIMessage =
       spans?: TextSpan[];
       refLink?: TextLink;
     }
-  | { type: 'activity'; tool: string; detail: string }
+  // `summary` is the glanceable line (activity.ts); `detail` is the raw input,
+  // kept so the page can hang it off a title — the summary is lossy on purpose.
+  | { type: 'activity'; tool: string; detail: string; summary?: string }
   | { type: 'ask'; id: string; questions: AskQuestion[] }
   | { type: 'ask_resolved'; id: string; answers: Record<string, string> }
   // `canAlways` is false when the SDK offered no rule that would cover this call

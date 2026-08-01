@@ -150,7 +150,14 @@ const renderSay = (m) =>
     else if (m.ref) n.append(el('span', 'ref', m.ref));
   });
 
-const renderActivity = (m) => entry('activity', (n) => (n.textContent = `⚙ ${m.tool} ${m.detail}`));
+// A verb and a subject, not the JSON. The full input is one hover away, because
+// the summary is lossy on purpose and the moment you need the arguments you need
+// all of them.
+const renderActivity = (m) =>
+  entry('activity', (n) => {
+    n.textContent = `⚙ ${m.summary || `${m.tool} ${m.detail}`}`;
+    n.title = `${m.tool} ${m.detail}`;
+  });
 const renderEvent = (m) =>
   entry('event', (n) => (n.textContent = `${m.event.source} · ${m.event.kind} · ${m.event.text}`));
 
@@ -610,16 +617,27 @@ const handlers = {
   ask_resolved: (m) => askCards.get(m.id)?.classList.add('answered'),
   approval: renderApproval,
   approval_resolved: (m) => resolveApprovalCard(m.id, m.allowed, m.always),
-  usage: (m) => renderUsage(m.usage),
+  usage: (m) => {
+    renderUsage(m.usage);
+    ctxPct = m.usage.contextPct;
+    paintProgress();
+  },
   status: (m) => {
     // A turn in flight is the conversation still happening, even in silence.
     if (m.state === 'thinking') keepVoiceAlive();
+    turnInFlight = m.state === 'thinking';
+    setBusy();
     $('status-dot').className = `dot ${m.state}`;
     // A deliberate stop is not a failure — mark it quietly.
     if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
   },
-  pending: renderPending,
+  pending: (m) => {
+    renderPending(m);
+    // The stream carries RUNNING workers only, so this is a count of live work.
+    workersRunning = m.workers.length;
+    setBusy();
+  },
   work: (m) => {
     workTotal = m.total ?? m.items.length;
     // The stream only carries the in-flight slice; in 'all' mode re-pull so the
@@ -645,6 +663,11 @@ const handlers = {
     // means that utterance is over, one way or another.
     if (m.state === 'hearing') showInterim(m.detail ?? '');
     else if (m.state === 'ignored' || m.state === 'duplicate' || m.state === 'disconnected') clearInterim();
+    // She has something to say and no channel to say it through. Her voice does
+    // not depend on his mic: with the mic off the session opens MUTED, so this
+    // costs him a channel but never carries his words. Silence is chosen with
+    // the speech level (`off`), which stops anything queueing server-side — so
+    // reaching here at all means he asked to be spoken to.
     // The harness has something to say and no channel to say it through. Only
     // an ARMED mic opens one: voice off is a deliberate choice for silence, and
     // this must never be the thing that starts billing behind his back.
@@ -664,6 +687,75 @@ const handlers = {
     feedEvent(m.event);
   },
 };
+
+// --- in-progress indicator -------------------------------------------------
+//
+// A turn with no outward sign is indistinguishable from a hang — the same
+// problem her spoken narration solves for the ear. Tracks a turn in flight AND
+// background workers, because "nothing is happening" and "a worker is building
+// images" look identical from the composer otherwise.
+
+let turnInFlight = false;
+let workersRunning = 0;
+let busySince = 0;
+let busyTick = null;
+let ctxPct = 0;
+
+const mmss = (ms) => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+function paintProgress() {
+  const busy = turnInFlight || workersRunning > 0;
+  $('progress').hidden = !busy;
+  if (!busy) return;
+  $('progress-time').textContent = mmss(Date.now() - busySince);
+  const ctx = $('progress-ctx');
+  ctx.firstElementChild.style.width = `${Math.min(100, ctxPct)}%`;
+  ctx.className = `ctx${ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : ''}`;
+  ctx.title = `context ${ctxPct.toFixed(1)}% used`;
+  $('progress-note').textContent = workersRunning
+    ? `${workersRunning} worker${workersRunning > 1 ? 's' : ''}`
+    : '';
+}
+
+/** Context grows DURING a turn, so the meter is polled rather than left stale. */
+async function pollContext() {
+  try {
+    const c = await (await fetch('/api/context')).json();
+    if (typeof c.percentage === 'number') ctxPct = c.percentage;
+  } catch {
+    /* keep the last known value — a failed poll is not news */
+  }
+}
+
+function setBusy() {
+  const busy = turnInFlight || workersRunning > 0;
+  // Hold the voice channel open for the duration of the work. The wait for a
+  // mouth is per session, so a job that closes and reopens one per announcement
+  // pays it over and over — see WORKING_IDLE_CLOSE_MS.
+  try {
+    voice?.setWorking(busy);
+  } catch {
+    /* voice may not be armed */
+  }
+  if (busy && !busyTick) {
+    busySince = Date.now();
+    void pollContext();
+    // One second is the resolution of the clock; context is polled far less
+    // often, because it costs a round trip and moves in steps, not smoothly.
+    let ticks = 0;
+    busyTick = setInterval(() => {
+      if (++ticks % 5 === 0) void pollContext();
+      paintProgress();
+    }, 1000);
+  } else if (!busy && busyTick) {
+    clearInterval(busyTick);
+    busyTick = null;
+  }
+  paintProgress();
+}
 
 // --- voice ------------------------------------------------------------------
 

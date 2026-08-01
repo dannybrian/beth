@@ -89,6 +89,15 @@
           </svg>
         </button>
         <textarea id="input" rows="1" placeholder="Talk to the director…" autofocus></textarea>
+        <!-- Visible only while something is actually running for her. A turn with
+             no outward sign is indistinguishable from a hang — which is the same
+             reason she narrates before a long operation. -->
+        <div id="progress" class="progress" hidden>
+          <span class="spin" aria-hidden="true"></span>
+          <span id="progress-time" class="t">0:00</span>
+          <span id="progress-ctx" class="ctx" title="context used"><i></i></span>
+          <span id="progress-note" class="note"></span>
+        </div>
         <button id="send">Send</button>
         <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
         <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>
