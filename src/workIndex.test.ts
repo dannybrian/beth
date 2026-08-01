@@ -9,8 +9,14 @@ import { createPlansReader } from './plansReader.ts';
 /**
  * Poll rather than sleep a fixed amount. Filesystem events have no guaranteed
  * latency, and a fixed wait is exactly how a watcher test becomes flaky.
+ *
+ * The DEADLINE is generous for the same reason. `node --test` runs the files in
+ * parallel, so a watcher can be waiting on an event while the machine is busy;
+ * 4s was enough to go red about once in a dozen full-suite runs while passing
+ * every time in isolation. Waiting longer costs nothing when the test passes —
+ * this returns the moment the condition holds — and only lengthens real failures.
  */
-async function waitFor(fn: () => boolean, ms = 4000): Promise<boolean> {
+async function waitFor(fn: () => boolean, ms = 20_000): Promise<boolean> {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
     if (fn()) return true;
