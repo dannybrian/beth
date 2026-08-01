@@ -94,15 +94,6 @@ const liveInstances = () => {
   return out;
 };
 
-// --- a free port, so a second repo does not collide with the first ---
-const portFree = (p) =>
-  new Promise((resolve) => {
-    const s = createServer();
-    s.once('error', () => resolve(false));
-    s.once('listening', () => s.close(() => resolve(true)));
-    s.listen(p, '127.0.0.1');
-  });
-
 const running = liveInstances();
 const sameRepo = running.find((r) => r.repo === repo);
 if (sameRepo) {
@@ -112,6 +103,31 @@ if (sameRepo) {
   console.error(`Open http://localhost:${sameRepo.port}, or stop that one first.`);
   process.exit(1);
 }
+
+// --- a free port, so a second repo does not collide with the first ---
+//
+// ⚠️ Probing 127.0.0.1 alone is NOT enough, and getting this wrong is expensive.
+// The voice server binds with `listen(port)` and no host, which is the IPv6
+// wildcard — so a probe on IPv4 loopback finds :4621 "free" while beadgame's
+// voice port is sitting right there. That is not hypothetical: a tulito instance
+// took 4621 as its UI port, the two coexisted because one was `*:4621` and the
+// other `127.0.0.1:4621`, and whatever the tunnel forwarded landed on whichever
+// answered first. Voice broke in a way that pointed at everything except this.
+//
+// So: a port is free only if it can be bound on BOTH the wildcard and loopback,
+// and only if no live instance has already claimed it — including as its VOICE
+// port, which nothing else on this machine would know to avoid.
+const bindable = (p, host) =>
+  new Promise((resolve) => {
+    const s = createServer();
+    s.once('error', () => resolve(false));
+    s.once('listening', () => s.close(() => resolve(true)));
+    if (host) s.listen(p, host);
+    else s.listen(p);
+  });
+
+const claimed = new Set(running.flatMap((r) => [r.port, r.voicePort]).filter(Boolean));
+const portFree = async (p) => !claimed.has(p) && (await bindable(p)) && (await bindable(p, '127.0.0.1'));
 
 const wanted = Number(value('port', process.env.HARNESS_PORT ?? 4620));
 let port = wanted;
