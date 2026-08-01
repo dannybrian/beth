@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>director</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="strip">
+      <div class="strip-left">
+        <span class="dot" id="status-dot"></span>
+        <span id="repo-label">…</span>
+        <span class="mode" id="mode-label"></span>
+      </div>
+      <div class="strip-right">
+        <button id="voice-toggle" class="voice off" title="Voice off">🎙 off</button>
+        <span id="voice-cost"></span>
+        <span id="usage-label"></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="transcript" id="transcript"></section>
+      <aside class="side">
+        <h2>Pending</h2>
+        <div id="pending-decisions" class="panel"></div>
+        <h2>Workers</h2>
+        <div id="pending-workers" class="panel"></div>
+        <h2>Events</h2>
+        <div id="event-feed" class="panel"></div>
+      </aside>
+    </main>
+
+    <footer class="composer">
+      <textarea id="input" rows="1" placeholder="Talk to the director…" autofocus></textarea>
+      <button id="send">Send</button>
+      <button id="interrupt" class="ghost" title="Stop the in-flight turn">Stop</button>
+    </footer>
+
+    <script src="/vendor/elevenlabs.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

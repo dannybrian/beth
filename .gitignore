@@ -1,0 +1,11 @@
+node_modules/
+logs/
+*.log
+
+# Secrets are read from the BOUND REPO's .env (or real env vars) — never from here.
+# A local .env is still ignored in case one is ever added.
+.env
+.env.*
+!.env.example
+
+.DS_Store
