@@ -54,12 +54,14 @@ function makeInputStream(): InputStream {
 const userMsg = (text: string): SDKUserMessage =>
   ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '' }) as SDKUserMessage;
 
+// The GENERIC director. Identity — name, voice, who they work with, repo-specific
+// standing orders — is supplied by the bound repo in .claude/DIRECTOR.md, so the
+// harness stays project-agnostic and each repo gets its own director.
 const PERSONA = [
-  // --- who she is ---
-  'You are Beth, the standing director on this project. You work with Danny — that is who you are talking to, always; address him by name when it is natural, not every line.',
-  'You are an expert project and development manager. That is the centre of gravity: you hold the shape of the work, you know what is in flight and what is blocked, you are decisive about sequencing, and you protect Danny\'s attention. Competence first — you are the person who has already read the plan.',
-  'You are from the American South, and it shows in HOW you talk, not in a costume. Warm, direct, unhurried even when the news is bad; plain words over jargon; the occasional turn of phrase or gentle dryness. Contractions always. Never phonetic spelling, never folksy filler, and never let the warmth read as vagueness — a southern professional is still a professional, and you are a good one.',
-  // --- how she talks ---
+  // --- the role ---
+  'You are the standing director on this project, reached through a conversational harness rather than a terminal.',
+  'You are an expert project and development manager. That is the centre of gravity: you hold the shape of the work, you know what is in flight and what is blocked, you are decisive about sequencing, and you protect your collaborator\'s attention. Competence first — you are the person who has already read the plan.',
+  // --- how you talk ---
   'This is a CONVERSATION, not a report surface. Answer in a sentence or a short paragraph. Never dump a status report unless asked for one, and never restate what you just did in a bulleted summary.',
   'You are frequently HEARD rather than read, so write like someone speaking: lead with the answer, keep sentences sayable, and skip anything that only works on a page (tables, bullet lists, file paths read aloud character by character).',
   // --- how she works ---
@@ -108,6 +110,25 @@ export class SessionManager {
   voiceActive: () => boolean = () => false;
 
   private sessionFile = () => path.join(this.cfg.stateDir, 'session.json');
+
+  /**
+   * The bound repo's own instructions for its director: who she is, what she is
+   * called, how she should behave here. This is the repo-side half of the harness
+   * contract — the harness supplies the role, the project supplies the person.
+   * Absent file is fine; you get a competent, unnamed director.
+   */
+  private repoDirectorGuide(): string {
+    const file = path.join(this.cfg.repo, '.claude', 'DIRECTOR.md');
+    try {
+      const body = fs.readFileSync(file, 'utf8').trim();
+      if (!body) return '';
+      console.log(`  director: loaded ${path.relative(this.cfg.repo, file)} (${body.length} chars)`);
+      return `\n\nThe project you are bound to provides these instructions about who you are and how to work here. They take precedence over the generic guidance above:\n\n${body}`;
+    } catch {
+      console.log('  director: no .claude/DIRECTOR.md in this repo — running as a generic director');
+      return '';
+    }
+  }
 
   /**
    * Every launch is a clean conversation by default. Resuming across days let stale
@@ -166,7 +187,9 @@ export class SessionManager {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: `${PERSONA} ${roleInstruction(this.role, this.cfg.directorPlan)} ${VOCALIZATION_PROMPT}`,
+          append:
+            `${PERSONA} ${roleInstruction(this.role, this.cfg.directorPlan)} ${VOCALIZATION_PROMPT}` +
+            this.repoDirectorGuide(),
         },
       },
     });
