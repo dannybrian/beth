@@ -77,18 +77,22 @@ if (!(await portFree(port))) {
 let voicePort = Number(process.env.HARNESS_VOICE_PORT ?? port + 1);
 for (let i = 0; i < 20 && !(await portFree(voicePort)); i++) voicePort = port + 1 + i + 1;
 
-// --- config from the bound repo's .env ---
-const repoEnv = (() => {
+// --- config: real env, then the bound repo's .env, then machine-wide ---
+// Same three layers as src/config.ts. The machine file is where the ElevenLabs
+// credentials belong — one account and one tunnel hostname for this Mac — so
+// binding to a new repo does not silently start a text-only harness.
+const readEnv = (f) => {
   const out = {};
-  const f = path.join(repo, '.env');
   if (!fs.existsSync(f)) return out;
   for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
     if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
   }
   return out;
-})();
-const conf = (k) => process.env[k] ?? repoEnv[k];
+};
+const repoEnv = readEnv(path.join(repo, '.env'));
+const machineEnv = readEnv(path.join(process.env.HOME ?? '', '.director-harness', '.env'));
+const conf = (k) => process.env[k] ?? repoEnv[k] ?? machineEnv[k];
 const wsUrl = conf('HARNESS_PUBLIC_WS_URL');
 const voiceConfigured = Boolean(conf('ELEVENLABS_API_KEY') && conf('SPEECH_ENGINE_ID'));
 
@@ -125,7 +129,8 @@ const waitFor = async (url, seconds) => {
 // which is exactly why this is automated rather than left as a second terminal.
 let tunnel = null;
 if (!voiceConfigured) {
-  console.log('· voice off — no ELEVENLABS_API_KEY / SPEECH_ENGINE_ID in the repo .env (text still works)');
+  console.log('· voice off — no ELEVENLABS_API_KEY / SPEECH_ENGINE_ID (text still works)');
+  console.log(`    put them in ~/.director-harness/.env to cover every repo at once`);
 } else if (!wsUrl) {
   console.log('· voice off — HARNESS_PUBLIC_WS_URL not set (ElevenLabs dials IN, so it needs a public URL)');
 } else if (flag('no-tunnel')) {

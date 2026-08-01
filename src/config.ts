@@ -85,14 +85,11 @@ const DEFAULT_MODEL = 'claude-opus-5';
 const slug = (p: string) => p.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /**
- * Read secrets from the BOUND REPO's .env, so a key already sitting in the
- * project (alongside REPLICATE_API_TOKEN and friends) is found without a second
- * copy. Real environment variables always win. Minimal parser on purpose — this
- * needs KEY=value and nothing else.
+ * Read KEY=value from a .env-style file. Minimal on purpose — this needs
+ * KEY=value and nothing else.
  */
-function repoEnv(repo: string): Record<string, string> {
+function readEnvFile(file: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const file = path.join(repo, '.env');
   if (!fs.existsSync(file)) return out;
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
@@ -102,6 +99,9 @@ function repoEnv(repo: string): Record<string, string> {
   return out;
 }
 
+/** Machine-wide harness config, beside the per-repo state directories. */
+export const MACHINE_ENV_FILE = path.join(os.homedir(), '.director-harness', '.env');
+
 export function loadConfig(): HarnessConfig {
   const repo = path.resolve(process.env.HARNESS_REPO ?? path.join(os.homedir(), 'Sources/beadgame'));
   if (!fs.existsSync(path.join(repo, '.claude'))) {
@@ -109,7 +109,23 @@ export function loadConfig(): HarnessConfig {
   }
   const stateDir = path.join(os.homedir(), '.director-harness', slug(repo));
   fs.mkdirSync(stateDir, { recursive: true });
-  const env = repoEnv(repo);
+  /**
+   * THREE LAYERS, most specific first: real environment, then the bound repo's
+   * .env, then a machine-wide file.
+   *
+   * The machine layer exists because the voice credentials are not project
+   * secrets. There is one ElevenLabs account, one Speech Engine and one tunnel
+   * hostname for this Mac — requiring a copy in every repo's .env duplicated the
+   * same key N times, which is both tedious and a worse place to leave a secret.
+   * Binding to a second repo silently produced a text-only harness, with the
+   * only symptom being a caution icon after speaking.
+   *
+   * A repo can still override any of it — a project with its own engine just
+   * sets the key locally and wins.
+   */
+  const env = readEnvFile(path.join(repo, '.env'));
+  const machine = readEnvFile(MACHINE_ENV_FILE);
+  const conf = (key: string) => process.env[key] ?? env[key] ?? machine[key];
 
   const port = Number(process.env.HARNESS_PORT ?? 4620);
 
@@ -118,7 +134,7 @@ export function loadConfig(): HarnessConfig {
     port,
     bind: process.env.HARNESS_BIND ?? '127.0.0.1',
     voicePort: Number(process.env.HARNESS_VOICE_PORT ?? port + 1),
-    claudeBin: process.env.HARNESS_CLAUDE_BIN ?? path.join(os.homedir(), '.local/bin/claude'),
+    claudeBin: conf('HARNESS_CLAUDE_BIN') ?? path.join(os.homedir(), '.local/bin/claude'),
     stateDir,
     eventLogPath: path.join(repo, '.claude', 'events.jsonl'),
     // Read from the bound repo's .env like every other setting. It was
@@ -127,24 +143,24 @@ export function loadConfig(): HarnessConfig {
     // the project-specific knowledge this harness is not supposed to hold. Set
     // HARNESS_DIRECTOR_PLAN in each repo's .env and the default stops mattering.
     directorPlan:
-      process.env.HARNESS_DIRECTOR_PLAN ?? env.HARNESS_DIRECTOR_PLAN ?? 'plans/2026-07-30-director-consolidation.md',
-    planRoots: (process.env.HARNESS_PLAN_ROOTS ?? '')
+      conf('HARNESS_DIRECTOR_PLAN') ?? 'plans/2026-07-30-director-consolidation.md',
+    planRoots: (conf('HARNESS_PLAN_ROOTS') ?? '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
-    model: process.env.HARNESS_MODEL ?? DEFAULT_MODEL,
-    elevenLabsApiKey: process.env.ELEVENLABS_API_KEY ?? env.ELEVENLABS_API_KEY,
-    speechEngineId: process.env.SPEECH_ENGINE_ID ?? env.SPEECH_ENGINE_ID,
-    publicWsUrl: process.env.HARNESS_PUBLIC_WS_URL ?? env.HARNESS_PUBLIC_WS_URL,
-    audioTagsSupported: process.env.HARNESS_AUDIO_TAGS !== '0',
+    model: conf('HARNESS_MODEL') ?? DEFAULT_MODEL,
+    elevenLabsApiKey: conf('ELEVENLABS_API_KEY'),
+    speechEngineId: conf('SPEECH_ENGINE_ID'),
+    publicWsUrl: conf('HARNESS_PUBLIC_WS_URL'),
+    audioTagsSupported: conf('HARNESS_AUDIO_TAGS') !== '0',
     voiceEffort:
-      process.env.HARNESS_VOICE_EFFORT === 'off'
+      conf('HARNESS_VOICE_EFFORT') === 'off'
         ? null
-        : ((process.env.HARNESS_VOICE_EFFORT ?? 'low') as HarnessConfig['voiceEffort']),
-    fillerDelayMs: Number(process.env.HARNESS_FILLER_DELAY_MS ?? 1500),
+        : ((conf('HARNESS_VOICE_EFFORT') ?? 'low') as HarnessConfig['voiceEffort']),
+    fillerDelayMs: Number(conf('HARNESS_FILLER_DELAY_MS') ?? 1500),
     // 900ms was still firing mid-sentence: an ordinary pause for breath, or an
     // "uh", outlasts it. Cutting a turn early is far worse than answering a beat
     // later — it asks half a question and then asks the rest as a second turn.
-    voiceSettleMs: Number(process.env.HARNESS_VOICE_SETTLE_MS ?? 1800),
+    voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 1800),
   };
 }

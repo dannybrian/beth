@@ -31,9 +31,11 @@ write a plan file or repair frontmatter.
 - **Ask before adding any dependency.** Current total: the Agent SDK, zod, the ElevenLabs
   SDK and browser client, and `ws`. Each was a deliberate decision. Prefer rolling a
   small thing over taking a package.
-- **Secrets never live here.** Config is read from the BOUND REPO's `.env` (or real env
-  vars) — see `src/config.ts` and `.env.example`. Nothing in this repo should contain a
-  key.
+- **Secrets never live here.** Config comes from three layers, most specific first: real
+  env vars → the BOUND REPO's `.env` → `~/.director-harness/.env`. The ElevenLabs
+  credentials belong in that machine file: one account and one tunnel hostname per Mac,
+  so a per-repo copy duplicates a secret, and forgetting one makes the new repo silently
+  text-only. See `src/config.ts` and `.env.example`. Nothing in this repo holds a key.
 - **Comments explain WHY.** Several of the trickiest bits exist because of a bug that was
   expensive to find; those comments are load-bearing. Don't strip them.
 
