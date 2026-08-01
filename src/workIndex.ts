@@ -48,6 +48,64 @@ export class WorkIndex {
     return () => this.subs.delete(fn);
   }
 
+  // --- what Danny is currently pointing at ---------------------------------
+  //
+  // This lives on the SERVER, not in the browser, because a spoken turn never
+  // touches the browser: ElevenLabs dials in and the utterance goes straight to
+  // the director. Holding the chips only in the page meant clicking a plan and
+  // then SPEAKING lost the reference entirely. Both paths now consume from here.
+
+  private pointing: WorkRef[] = [];
+  private pointSubs = new Set<(refs: WorkRef[]) => void>();
+
+  onPointingChange(fn: (refs: WorkRef[]) => void): () => void {
+    this.pointSubs.add(fn);
+    return () => this.pointSubs.delete(fn);
+  }
+
+  private pointSeq = -1;
+
+  /**
+   * Replace what is being pointed at. Silent — the browser already drew it.
+   *
+   * `seq` orders the page's updates. Two fetches issued microseconds apart are
+   * not guaranteed to arrive in order, and out-of-order delivery here has teeth:
+   * a chip-sync landing AFTER the turn that consumed it would resurrect a spent
+   * reference and silently staple it to the next spoken turn. Stale seq loses.
+   */
+  point(refs: WorkRef[], seq?: number) {
+    if (seq !== undefined) {
+      // `<=`, not `<`: the hazard is a DUPLICATE of an update already applied —
+      // the page mirrors chips and then posts the turn carrying the same seq, so
+      // the late copy arrives with a seq equal to the one already seen. Treating
+      // equal as fresh re-armed a reference the turn had just consumed.
+      if (seq <= this.pointSeq) return;
+      this.pointSeq = seq;
+    }
+    this.pointing = refs;
+  }
+
+  pointed = () => this.pointing;
+
+  /**
+   * Take the references and clear them. CONSUMING, not reading: a reference is
+   * spent by the turn that uses it, exactly as the composer chips clear on send.
+   * Subscribers are told so the page can drop chips a spoken turn just used.
+   */
+  takePointed(): WorkRef[] {
+    const refs = this.pointing;
+    if (!refs.length) return refs;
+    this.pointing = [];
+    for (const fn of this.pointSubs) {
+      try {
+        fn(this.pointing);
+      } catch {
+        /* a dead subscriber must not break a turn */
+      }
+    }
+    return refs;
+  }
+
   all = () => this.items;
   /** Sorted freshest-first: 30+ plans are active at once, so recency is the only
    *  ordering that keeps the top of the panel worth looking at. */

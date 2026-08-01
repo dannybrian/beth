@@ -89,17 +89,22 @@ export function createServer(deps: {
       if (req.method === 'POST') {
         const body = await readJson(req);
         switch (url.pathname) {
+          case '/api/point': {
+            // The page mirrors its chips here so a SPOKEN turn can see them —
+            // voice never touches the browser, so the reference has to live
+            // server-side to survive the trip.
+            work.point(Array.isArray(body.refs) ? (body.refs as WorkRef[]) : [], Number(body.seq) || undefined);
+            return json(200, { ok: true });
+          }
           case '/api/turn': {
             const text = String(body.text ?? '').trim();
-            const refs: WorkRef[] = Array.isArray(body.refs) ? body.refs : [];
+            // The page sends its chips with the turn as well as mirroring them,
+            // so a typed turn cannot race its own /api/point.
+            if (Array.isArray(body.refs)) work.point(body.refs as WorkRef[], Number(body.seq) || undefined);
             // A turn may be nothing BUT a pointing gesture — clicking a plan and
             // hitting send is a legitimate "tell me about this".
-            if (!text && !refs.length) return json(400, { error: 'empty turn' });
-            const preamble = work.preamble(refs);
-            session.send(preamble ? `${preamble}\n${text}` : text, {
-              display: text || `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})`,
-              refs,
-            });
+            if (!text && !work.pointed().length) return json(400, { error: 'empty turn' });
+            session.sendPointed(text);
             return json(200, { ok: true });
           }
           case '/api/answer': {

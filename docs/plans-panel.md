@@ -137,8 +137,28 @@ naming what was pointed at and instructing her to use the spoken name — while 
 transcript shows what Danny typed. Keeping the two apart means he can edit his sentence
 freely without dangling a reference, and a turn can be pure gesture (click, send).
 
-`WorkIndex.preamble(refs)` is the single place that phrasing lives, so a spoken turn can
-carry the same references later without the composer being involved.
+`WorkIndex.preamble(refs)` is the single place that phrasing lives. What it hands Beth is
+the *pair*: the path (so she can resolve and open it) with status and task counts inline,
+plus the spoken name and an instruction to use that name aloud and never the path.
+
+**Pointing lives on the server, so voice works too.** Holding the chips only in the page
+meant clicking a plan and then SPEAKING lost the reference — a spoken turn never passes
+through the browser, since ElevenLabs dials the harness directly and the utterance goes
+straight to the director. So the page mirrors its chips to `/api/point`, and both input
+paths converge on `SessionManager.sendPointed()`, which CONSUMES them: a reference is
+spent by the turn that uses it, exactly as the composer chips clear on send. Consumption
+is broadcast so the page drops chips a spoken turn just used.
+
+Deliberately not folded into `send()` — a resolved decision or the promote nudge are turns
+too, and must not silently eat a reference held for the next question.
+
+⚠️ The page mirrors chips and posts the turn as two separate fetches, which are not
+guaranteed to arrive in order. A late-arriving mirror re-armed a reference the turn had
+just consumed, stapling it to the *next* spoken turn. Updates carry a sequence number and
+stale ones lose — and the comparison must be `<=`, not `<`: a spoken turn consumes without
+supplying a seq of its own, so the duplicate arrives carrying the same number as the
+update already applied. `<` waved it straight through. Caught in a live run, not in the
+first test written for it.
 
 **Spoken names are derived, and that turned out to be the substance.** Measured against
 the real corpus: cutting a title at its em-dash reads well but collapses 69 plans into

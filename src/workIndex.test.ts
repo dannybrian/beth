@@ -115,6 +115,68 @@ test('a reference to a plan that has gone is reported, not silently dropped', as
   });
 });
 
+test('pointing is consumed by the turn that uses it, not merely read', async () => {
+  // A spoken turn takes the same references a typed one would, so clicking a
+  // plan and then TALKING works. Consuming (not peeking) matches the composer
+  // chips clearing on send, and stops a reference riding a later, unrelated turn.
+  await withIndex(async (idx) => {
+    const ref = { kind: 'item' as const, path: 'plans/2026-01-01-alpha.md', spoken: 'Alpha' };
+    idx.point([ref]);
+    assert.equal(idx.pointed().length, 1);
+    assert.deepEqual(idx.takePointed(), [ref]);
+    assert.deepEqual(idx.takePointed(), [], 'a second turn gets nothing');
+  });
+});
+
+test('consuming pointing notifies subscribers so the page drops its chips', async () => {
+  await withIndex(async (idx) => {
+    const seen: number[] = [];
+    idx.onPointingChange((refs) => seen.push(refs.length));
+    idx.point([{ kind: 'item', path: 'plans/2026-01-01-alpha.md', spoken: 'Alpha' }]);
+    idx.takePointed();
+    assert.deepEqual(seen, [0], 'cleared once, and only on consume');
+    idx.takePointed();
+    assert.deepEqual(seen, [0], 'consuming nothing does not republish');
+  });
+});
+
+test('a chip-sync that arrives late cannot resurrect a consumed reference', async () => {
+  // The real ordering hazard: the page mirrors chips and posts the turn as two
+  // separate fetches. If the mirror lands after the turn, a spent reference
+  // would silently staple itself to the next SPOKEN turn.
+  await withIndex(async (idx) => {
+    const ref = { kind: 'item' as const, path: 'plans/2026-01-01-alpha.md', spoken: 'Alpha' };
+    idx.point([ref], 100); // the page's chip sync
+    idx.point([ref], 101); // the turn carrying the same refs
+    idx.takePointed(); // turn consumes them
+    idx.point([ref], 100); // the delayed duplicate finally lands
+    assert.deepEqual(idx.pointed(), [], 'stale update rejected');
+  });
+});
+
+test('a DUPLICATE chip-sync at the same seq cannot resurrect it either', async () => {
+  // This is the shape that actually bit in a live run: a spoken turn consumes
+  // pointing without supplying any seq of its own, so the last seq on record is
+  // still the chip sync's. A re-delivered copy carries that same number, and an
+  // exclusive `<` comparison waved it straight through onto the next turn.
+  await withIndex(async (idx) => {
+    const ref = { kind: 'item' as const, path: 'plans/2026-01-01-alpha.md', spoken: 'Alpha' };
+    idx.point([ref], 7);
+    idx.takePointed(); // a spoken turn — no seq of its own
+    idx.point([ref], 7); // the duplicate
+    assert.deepEqual(idx.pointed(), [], 'same-seq duplicate rejected');
+  });
+});
+
+test('a genuinely newer point after a turn is still accepted', async () => {
+  await withIndex(async (idx) => {
+    idx.point([{ kind: 'item', path: 'plans/2026-01-01-alpha.md', spoken: 'Alpha' }], 100);
+    idx.takePointed();
+    idx.point([{ kind: 'item', path: 'plans/deep/x.md', spoken: 'Later click' }], 101);
+    assert.equal(idx.pointed()[0]?.spoken, 'Later click');
+  });
+});
+
 test('spoken names stay unique across every reader in the index', async () => {
   const repo = repoFixture();
   // Two readers producing an identically-titled item — uniqueness is the index's

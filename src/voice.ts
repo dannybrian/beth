@@ -246,7 +246,10 @@ export class VoiceService {
       }
     });
 
-    myTurn = this.session.send(utterance);
+    // sendPointed, not send: a plan clicked in the panel has to reach a SPOKEN
+    // turn too. Pointing lives on the server precisely because this path never
+    // touches the browser — ElevenLabs dials in and the utterance comes here.
+    myTurn = this.session.sendPointed(utterance);
 
     /** Resolves false when woken by new text, true when the wait timed out. */
     const waitForText = (ms?: number) =>

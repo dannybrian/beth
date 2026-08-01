@@ -20,6 +20,8 @@ const pending = new PendingStore();
 // tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
 const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })]);
 work.subscribe((items) => bus.publish({ type: 'work', items: items.filter((i) => isInFlight(i.status)) }));
+// A spoken turn consumes pointing server-side; tell the page so its chips clear.
+work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
 
 let session: SessionManager;

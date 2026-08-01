@@ -171,6 +171,16 @@ let workItems = [];
 
 const refKey = (r) => `${r.path}#${r.taskIndex ?? ''}`;
 
+/**
+ * Mirror the chips to the server. A SPOKEN turn never passes through this page —
+ * ElevenLabs dials the harness directly — so pointing has to live server-side or
+ * clicking a plan and then talking loses the reference.
+ */
+// Seeded from the clock so a page reload always outranks the previous page's
+// updates — a plain counter restarting at 0 would be rejected as stale.
+let pointSeq = Date.now();
+const syncRefs = () => post('/api/point', { refs, seq: ++pointSeq });
+
 function renderRefs() {
   const box = $('composer-refs');
   box.hidden = refs.length === 0;
@@ -184,6 +194,7 @@ function renderRefs() {
       x.onclick = () => {
         refs = refs.filter((o) => refKey(o) !== refKey(r));
         renderRefs();
+        syncRefs();
       };
       chip.append(x);
       return chip;
@@ -194,6 +205,7 @@ function renderRefs() {
 function attachRef(ref) {
   if (!refs.some((r) => refKey(r) === refKey(ref))) refs.push(ref);
   renderRefs();
+  syncRefs();
   input.focus();
 }
 
@@ -339,6 +351,11 @@ const handlers = {
     workItems = m.items;
     renderWork();
   },
+  // A spoken turn consumed the references — drop the chips it used.
+  pointing: (m) => {
+    refs = m.refs ?? [];
+    renderRefs();
+  },
   cleared: () => {
     transcript.replaceChildren();
     askCards.clear();
@@ -414,7 +431,7 @@ const send = () => {
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
-  post('/api/turn', { text, refs });
+  post('/api/turn', { text, refs, seq: ++pointSeq });
   refs = [];
   renderRefs();
 };

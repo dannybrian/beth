@@ -229,6 +229,24 @@ export class SessionManager {
   }
 
   /**
+   * A turn Danny originated — typed or SPOKEN — which consumes whatever he is
+   * currently pointing at in the plans panel.
+   *
+   * Both input paths go through here so they cannot drift. It is deliberately
+   * NOT folded into send(): a resolved decision or the promote nudge are turns
+   * too, and they must not silently eat a reference he was holding for his next
+   * question.
+   */
+  sendPointed(text: string): number {
+    const refs = this.work.takePointed();
+    const preamble = this.work.preamble(refs);
+    return this.send(preamble ? `${preamble}\n${text}` : text, {
+      display: text || `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})`,
+      refs,
+    });
+  }
+
+  /**
    * Abort the in-flight turn — the Stop button, and the equivalent of Escape in
    * Claude Code. The session survives; the next turn continues normally.
    *

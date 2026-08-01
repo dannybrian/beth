@@ -62,6 +62,9 @@ export type UIMessage =
   | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
   | { type: 'work'; items: WorkItem[] }
+  // Server-owned pointing state. Published when a turn CONSUMES it, so the page
+  // drops chips that a spoken turn just used.
+  | { type: 'pointing'; refs: WorkRef[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
@@ -84,7 +87,7 @@ export class ConversationBus {
     // republishes on every file save, so replaying it would bury the transcript.
     if (m.type === 'status') {
       this.lastStatus = m;
-    } else if (m.type !== 'pending' && m.type !== 'work') {
+    } else if (m.type !== 'pending' && m.type !== 'work' && m.type !== 'pointing') {
       this.history.push(m);
       if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();
     }
