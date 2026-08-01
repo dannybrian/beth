@@ -114,7 +114,7 @@ export class VoiceService {
     // A pending turn belongs to a session that no longer exists.
     if (this.settleTimer) clearTimeout(this.settleTimer);
     this.settleTimer = null;
-    this.lastAnswered = '';
+    this.lastSettled = '';
     this.turnActive = false;
     this.endSession();
   }
@@ -310,7 +310,10 @@ export class VoiceService {
    */
   private settleTimer: NodeJS.Timeout | null = null;
   private pendingUtterance = '';
-  private lastAnswered = '';
+  /** The full utterance last acted on — what a continuation is measured against. */
+  private lastSettled = '';
+  /** Serialises spoken TURNS. See the is_final note in scheduleTurn. */
+  private turnChain: Promise<unknown> = Promise.resolve();
 
   private scheduleTurn(utterance: string, session: any) {
     this.pendingUtterance = utterance;
@@ -320,20 +323,47 @@ export class VoiceService {
 
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
-      const text = this.pendingUtterance;
+      const full = this.pendingUtterance;
 
       // ElevenLabs re-delivers a transcript it thinks went unanswered. Answering
       // it again would repeat Beth's reply and burn a second turn on a question
       // already asked, so an identical settled utterance is dropped.
-      if (text === this.lastAnswered) {
-        this.bus.publish({ type: 'voice', state: 'duplicate', detail: text, status: this.status() });
+      if (full === this.lastSettled) {
+        this.bus.publish({ type: 'voice', state: 'duplicate', detail: full, status: this.status() });
         return;
       }
-      this.lastAnswered = text;
+
+      // A CONTINUATION of what we just answered — proof the window closed while
+      // Danny was mid-sentence. Transcripts accumulate, so the new one contains
+      // the old as a prefix; re-sending the whole thing asks the same question
+      // twice and gets it answered twice. Send only the words he has added, which
+      // the session reads as the continuation it is.
+      let toSend = full;
+      if (this.lastSettled && full.startsWith(this.lastSettled)) {
+        toSend = full.slice(this.lastSettled.length).trim();
+        if (!toSend) {
+          this.bus.publish({ type: 'voice', state: 'duplicate', detail: full, status: this.status() });
+          return;
+        }
+        this.bus.publish({ type: 'voice', state: 'continuation', detail: toSend, status: this.status() });
+      }
+      this.lastSettled = full;
+
+      // ⚠️ NEVER two spoken responses at once. Each sendResponse ends by sending
+      // the is_final marker, so a second one racing the first makes whichever
+      // finishes sooner close the agent turn — and the rest of the other answer
+      // is discarded unheard. That is how "Let me check the evidence on disk."
+      // became the last thing Danny heard: a turn fired early, its continuation
+      // fired a second one, and they cut each other off. Chain them instead.
       this.turnActive = true;
-      session.sendResponse(this.runTurn(text)).finally(() => {
-        this.turnActive = false;
-      });
+      this.turnChain = this.turnChain
+        .then(() => session.sendResponse(this.runTurn(toSend)))
+        .catch(() => {
+          /* session may have closed underneath us */
+        })
+        .finally(() => {
+          this.turnActive = false;
+        });
     }, this.cfg.voiceSettleMs);
     this.settleTimer.unref?.();
   }

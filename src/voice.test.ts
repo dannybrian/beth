@@ -79,6 +79,40 @@ test('a revision arriving inside the settle window resets the wait', async () =>
   assert.deepEqual(session.sent, ['one two']);
 });
 
+test('a continuation sends only the NEW words, not the question again', async () => {
+  // What Danny hit: the window closed while he was mid-sentence, so the turn
+  // fired early and the rest of the sentence arrived as a second transcript.
+  // Transcripts accumulate, so re-sending the whole thing asks the same question
+  // twice — and gets it answered twice.
+  const session = fakeSession();
+  const v = new VoiceService(cfg(), new ConversationBus(), session as never);
+  const speech = fakeSpeech();
+
+  schedule(v, 'did we finish the auth plan', speech);
+  await settle();
+  schedule(v, 'did we finish the auth plan, or is the device smoke still open', speech);
+  await settle();
+
+  assert.equal(session.sent.length, 2);
+  assert.equal(session.sent[0], 'did we finish the auth plan');
+  assert.equal(session.sent[1], ', or is the device smoke still open', 'only the added words');
+});
+
+test('a continuation of a continuation still only sends the newest words', async () => {
+  const session = fakeSession();
+  const v = new VoiceService(cfg(), new ConversationBus(), session as never);
+  const speech = fakeSpeech();
+
+  schedule(v, 'one', speech);
+  await settle();
+  schedule(v, 'one two', speech);
+  await settle();
+  schedule(v, 'one two three', speech);
+  await settle();
+
+  assert.deepEqual(session.sent, ['one', 'two', 'three']);
+});
+
 test('a re-delivered transcript is not answered twice', async () => {
   // ElevenLabs re-delivers a transcript it believes went unanswered. Answering
   // again repeats Beth's reply and spends a second turn on the same question.
@@ -188,6 +222,34 @@ test('the queue keeps the NEWEST lines when work outruns the channel', async () 
   assert.equal(speech.spoken.length, 6, 'capped, not a monologue');
   assert.equal(speech.spoken[0], 'line 4', 'oldest was dropped first');
   assert.equal(speech.spoken.at(-1), 'line 9', 'the latest word survives');
+});
+
+test('two spoken turns never stream at once', async () => {
+  // Each sendResponse ends by sending the is_final marker, so two overlapping
+  // ones make whichever finishes first close the agent turn — the rest of the
+  // other answer is discarded unheard. This is the mechanism behind "she said
+  // 'Let me check the evidence on disk' and then nothing".
+  const session = fakeSession();
+  const v = new VoiceService(cfg(), new ConversationBus(), session as never);
+
+  let concurrent = 0;
+  let maxConcurrent = 0;
+  const slowSpeech = {
+    sendResponse: async () => {
+      concurrent++;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      await new Promise((r) => setTimeout(r, 80));
+      concurrent--;
+    },
+  };
+
+  schedule(v, 'first question', slowSpeech);
+  await settle(60);
+  schedule(v, 'a completely different second question', slowSpeech);
+  await settle(400);
+
+  assert.equal(maxConcurrent, 1, 'responses must be chained, never concurrent');
+  assert.equal(session.sent.length, 2, 'both turns still reach the director');
 });
 
 test('after the socket drops, the next line queues instead of vanishing', async () => {

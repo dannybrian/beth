@@ -136,6 +136,9 @@ export function loadConfig(): HarnessConfig {
         ? null
         : ((process.env.HARNESS_VOICE_EFFORT ?? 'low') as HarnessConfig['voiceEffort']),
     fillerDelayMs: Number(process.env.HARNESS_FILLER_DELAY_MS ?? 1500),
-    voiceSettleMs: Number(process.env.HARNESS_VOICE_SETTLE_MS ?? 900),
+    // 900ms was still firing mid-sentence: an ordinary pause for breath, or an
+    // "uh", outlasts it. Cutting a turn early is far worse than answering a beat
+    // later — it asks half a question and then asks the rest as a second turn.
+    voiceSettleMs: Number(process.env.HARNESS_VOICE_SETTLE_MS ?? 1800),
   };
 }
