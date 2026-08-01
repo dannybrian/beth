@@ -91,6 +91,10 @@ export function createServer(deps: {
             const ok = gate.answerApproval(String(body.id), Boolean(body.allowed));
             return json(ok ? 200 : 404, { ok });
           }
+          case '/api/clear': {
+            await session.clear();
+            return json(200, { ok: true });
+          }
           case '/api/interrupt': {
             const receipt = await session.interrupt();
             return json(200, { ok: true, receipt });

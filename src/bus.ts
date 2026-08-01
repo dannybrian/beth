@@ -59,6 +59,7 @@ export type UIMessage =
   | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
+  | { type: 'cleared' }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {
@@ -93,5 +94,11 @@ export class ConversationBus {
   /** Replay for a browser that connects (or reconnects) mid-conversation. */
   replay(): UIMessage[] {
     return this.lastStatus ? [...this.history, this.lastStatus] : this.history;
+  }
+
+  /** Drop the transcript so a cleared conversation does not come back on refresh. */
+  clear() {
+    this.history = [];
+    this.lastStatus = null;
   }
 }

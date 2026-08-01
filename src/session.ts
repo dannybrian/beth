@@ -139,8 +139,8 @@ export class SessionManager {
     });
   };
 
-  start(kickoff?: string) {
-    const resume = this.loadPriorSession();
+  start(kickoff?: string, opts: { allowResume?: boolean } = {}) {
+    const resume = opts.allowResume === false ? undefined : this.loadPriorSession();
     this.q = query({
       prompt: this.input,
       options: {
@@ -214,6 +214,34 @@ export class SessionManager {
 
   stop() {
     this.input.end();
+  }
+
+  /**
+   * Start a brand-new conversation without restarting the harness — `/clear`.
+   *
+   * Drops the model's context and the transcript. Deliberately does NOT touch the
+   * pending queues or running workers: those are work, not conversation, and
+   * losing a queued decision because you cleared the chat would be a nasty
+   * surprise. Beth is still Beth afterwards — the persona is in the system prompt,
+   * which the new session rebuilds.
+   */
+  async clear() {
+    try {
+      await this.interrupt();
+    } catch {
+      /* nothing in flight */
+    }
+    this.input.end();
+    this.q = null;
+    this.input = makeInputStream();
+    this.sessionIdValue = '';
+    this.lastCost = 0;
+    this.turnSeq = 0;
+    this.interruptPending = false;
+    this.start(undefined, { allowResume: false });
+    this.bus.clear();
+    this.bus.publish({ type: 'cleared' });
+    this.bus.publish({ type: 'status', state: 'idle' });
   }
 
   private async loop() {

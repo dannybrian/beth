@@ -192,6 +192,12 @@ const handlers = {
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
   },
   pending: renderPending,
+  cleared: () => {
+    transcript.replaceChildren();
+    askCards.clear();
+    $('usage-label').textContent = '';
+    entry('activity', (n) => (n.textContent = '— new conversation —'));
+  },
   voice: (m) => renderVoice(m.status, m.detail),
   event: (m) => {
     renderEvent(m);
@@ -255,10 +261,14 @@ const send = () => {
   if (!text) return;
   input.value = '';
   input.style.height = 'auto';
+  // Muscle memory from Claude Code — these never reach the model.
+  if (text === '/clear') return void post('/api/clear');
+  if (text === '/stop') return void post('/api/interrupt');
   post('/api/turn', { text });
 };
 $('send').onclick = send;
 $('interrupt').onclick = () => post('/api/interrupt');
+$('clear').onclick = () => post('/api/clear');
 input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
