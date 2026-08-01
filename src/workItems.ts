@@ -115,6 +115,21 @@ export type WorkItem = {
   tasks: WorkTask[];
   /** Which reader produced this, for debugging a wrong-looking panel. */
   reader: string;
+  /**
+   * This item is the DIRECTOR ROLE LOCK, not a deliverable.
+   *
+   * The role is held by claiming a plan, because `/plans` is the claim mechanism
+   * and session records key on `plan_path` — so the lock has to be a file that
+   * `/plans claim` can write an `owner:` into. That makes it a plan by
+   * construction while being a standing ledger by nature: no Context/Approach/
+   * Verification, no tasks, no completion condition, permanently `active`.
+   *
+   * Left in the work list it sits at the top of Danny's board forever and makes
+   * the active count one too many. So it is kept in the index (the claim state is
+   * real and worth reading) but excluded from the LIVE set — the mode badge in
+   * the header already says who holds the role, and says it better.
+   */
+  roleLock?: boolean;
 };
 
 /** A reader supplies everything but the spoken name — the index assigns those,

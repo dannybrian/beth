@@ -19,9 +19,13 @@ const pending = new PendingStore();
 
 // One index, two consumers: the panel over the stream, and Beth via the `plans`
 // tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
-const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })]);
+const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })], {
+  // The director plan is the role LOCK, not work. Held out of the board so it
+  // stops occupying a permanent slot in ACTIVE and inflating the count.
+  roleLockPath: cfg.directorPlan,
+});
 work.subscribe((items) =>
-  bus.publish({ type: 'work', items: items.filter((i) => isLive(i.status)), total: items.length })
+  bus.publish({ type: 'work', items: items.filter((i) => isLive(i.status) && !i.roleLock), total: items.length })
 );
 // A spoken turn consumes pointing server-side; tell the page so its chips clear.
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));

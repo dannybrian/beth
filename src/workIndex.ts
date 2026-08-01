@@ -39,8 +39,15 @@ export class WorkIndex {
    */
   nameOverrides = new Map<string, string>();
 
-  constructor(readers: WorkReader[]) {
+  /**
+   * Repo-relative path of the plan that IS the director role lock, if the project
+   * uses one. Marked and held out of the live set — see WorkItem.roleLock.
+   */
+  roleLockPath = '';
+
+  constructor(readers: WorkReader[], opts: { roleLockPath?: string } = {}) {
     this.readers = readers;
+    this.roleLockPath = opts.roleLockPath ?? '';
   }
 
   subscribe(fn: (items: WorkItem[]) => void): () => void {
@@ -111,7 +118,7 @@ export class WorkIndex {
    *  ordering that keeps the top of the panel worth looking at. */
   inFlight = () => this.items.filter((i) => isInFlight(i.status));
   /** What the panel and the `plans` tool show: in-flight PLUS awaiting-eyes. */
-  live = () => this.items.filter((i) => isLive(i.status));
+  live = () => this.items.filter((i) => isLive(i.status) && !i.roleLock);
   byPath = (p: string) => this.items.find((i) => i.path === p);
 
   /** Resolve a reference back to what it points at. */
@@ -154,7 +161,7 @@ export class WorkIndex {
     );
 
     this.items = drafts
-      .map((d) => ({ ...d, spoken: named.get(d.path) ?? d.title }))
+      .map((d) => ({ ...d, spoken: named.get(d.path) ?? d.title, roleLock: d.path === this.roleLockPath }))
       .sort((a, b) => (b.lastTouched ?? '').localeCompare(a.lastTouched ?? '') || a.path.localeCompare(b.path));
 
     // An explicit name that did not stick means two plans asked for the same one.
@@ -254,7 +261,7 @@ export class WorkIndex {
 
   /** Grouped for display and for the tool, in the harness's in-flight order. */
   grouped(): { status: WorkStatus; items: WorkItem[] }[] {
-    return LIVE.map((status) => ({ status, items: this.items.filter((i) => i.status === status) })).filter(
+    return LIVE.map((status) => ({ status, items: this.live().filter((i) => i.status === status) })).filter(
       (g) => g.items.length
     );
   }

@@ -151,6 +151,47 @@ test('awaiting-eyes reaches the LIVE set and leads the grouping', async () => {
   idx.stop();
 });
 
+test('the director role lock is not counted as work', async () => {
+  // It is a plan only because /plans is the claim mechanism — session records key
+  // on plan_path, so the lock must be a file `/plans claim` can own. By nature it
+  // is a standing ledger: permanently active, no tasks, never ships. Left in the
+  // board it holds a slot in ACTIVE forever and makes the active count one too many.
+  const items = [
+    { path: 'plans/director.md', title: 'Director consolidation', status: 'active' as const, tags: [], claim: null, tasks: [], reader: 't' },
+    { path: 'plans/real.md', title: 'Actual work', status: 'active' as const, tags: [], claim: null, tasks: [], reader: 't' },
+  ];
+  const idx = new WorkIndex([{ name: 't', watchRoots: () => [], read: () => items }], {
+    roleLockPath: 'plans/director.md',
+  });
+  idx.refresh();
+
+  assert.deepEqual(
+    idx.live().map((i) => i.path),
+    ['plans/real.md'],
+    'the lock is not in-flight work'
+  );
+  assert.deepEqual(
+    idx.grouped().flatMap((g) => g.items.map((i) => i.path)),
+    ['plans/real.md'],
+    'and the panel agrees with the live set'
+  );
+  // Still indexed: the claim state on it is real and worth being able to read.
+  assert.equal(idx.byPath('plans/director.md')?.roleLock, true);
+  assert.equal(idx.all().length, 2);
+  idx.stop();
+});
+
+test('with no role lock configured, nothing is excluded', async () => {
+  const items = [
+    { path: 'plans/a.md', title: 'A', status: 'active' as const, tags: [], claim: null, tasks: [], reader: 't' },
+  ];
+  const idx = new WorkIndex([{ name: 't', watchRoots: () => [], read: () => items }]);
+  idx.refresh();
+  assert.equal(idx.live().length, 1);
+  assert.equal(idx.all()[0].roleLock, false);
+  idx.stop();
+});
+
 test('review is recognised but stays out of the live panel', async () => {
   // beadgame's plans/README defines review as "an audit assigned it and a human
   // must reclassify" — bookkeeping owed to /tidyrepo, not a deliverable awaiting
