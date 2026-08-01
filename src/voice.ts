@@ -84,6 +84,13 @@ export class VoiceService {
   /** How much of what she writes is read aloud. See spoken.ts. */
   private verbosity: SpeechLevel;
 
+  /**
+   * The outbound plane, when it is available. Set by main.ts rather than built
+   * here: it does not belong to Speech Engine and outlives it — step 4 removes
+   * this class and keeps that one.
+   */
+  speakOut: { speak(text: string): string | null } | null = null;
+
   /** The excerpt to speak for a message — '' means the page carries it alone. */
   private pickSpoken(m: UIMessage & { type: 'assistant' | 'say' }): string {
     const raw = m.voiceText ?? m.text;
@@ -110,10 +117,17 @@ export class VoiceService {
     bus.subscribe((m: UIMessage) => {
       if (m.type !== 'assistant' && m.type !== 'say') return;
       if (this.turnActive) return;
-      const text = forVoice(this.pickSpoken(m), this.cfg.audioTagsSupported && this.tagsSupported).trim();
+      const picked = this.pickSpoken(m);
+      // ⚠️ Tag policy differs per path, so strip per path: speak-out runs a
+      // realtime model that predates v3 tags, and would read "[laughs]" aloud.
+      const text = forVoice(picked, this.cfg.audioTagsSupported && this.tagsSupported).trim();
       // Empty means the level decided the page carries this one. No announcement
       // queues for it: nobody is waiting on a transcript to hear it.
       if (!text) return;
+      // THE OUTBOUND PLANE. She says it now — no session to open, no transcript
+      // to answer, no mic required. Everything below this line is the workaround
+      // for not being able to do that, and step 3 deletes it.
+      if (this.speakOut?.speak(picked)) return;
       // Nothing that will carry it right now — no paid session, or one that has
       // not heard anything yet. The usual case is that the work took longer than
       // the client's idle window, so the channel closed mid-job. Dropping the

@@ -684,11 +684,56 @@ const handlers = {
     }
     renderVoice(m.status, m.detail);
   },
+  speak: (m) => enqueueSpeak(m.id),
   event: (m) => {
     renderEvent(m);
     feedEvent(m.event);
   },
 };
+
+// --- her voice, outbound ------------------------------------------------------
+//
+// The whole transport: an HTTP stream into an <audio> element. No session to
+// open, no transcript to answer, no mic — which is the entire reason this
+// exists, because Speech Engine can only carry a reply to something it heard.
+//
+// ONE line at a time. Assigning `src` while a play() is still resolving aborts
+// it, and both lines are lost — the browser calls that `AbortError: interrupted
+// by a new load request`, and it cost an afternoon in the spike.
+const speaker = new Audio();
+const speakBacklog = [];
+let speakingId = null;
+
+function enqueueSpeak(id) {
+  speakBacklog.push(id);
+  playNextSpoken();
+}
+
+function playNextSpoken() {
+  if (speakingId !== null) return;
+  const id = speakBacklog.shift();
+  if (id === undefined) return;
+  speakingId = id;
+  speaker.src = `/api/voice/say/${encodeURIComponent(id)}`;
+  speaker.play().catch((e) => {
+    // Chrome refuses audio until the page has been interacted with. Say so:
+    // silence is indistinguishable from a hang, which is the bug this replaces.
+    entry('activity', (n) => (n.textContent = `🔇 not spoken — ${e.name === 'NotAllowedError' ? 'click the page once to allow audio' : e.message}`));
+    doneSpeaking(id);
+  });
+}
+
+/** Advance exactly once per line, however it ended. */
+function doneSpeaking(id) {
+  if (speakingId !== id) return;
+  speakingId = null;
+  playNextSpoken();
+}
+
+speaker.addEventListener('ended', () => doneSpeaking(speakingId));
+// A failed fetch (502 from a missing permission, say) must not wedge the queue.
+// The server publishes its own `unspoken` line with the reason.
+speaker.addEventListener('error', () => doneSpeaking(speakingId));
 
 // --- in-progress indicator -------------------------------------------------
 //

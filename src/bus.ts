@@ -99,6 +99,10 @@ export type UIMessage =
   // drops chips that a spoken turn just used.
   | { type: 'pointing'; refs: WorkRef[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
+  // A line is ready to be SPOKEN, and here is where to fetch the audio. Carries
+  // no words: the transcript already has them, and shipping them twice invites
+  // the page to render a copy. Never replayed — see publish().
+  | { type: 'speak'; id: string; chars: number }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
@@ -122,7 +126,9 @@ export class ConversationBus {
     // republishes on every file save, so replaying it would bury the transcript.
     if (m.type === 'status') {
       this.lastStatus = m;
-    } else if (m.type !== 'pending' && m.type !== 'work' && m.type !== 'pointing') {
+      // `speak` is an instruction to make a noise NOW. Replaying it would make a
+      // reconnecting page perform the whole conversation again, out loud.
+    } else if (m.type !== 'pending' && m.type !== 'work' && m.type !== 'pointing' && m.type !== 'speak') {
       this.history.push(m);
       if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();
     }

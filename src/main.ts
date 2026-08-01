@@ -7,6 +7,7 @@ import { PendingStore } from './state.ts';
 import { AskGate } from './askgate.ts';
 import { SessionManager } from './session.ts';
 import { VoiceService } from './voice.ts';
+import { SpeakOut } from './speakOut.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
@@ -47,7 +48,12 @@ const KICKOFF =
 const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
 
 const voice = new VoiceService(cfg, bus, session);
-const server = createServer({ cfg, bus, events, pending, gate, session, voice, work });
+// The OUTBOUND plane, and deliberately not part of VoiceService: it does not need
+// Speech Engine, a tunnel, a public port or an armed mic, and it is what survives
+// when those go. Handed to voice so announcements stop waiting for a transcript.
+const speakOut = new SpeakOut(cfg, bus);
+if (speakOut.configured) voice.speakOut = speakOut;
+const server = createServer({ cfg, bus, events, pending, gate, session, voice, speakOut, work });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -91,6 +97,13 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);
   console.log(`  who:   ${cfg.directorName} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
+  console.log(
+    `  speech: ${
+      speakOut.configured
+        ? `speak-out on (${cfg.ttsModel}) — she no longer waits for a transcript`
+        : 'speak-out off — announcements wait for a transcript'
+    }`
+  );
 });
 
 // Only listen publicly when voice is actually configured — otherwise nothing

@@ -135,6 +135,11 @@ These cost hours. Don't rediscover them.
   6–14 s for the recogniser's own filler at an empty room, and **a muted mic means
   she is mute too** — no audio, no transcript, no mouth. The mic is what opens a
   channel, and that is a product constraint, not a policy.
+  ✅ **Solved, and not by Speech Engine.** `src/speakOut.ts` streams her audio to the
+  page over loopback, so she speaks whenever she likes with no session and no mic.
+  Everything above still describes the *Speech Engine* path, which now carries only
+  transcript-driven turns. Don't try either dead end again; don't add scaffolding to
+  the announcement queue either — step 3 deletes it.
 - **A permission card cannot be answered by voice.** `canUseTool` pends forever by
   design, so a prompt reaching the gate stops a spoken conversation dead — the paid
   channel bills while she waits and the only tell is silence, which reads as a hang.
@@ -191,10 +196,12 @@ These cost hours. Don't rediscover them.
 `docs/` is where agreed-but-unbuilt work lives, so a fresh session can pick it up without
 the conversation that produced it. Where things stand:
 
-- **`voice-plane.md`** — DECIDED, not started. Leave Speech Engine for browser STT plus
-  server-side TTS, because she can never speak first and outbound speech is the premise.
-  Spike the echo/barge-in behaviour first, then land speak-out while Speech Engine still
-  carries input; each step leaves a working harness, and the last one is pure deletion.
+- **`voice-plane.md`** — steps 1 and 2 are BUILT. The spike (`spike/voice-plane/`) settled
+  the risk that could have sunk it: with the speakers up she does not hear herself, and
+  barge-in behaves. Speak-out has landed (`src/speakOut.ts`), so **she no longer waits for
+  a transcript to say something**. Next: swap input to browser STT and move the settle
+  window into the page, then tear out the transport tax — voice port, tunnel, singleton,
+  cost meter. That last step is pure deletion, which is the point.
 - **`status-surface.md`** — step 1 is BUILT: the dot tracks anything running, the spinner
   tracks the prediction. Next the stats move behind the context meter, then the test
   monitor takes the top right.

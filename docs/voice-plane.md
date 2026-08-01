@@ -166,9 +166,21 @@ free when not, and no reason to ever hang up.
    one therefore does not protect the recogniser at all — it protects the barge-in gate.
    That makes parking the ear during playback load-bearing rather than optional, and
    makes the RMS gate the only way interruption survives. Worth knowing before step 3.
-2. **Speak-out first, while Speech Engine still handles input.** Outbound is the half that
-   is broken today, and it can land on its own: `say` items and announcements go out over
-   the new path immediately, with no waiting.
+2. **Speak-out first, while Speech Engine still handles input.** BUILT — `src/speakOut.ts`,
+   `GET /api/voice/say/<id>`, and a serial player in `ui/app.js`. A line she writes is held
+   server-side, published to the page as an id, and streamed as mp3 into an `<audio>`
+   element. **She speaks the moment she has something to say**: no session to open, no
+   transcript to answer, no mic, no `speak-request`, no staleness window.
+
+   Deliberately NOT part of `VoiceService`: it needs none of Speech Engine, the tunnel, the
+   public port or an armed mic, and it is what survives when those go. Transcript-driven
+   turns still answer through Speech Engine (`turnActive` keeps them from being spoken
+   twice), which is what makes this step land on its own.
+
+   Two things worth carrying forward: the voice id is INHERITED from the engine so both
+   paths sound like the same person, and the model deliberately is not — which means audio
+   tags are stripped on this path (`eleven_flash_v2_5` predates them). `HARNESS_SPEAK_OUT=0`
+   goes back to waiting.
 3. **Swap input over**, move the settle window into the page, and delete the queue,
    `speakable`, and the ack with it.
 4. **Tear out the transport tax** — voice port, tunnel, singleton, cost meter — and

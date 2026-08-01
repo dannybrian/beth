@@ -77,6 +77,29 @@ export type HarnessConfig = {
    */
   publicWsUrl?: string;
   /**
+   * OUTBOUND speech: stream TTS from the harness and let the page play it, rather
+   * than waiting for Speech Engine to carry a response to something it heard.
+   *
+   * This is the half of the voice plane Speech Engine cannot do at all — a queued
+   * line waits 6–14 s for the recogniser to remark on an empty room, and never
+   * arrives at all if the mic is muted. Set HARNESS_SPEAK_OUT=0 to go back to
+   * announcements-wait-for-a-transcript. See docs/voice-plane.md.
+   */
+  speakOut: boolean;
+  /**
+   * Whose voice she speaks in. Read off the Speech Engine when absent, so the two
+   * paths sound like the same person — the IDENTITY is worth inheriting even
+   * though the model below is not.
+   */
+  voiceId?: string;
+  /**
+   * TTS model for the speak-out path, which is NOT the engine's.
+   * `eleven_v3_conversational` is rejected by the standalone endpoint (tried
+   * 2026-08-01), and realtime models are the ones tuned for first-byte latency,
+   * which is what matters when she is talking to you.
+   */
+  ttsModel: string;
+  /**
    * Whether the configured Speech Engine's TTS model understands v3 audio tags.
    * Realtime engines often run Flash/Turbo for latency, which may not. When false,
    * tags are stripped from the voice path too, so the voice never reads them aloud.
@@ -194,6 +217,9 @@ export function loadConfig(): HarnessConfig {
     elevenLabsApiKey: conf('ELEVENLABS_API_KEY'),
     speechEngineId: conf('SPEECH_ENGINE_ID'),
     publicWsUrl: conf('HARNESS_PUBLIC_WS_URL'),
+    speakOut: conf('HARNESS_SPEAK_OUT') !== '0',
+    voiceId: conf('HARNESS_VOICE_ID') ?? conf('ELEVENLABS_VOICE_ID'),
+    ttsModel: conf('HARNESS_TTS_MODEL') ?? 'eleven_flash_v2_5',
     audioTagsSupported: conf('HARNESS_AUDIO_TAGS') !== '0',
     speechLevel: (SPEECH_LEVELS as string[]).includes(conf('HARNESS_SPEECH_LEVEL') ?? '')
       ? (conf('HARNESS_SPEECH_LEVEL') as SpeechLevel)

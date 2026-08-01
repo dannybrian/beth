@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import type { ConversationBus, UIMessage } from './bus.ts';
 import type { EventLog } from './eventlog.ts';
@@ -14,6 +15,7 @@ import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
 import type { VoiceService } from './voice.ts';
+import type { SpeakOut } from './speakOut.ts';
 import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
@@ -49,6 +51,7 @@ export function createServer(deps: {
   gate: AskGate;
   session: SessionManager;
   voice: VoiceService;
+  speakOut?: SpeakOut;
   work: WorkIndex;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
@@ -251,7 +254,30 @@ export function createServer(deps: {
         return json(200, await deps.voice.mintToken());
       }
       if (url.pathname === '/api/voice/status') {
-        return json(200, deps.voice.status());
+        return json(200, { ...deps.voice.status(), ...(deps.speakOut?.status() ?? {}) });
+      }
+      // Audio for a line she has decided to say. This is the ENTIRE outbound
+      // transport: an HTTP stream into an <audio> element, on the loopback
+      // server, which is why the new plane needs no tunnel and no public port.
+      if (url.pathname.startsWith('/api/voice/say/')) {
+        const id = url.pathname.slice('/api/voice/say/'.length);
+        if (!deps.speakOut) return json(503, { error: 'speak-out is not configured' });
+        try {
+          const stream = await deps.speakOut.stream(id);
+          res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store' });
+          const node = Readable.fromWeb(stream as any);
+          node.on('error', () => res.destroy());
+          req.on('close', () => node.destroy());
+          return void node.pipe(res);
+        } catch (e: any) {
+          // Say WHY out loud. The failure that actually happens is the API key
+          // missing the text_to_speech permission, and a silent 502 there reads
+          // as "voice is broken" rather than as one checkbox.
+          const msg = String(e?.body?.detail?.message ?? e?.message ?? e).slice(0, 300);
+          console.log(`  speak-out: ${id} failed — ${msg}`);
+          bus.publish({ type: 'voice', state: 'unspoken', detail: msg, status: deps.voice.status() });
+          return json(502, { error: msg });
+        }
       }
       if (url.pathname === '/api/context') {
         // Full category breakdown — what actually occupies the window, and the
