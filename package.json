@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node src/main.ts"
+    "start": "node src/main.ts",
+    "test": "node --test src/*.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +18,8 @@
     "@elevenlabs/elevenlabs-js": "^2.60.0",
     "ws": "^8.21.1",
     "zod": "^4.4.3"
+  },
+  "bin": {
+    "beth": "./bin/beth.mjs"
   }
 }

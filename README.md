@@ -8,6 +8,23 @@ CLAUDE.md, skills, hooks, and `/plans` work exactly as they do in a terminal —
 harness only re-homes the director's input and output.
 
 ```bash
+cd ~/Sources/beadgame && beth
+```
+
+`beth` binds to the git root you are standing in, picks a free port (so several
+repos run side by side), **starts the ngrok tunnel** — voice does not work without
+one, because ElevenLabs dials *in* — opens the browser, and tears everything down
+together on Ctrl-C. `beth --help` for flags; `--no-tunnel` and `--no-open` opt out.
+
+Install the command once:
+
+```bash
+ln -sf ~/Sources/director-harness/bin/beth.mjs ~/.local/bin/beth
+```
+
+Or run the server directly, without the tunnel or port-picking:
+
+```bash
 node src/main.ts          # → http://localhost:4620
 ```
 
