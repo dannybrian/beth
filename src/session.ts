@@ -100,7 +100,17 @@ export class SessionManager {
 
   private sessionFile = () => path.join(this.cfg.stateDir, 'session.json');
 
+  /**
+   * Every launch is a clean conversation by default. Resuming across days let stale
+   * context accumulate — and it buys less than it appears to: of ~51k tokens, only
+   * ~9k was message history. The rest is fixed prefix (memory files, tool schemas)
+   * that a fresh session pays for anyway.
+   *
+   * The session id is still written on every run, so `HARNESS_RESUME=1` can pick up
+   * exactly where the last one left off when that is what you want.
+   */
   private loadPriorSession(): string | undefined {
+    if (process.env.HARNESS_RESUME !== '1') return undefined;
     try {
       const { sessionId, cwd } = JSON.parse(fs.readFileSync(this.sessionFile(), 'utf8'));
       // cwd keys session storage; resuming under a different cwd silently starts fresh.
