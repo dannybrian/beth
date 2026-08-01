@@ -39,6 +39,12 @@ export type HarnessConfig = {
    * Set HARNESS_VOICE_EFFORT=off to disable the switch entirely.
    */
   voiceEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+  /**
+   * How long a spoken turn may stay silent before Beth says "let me check".
+   * The filler marks LATENESS — if the real answer lands inside this window it is
+   * never spoken, so quick replies are not prefaced with a stall.
+   */
+  fillerDelayMs: number;
 };
 
 // The director session runs all day and every turn carries full repo context, so
@@ -91,5 +97,6 @@ export function loadConfig(): HarnessConfig {
       process.env.HARNESS_VOICE_EFFORT === 'off'
         ? null
         : ((process.env.HARNESS_VOICE_EFFORT ?? 'low') as HarnessConfig['voiceEffort']),
+    fillerDelayMs: Number(process.env.HARNESS_FILLER_DELAY_MS ?? 1500),
   };
 }

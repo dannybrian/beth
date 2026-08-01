@@ -217,11 +217,8 @@ export class VoiceService {
     let done = false;
     let myTurn = -1;
 
-    // Say something immediately. Two jobs: it covers the seconds the director
-    // spends thinking (which dominate round-trip latency, not TTS), and it
-    // guarantees the response is never empty — an empty response makes ElevenLabs
-    // re-deliver the transcript, which is how the ping-pong loop started.
-    queue.push(this.pickFiller());
+    const filler = this.pickFiller();
+    const fillerDelayMs = this.cfg.fillerDelayMs;
 
     const push = (s: string) => {
       const text = forVoice(s, this.cfg.audioTagsSupported && this.tagsSupported).trim();
@@ -251,17 +248,52 @@ export class VoiceService {
 
     myTurn = this.session.send(utterance);
 
+    /** Resolves false when woken by new text, true when the wait timed out. */
+    const waitForText = (ms?: number) =>
+      new Promise<boolean>((resolve) => {
+        let settled = false;
+        wake = () => {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        };
+        if (ms !== undefined) {
+          setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            resolve(true);
+          }, ms).unref?.();
+        }
+      });
+
     return {
       async *[Symbol.asyncIterator]() {
+        let emitted = 0;
         try {
           for (;;) {
             if (queue.length) {
+              emitted++;
               yield queue.shift()!;
               continue;
             }
-            if (done) return;
-            await new Promise<void>((r) => (wake = r));
+            if (done) break;
+
+            // The filler is a LATENESS signal, not a greeting. Wait first: if the
+            // real answer arrives inside the window, Danny never hears "let me
+            // check" in front of a fast reply. Only a genuinely slow turn gets one.
+            if (emitted === 0) {
+              const timedOut = await waitForText(fillerDelayMs);
+              if (timedOut && !queue.length && !done) {
+                emitted++;
+                yield filler;
+              }
+              continue;
+            }
+            await waitForText();
           }
+          // Never end an empty response: ElevenLabs re-delivers the transcript when
+          // it gets nothing back, which is how the ping-pong loop started.
+          if (emitted === 0) yield 'Sorry — I came up empty on that one.';
         } finally {
           unsub();
         }
