@@ -15,6 +15,8 @@ import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
 import type { VoiceService } from './voice.ts';
 import type { HarnessConfig } from './config.ts';
+import type { WorkIndex } from './workIndex.ts';
+import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
@@ -39,8 +41,9 @@ export function createServer(deps: {
   gate: AskGate;
   session: SessionManager;
   voice: VoiceService;
+  work: WorkIndex;
 }) {
-  const { cfg, bus, events, pending, gate, session } = deps;
+  const { cfg, bus, events, pending, gate, session, work } = deps;
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${cfg.port}`);
@@ -69,6 +72,9 @@ export function createServer(deps: {
       // Re-render anything still waiting on a human.
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
+      // Only in-flight items go down the stream — the panel shows in-progress
+      // work, and shipping all 571 of beadgame's plans on every connect is waste.
+      send({ type: 'work', items: work.inFlight() });
       const unsub = bus.subscribe(send);
       const keepalive = setInterval(() => res.write(': ping\n\n'), 20_000);
       req.on('close', () => {
@@ -85,8 +91,15 @@ export function createServer(deps: {
         switch (url.pathname) {
           case '/api/turn': {
             const text = String(body.text ?? '').trim();
-            if (!text) return json(400, { error: 'empty turn' });
-            session.send(text);
+            const refs: WorkRef[] = Array.isArray(body.refs) ? body.refs : [];
+            // A turn may be nothing BUT a pointing gesture — clicking a plan and
+            // hitting send is a legitimate "tell me about this".
+            if (!text && !refs.length) return json(400, { error: 'empty turn' });
+            const preamble = work.preamble(refs);
+            session.send(preamble ? `${preamble}\n${text}` : text, {
+              display: text || `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})`,
+              refs,
+            });
             return json(200, { ok: true });
           }
           case '/api/answer': {
@@ -151,6 +164,12 @@ export function createServer(deps: {
         // prefix that gets re-read on every API round-trip.
         const ctx = await session.contextUsage();
         return json(200, ctx ?? { error: 'no session' });
+      }
+      if (url.pathname === '/api/work') {
+        // The whole index, for anything the stream's in-flight slice can't answer
+        // (search over parked/shipped work, resolving a stale reference).
+        const scope = url.searchParams.get('scope');
+        return json(200, { items: scope === 'all' ? work.all() : work.inFlight() });
       }
       if (url.pathname === '/api/state') {
         return json(200, {

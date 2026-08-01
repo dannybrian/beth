@@ -7,15 +7,24 @@ import { AskGate } from './askgate.ts';
 import { SessionManager } from './session.ts';
 import { VoiceService } from './voice.ts';
 import { createServer } from './server.ts';
+import { WorkIndex } from './workIndex.ts';
+import { createPlansReader } from './plansReader.ts';
+import { isInFlight } from './workItems.ts';
 
 const cfg = loadConfig();
 const bus = new ConversationBus();
 const events = new EventLog(cfg.eventLogPath);
 const pending = new PendingStore();
 
+// One index, two consumers: the panel over the stream, and Beth via the `plans`
+// tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
+const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })]);
+work.subscribe((items) => bus.publish({ type: 'work', items: items.filter((i) => isInFlight(i.status)) }));
+work.start();
+
 let session: SessionManager;
 const gate = new AskGate(bus, events, () => session.sessionId());
-session = new SessionManager(cfg, bus, events, pending, gate);
+session = new SessionManager(cfg, bus, events, pending, gate, work);
 
 // Terminal-session and hook writes to the event log flow into the UI too.
 events.onEvent((e) => {
@@ -29,7 +38,7 @@ const KICKOFF =
 const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
 
 const voice = new VoiceService(cfg, bus, session);
-const server = createServer({ cfg, bus, events, pending, gate, session, voice });
+const server = createServer({ cfg, bus, events, pending, gate, session, voice, work });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -50,6 +59,7 @@ server.listen(cfg.port, () => {
 
 const shutdown = () => {
   events.stop();
+  work.stop();
   session.stop();
   server.close();
   process.exit(0);

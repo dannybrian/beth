@@ -12,6 +12,14 @@ It is **project-agnostic on purpose**. The harness supplies the director's ROLE;
 bound repo supplies the PERSON via its own `.claude/DIRECTOR.md`. Resist anything that
 teaches the harness about a specific project.
 
+The same split holds for work: the harness defines the SHAPE of a work item
+(`src/workItems.ts`) and a *reader* produces it from whatever the project stores.
+`/plans` is a BUILT-IN reader because dated-markdown-with-frontmatter is Danny's
+convention across repos — beadgame ships nothing. A project with foreign work (issues,
+Linear) supplies its own reader. The harness only READS: the project's `/plans` and
+`/tidyrepo` own where plans live and whether they are accurate, and nothing here may
+write a plan file or repair frontmatter.
+
 ## Conventions
 
 - **No build step.** Node ≥ 23 runs `.ts` directly via native type stripping. This is
@@ -35,9 +43,12 @@ teaches the harness about a specific project.
 pnpm test        # node --test src/*.test.ts
 ```
 
-Tests are thin and concentrated where behaviour is subtle (`audioTags`). The turn-stream
-timing in `voice.ts` has produced two real bugs and has no tests — a good place to add
-some.
+Tests are thin and concentrated where behaviour is subtle (`audioTags`, `spokenName`,
+the `plansReader` parsers, the `workIndex` watcher). The turn-stream timing in `voice.ts`
+has produced two real bugs and has no tests — a good place to add some.
+
+Watcher tests poll for a condition rather than sleeping a fixed amount; filesystem event
+latency has no guarantee, and a fixed wait is how these go flaky.
 
 ## Running it
 

@@ -26,6 +26,8 @@
     <main>
       <section class="transcript" id="transcript"></section>
       <aside class="side">
+        <h2>Plans <span id="work-count" class="count"></span></h2>
+        <div id="work-panel" class="panel work"></div>
         <h2>Pending</h2>
         <div id="pending-decisions" class="panel"></div>
         <h2>Workers</h2>
@@ -36,11 +38,16 @@
     </main>
 
     <footer class="composer">
-      <button id="voice-toggle" class="voice off" title="Voice off">🎙</button>
-      <textarea id="input" rows="1" placeholder="Talk to Beth…" autofocus></textarea>
-      <button id="send">Send</button>
-      <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
-      <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>
+      <!-- What Danny is pointing at. Each chip carries a spoken name he can read
+           and a path Beth can resolve — the pair is the whole point. -->
+      <div id="composer-refs" class="refs" hidden></div>
+      <div class="composer-row">
+        <button id="voice-toggle" class="voice off" title="Voice off">🎙</button>
+        <textarea id="input" rows="1" placeholder="Talk to Beth…" autofocus></textarea>
+        <button id="send">Send</button>
+        <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
+        <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>
+      </div>
     </footer>
 
     <script src="/vendor/elevenlabs.js"></script>

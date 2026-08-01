@@ -222,14 +222,131 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 }
 .item button.resolve:hover { color: var(--text); border-color: var(--accent); }
 
+/* --- plans panel --- */
+.side h2 .count { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.panel.work { gap: 3px; }
+.panel.work:empty::after { content: "no plans in flight"; }
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 2px 2px;
+  cursor: pointer;
+}
+.group-head:hover { color: var(--text); }
+.group-count { margin-left: auto; }
+
+.work-item { padding: 6px 8px; }
+.work-head { display: flex; align-items: flex-start; gap: 4px; }
+.caret {
+  flex: none;
+  width: 13px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.caret.spacer { cursor: default; }
+.caret:hover { color: var(--text); }
+
+/* The click target that matters: pointing Beth at this plan. */
+.work-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.work-name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.work-item .meta { margin-left: 17px; }
+.work-item.status-blocked { border-left: 3px solid var(--err); }
+.work-item.status-active { border-left: 3px solid var(--ok); }
+.work-item.status-planning { border-left: 3px solid var(--line); }
+
+.bar { height: 2px; background: var(--line); border-radius: 2px; margin: 5px 0 1px 17px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); }
+
+.tasks { margin: 5px 0 2px 10px; border-left: 1px solid var(--line); }
+.task {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  font-size: 11.5px;
+  color: var(--text);
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.task:hover { background: #20252d; }
+.task .box { flex: none; color: var(--muted); font-size: 10px; }
+/* Tasks are written as full sentences; a 61-task plan must not become a wall. */
+.task-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.task.done { color: var(--muted); }
+.task.done .task-text { text-decoration: line-through; text-decoration-color: var(--line); }
+
+/* --- references (the composer chips) --- */
+.refs { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 34ch;
+  padding: 2px 4px 2px 8px;
+  border-radius: 11px;
+  font-size: 11.5px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+}
+/* A task reference is a different kind of thing from a plan reference. */
+.chip.task { background: color-mix(in srgb, var(--say) 14%, transparent); border-color: color-mix(in srgb, var(--say) 40%, transparent); }
+.chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-x {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 3px;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.chip-x:hover { color: var(--err); }
+.refs.sent { justify-content: flex-end; margin-bottom: 5px; }
+.refs.sent .chip { padding-right: 8px; }
+
 /* --- composer --- */
 .composer {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 10px 14px;
   border-top: 1px solid var(--line);
   background: var(--panel);
 }
+.composer-row { display: flex; gap: 8px; }
 .composer textarea {
   flex: 1;
   resize: none;

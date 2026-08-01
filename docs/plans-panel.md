@@ -123,13 +123,70 @@ reachable from anywhere and survives the harness not running; the harness is loc
 deliberately so. Do not delete the dashboard view on the strength of this. Let it decay
 naturally if it goes unused.
 
+## What was built (2026-07-31)
+
+Deixis, the index, the panel and the tool. Handoff and search are not built; the seams
+for them are noted below. Code: `workItems.ts` (the shape and the reader seam),
+`plansReader.ts` (the built-in `/plans` reader), `spokenName.ts` (naming, tested),
+`workIndex.ts` (index, watcher, reference resolution).
+
+**A reference is a pair, and neither half lives in the text.** The composer holds chips,
+not a `[title](path)` string: the chip shows the spoken name, the path rides underneath,
+and the turn posts `{text, refs[]}`. The server composes what Beth receives — a preamble
+naming what was pointed at and instructing her to use the spoken name — while the
+transcript shows what Danny typed. Keeping the two apart means he can edit his sentence
+freely without dangling a reference, and a turn can be pure gesture (click, send).
+
+`WorkIndex.preamble(refs)` is the single place that phrasing lives, so a spoken turn can
+carry the same references later without the composer being involved.
+
+**Spoken names are derived, and that turned out to be the substance.** Measured against
+the real corpus: cutting a title at its em-dash reads well but collapses 69 plans into
+collisions — three in-flight plans all become "Viz sidecar", others become bare "Design".
+So naming is a candidate ladder (headline → filename → full title → qualified) with
+collision resolution across the whole index; the filename is often the best name because
+Danny chose it. Result on beadgame: 571 plans, zero duplicates.
+
+**Plans can name themselves.** `name:` in frontmatter wins over any derived name,
+verbatim. Nothing uses it today, which is why derivation has to be good on its own.
+
+**One index, two consumers — and it needed enforcing.** First live test: asked what was
+left on a plan, Beth *grepped the file* rather than calling the tool. Her regex would
+have counted checkboxes inside code fences and missed indented ones — a different number
+than the panel, which is the exact failure this design is meant to prevent. The tool
+description and persona now say so explicitly. Verified: she calls `plans` and speaks
+names, not paths.
+
+### Reader notes, from the real corpus
+
+- Plans are **not** in one directory — 571 across a dozen roots, most under `game/plans/`,
+  not the top-level `plans/`. `plans/**/*.md` would have missed the bulk of them.
+- The **title is not in frontmatter**; it is the first H1.
+- **Checkboxes inside fenced code blocks are samples, not tasks.**
+- `future/` without explicit status means **parked** — mirroring the `/plans` skill, or
+  dozens of parking-lot ideas surface as `unknown` straight into the panel.
+- A stale `owner:` is **not** a live claim. Liveness needs a fresh session record naming
+  that plan. This is the check the handoff must refuse on.
+
+### The harness reads; it does not own
+
+The project's `/plans` and `/tidyrepo` own where plans live and whether they are accurate.
+The reader never writes a plan file, never repairs frontmatter, never re-homes anything.
+Discovery defers to the project's own index for *where* to look and reads the files
+themselves for *what is true* — so the panel is fresh without becoming a second authority.
+
 ## Open questions
 
-- **Reference format.** What exactly lands in the chat input on click — a path, a title,
-  a `[title](path)` pair? It has to read well aloud and resolve unambiguously.
+- ~~**Reference format.**~~ Resolved: a chip carrying `{spoken, path}`, never a string in
+  the input. See above.
 - **Claude Code handoff mechanism.** CLI with a seeded prompt, or a URL scheme? Verify
-  before designing.
-- **Umbrella plans.** Danny mentioned these; the plans system has `depends_on` but no
-  parent/child. Does the panel infer hierarchy, or does the plans format gain it?
-- **Search scope.** Titles and frontmatter only, or full body text? Full text is more
-  useful and invites "just ask Beth" instead — which may be the better answer.
+  before designing. The index already carries `claim.live` and per-task `line`, which is
+  what the refusal and the VSCode jump need.
+- **Umbrella plans.** Still open, and now has a lever: `name:` lets an umbrella plan take
+  a name reflecting what hangs off it. Danny also wants naming from the **UI** — renaming
+  a plan without editing its file. `WorkIndex.nameOverrides` is that seam: consulted
+  before frontmatter, empty today. Landing it is populating the map plus an affordance,
+  not a refactor. Hierarchy itself is still unmodelled.
+- **Search scope.** Unbuilt. `/api/work?scope=all` exposes the whole index, and bodies are
+  deliberately not held in memory yet — 571 plans of body text is the cost to weigh when
+  full-text search is actually wanted.

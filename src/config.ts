@@ -16,6 +16,13 @@ export type HarnessConfig = {
   eventLogPath: string;
   /** Plan whose live claim means a terminal director already holds the role. */
   directorPlan: string;
+  /**
+   * Where this project's plans live, repo-relative. Normally EMPTY: the reader
+   * defers to the project's own index and falls back to finding directories named
+   * `plans`. Set HARNESS_PLAN_ROOTS only for a repo that keeps them somewhere the
+   * reader cannot find on its own.
+   */
+  planRoots: string[];
   model: string;
   /** Voice is optional — absent credentials degrade the harness to text-only. */
   elevenLabsApiKey?: string;
@@ -88,6 +95,10 @@ export function loadConfig(): HarnessConfig {
     stateDir,
     eventLogPath: path.join(repo, '.claude', 'events.jsonl'),
     directorPlan: process.env.HARNESS_DIRECTOR_PLAN ?? 'plans/2026-07-30-director-consolidation.md',
+    planRoots: (process.env.HARNESS_PLAN_ROOTS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
     model: process.env.HARNESS_MODEL ?? DEFAULT_MODEL,
     elevenLabsApiKey: process.env.ELEVENLABS_API_KEY ?? env.ELEVENLABS_API_KEY,
     speechEngineId: process.env.SPEECH_ENGINE_ID ?? env.SPEECH_ENGINE_ID,

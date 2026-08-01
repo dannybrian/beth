@@ -29,7 +29,12 @@ export type RoleAssessment = {
   blockedBy?: SessionRecord;
 };
 
-function liveRecords(repo: string): SessionRecord[] {
+/**
+ * Session records whose heartbeat is fresh enough to mean a REAL working session.
+ * Shared with the work index: a plan's `owner` frontmatter is only a live claim if
+ * one of these names it, and the one-click handoff has to refuse on exactly that.
+ */
+export function liveRecords(repo: string): SessionRecord[] {
   const dir = path.join(repo, '.claude', 'sessions');
   if (!fs.existsSync(dir)) return [];
   const now = Date.now();

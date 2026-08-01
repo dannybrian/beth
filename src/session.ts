@@ -13,6 +13,8 @@ import type { ConversationBus, UsageSnapshot } from './bus.ts';
 import type { EventLog } from './eventlog.ts';
 import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
+import type { WorkIndex } from './workIndex.ts';
+import type { WorkRef } from './workItems.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
@@ -67,7 +69,12 @@ const PERSONA = [
   // --- how she works ---
   'Use the harness `say` tool for discrete announceable events — one item per call, first sentence stands alone. Ordinary replies still reach Danny as text, so use `say` for mid-work narration and things worth surfacing on their own, not to echo your reply.',
   'Use `queue_decision` for anything Danny should decide but that does not block you. Reserve AskUserQuestion for decisions that genuinely block the work — it pauses the turn.',
-  'Answer "what\'s pending?" from the `pending` tool, never from memory.',
+  'Answer "what\'s pending?" from the `pending` tool, and anything about plans — what is in flight, a plan\'s status, how far along it is, what its tasks are — from the `plans` tool. Never from memory, and never by grepping plan files: the index and the panel Danny is looking at are the same source, and a hand-rolled count will disagree with what he can see.',
+  // Deixis: Danny points at a plan in the panel, and the turn arrives carrying a
+  // spoken name for it. Reading the path aloud instead is the exact failure the
+  // reference pair exists to prevent.
+  'When a turn tells you Danny is POINTING at something, treat that as what "this" and "that" refer to. Call it by the quoted spoken name, in speech and in writing. Never read a file path aloud.',
+  'A plan with no tasks has no checkboxes yet — say "no tasks", never "nothing done" or "0%".',
   'Work model: answer questions and quick reads inline; dispatch build-shaped work to a background subagent so the conversation stays answerable in seconds.',
 ].join(' ');
 
@@ -88,19 +95,22 @@ export class SessionManager {
   private events: EventLog;
   private pending: PendingStore;
   private gate: AskGate;
+  private work: WorkIndex;
 
   constructor(
     cfg: HarnessConfig,
     bus: ConversationBus,
     events: EventLog,
     pending: PendingStore,
-    gate: AskGate
+    gate: AskGate,
+    work: WorkIndex
   ) {
     this.cfg = cfg;
     this.bus = bus;
     this.events = events;
     this.pending = pending;
     this.gate = gate;
+    this.work = work;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
   }
 
@@ -181,6 +191,7 @@ export class SessionManager {
             sessionId: this.sessionId,
             publishPending: this.publishPending,
             voiceActive: this.voiceActive,
+            work: this.work,
           }),
         },
         canUseTool: this.gate.canUseTool,
@@ -204,10 +215,14 @@ export class SessionManager {
    * consumer can tell ITS turn finishing from any other turn finishing — without
    * that, a voice stream ends on whatever `idle` happens to arrive first.
    * Note: turns pushed close together COALESCE into one turn.
+   *
+   * `display` splits what Beth RECEIVES from what the transcript SHOWS. A turn
+   * carrying references is prefixed with a block naming what Danny pointed at;
+   * showing him that block back would bury the sentence he actually typed.
    */
-  send(text: string, opts: { silent?: boolean } = {}): number {
+  send(text: string, opts: { silent?: boolean; display?: string; refs?: WorkRef[] } = {}): number {
     const turn = ++this.turnSeq;
-    if (!opts.silent) this.bus.publish({ type: 'user', text });
+    if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs });
     this.bus.publish({ type: 'status', state: 'thinking', turn });
     this.input.push(userMsg(text));
     return turn;

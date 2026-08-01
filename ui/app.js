@@ -31,7 +31,17 @@ function entry(kind, build) {
   return add(n);
 }
 
-const renderUser = (m) => entry('user', (n) => n.append(el('div', 'body', m.text)));
+const renderUser = (m) =>
+  entry('user', (n) => {
+    // Show what he pointed at next to what he typed — a turn that was mostly a
+    // gesture should still read as one later.
+    if (m.refs?.length) {
+      const row = el('div', 'refs sent');
+      for (const r of m.refs) row.append(el('span', `chip ${r.kind}`, r.spoken));
+      n.append(row);
+    }
+    n.append(el('div', 'body', m.text));
+  });
 const renderAssistant = (m) => entry('assistant', (n) => n.append(el('div', 'body', m.text)));
 
 const renderSay = (m) =>
@@ -146,6 +156,135 @@ function renderPending(m) {
   );
 }
 
+// --- plans panel + click-to-reference ---------------------------------------
+//
+// Clicking is the point of this panel. A reference is a PAIR — the spoken name
+// Beth reads back, and the path she resolves — so a click carries both, and the
+// composer shows the name while the path rides underneath.
+
+/** Pending references for the next turn, in click order. */
+let refs = [];
+/** Expansion survives re-render; the index republishes on every file save. */
+const expanded = new Set();
+const collapsedGroups = new Set(['blocked', 'planning']);
+let workItems = [];
+
+const refKey = (r) => `${r.path}#${r.taskIndex ?? ''}`;
+
+function renderRefs() {
+  const box = $('composer-refs');
+  box.hidden = refs.length === 0;
+  box.replaceChildren(
+    ...refs.map((r) => {
+      const chip = el('span', `chip ${r.kind}`);
+      chip.append(el('span', 'chip-name', r.spoken));
+      chip.title = r.line ? `${r.path}:${r.line}` : r.path;
+      const x = el('button', 'chip-x', '×');
+      x.title = 'Remove this reference';
+      x.onclick = () => {
+        refs = refs.filter((o) => refKey(o) !== refKey(r));
+        renderRefs();
+      };
+      chip.append(x);
+      return chip;
+    })
+  );
+}
+
+function attachRef(ref) {
+  if (!refs.some((r) => refKey(r) === refKey(ref))) refs.push(ref);
+  renderRefs();
+  input.focus();
+}
+
+/** Task progress, or null when the plan has no checkboxes. Never "0%". */
+const taskSummary = (item) =>
+  item.tasks.length ? { done: item.tasks.filter((t) => t.done).length, total: item.tasks.length } : null;
+
+function renderTask(item, task) {
+  const row = el('div', `task ${task.done ? 'done' : ''}`);
+  row.style.paddingLeft = `${8 + task.depth * 10}px`;
+  row.append(el('span', 'box', task.done ? '☑' : '☐'));
+  row.append(el('span', 'task-text', task.text));
+  row.title = `Point Beth at this task — ${item.path}:${task.line}`;
+  row.onclick = () =>
+    attachRef({ kind: 'task', path: item.path, spoken: task.spoken, taskIndex: task.index, line: task.line });
+  return row;
+}
+
+function renderWorkItem(item) {
+  const n = el('div', `item work-item status-${item.status}`);
+  const head = el('div', 'work-head');
+
+  const t = taskSummary(item);
+  if (t) {
+    const caret = el('button', 'caret', expanded.has(item.path) ? '▾' : '▸');
+    caret.title = 'Show tasks';
+    caret.onclick = (e) => {
+      e.stopPropagation();
+      expanded.has(item.path) ? expanded.delete(item.path) : expanded.add(item.path);
+      renderWork();
+    };
+    head.append(caret);
+  } else {
+    head.append(el('span', 'caret spacer', ' '));
+  }
+
+  const name = el('button', 'work-name', item.spoken);
+  name.title = `Point Beth at this plan — ${item.path}`;
+  name.onclick = () => attachRef({ kind: 'item', path: item.path, spoken: item.spoken });
+  head.append(name);
+  n.append(head);
+
+  const bits = [item.priority, t ? `${t.done}/${t.total} tasks` : 'no tasks'].filter(Boolean);
+  // A live claim means an implementer is on it — the thing a handoff must respect.
+  if (item.claim?.live) bits.push('claimed');
+  else if (item.claim) bits.push('stale owner');
+  const meta = el('div', 'meta', bits.join(' · '));
+  n.append(meta);
+
+  if (t) {
+    const bar = el('div', 'bar');
+    const fill = el('div', 'fill');
+    fill.style.width = `${Math.round((t.done / t.total) * 100)}%`;
+    bar.append(fill);
+    n.append(bar);
+  }
+
+  if (expanded.has(item.path)) {
+    const list = el('div', 'tasks');
+    for (const task of item.tasks) list.append(renderTask(item, task));
+    n.append(list);
+  }
+  return n;
+}
+
+const STATUS_ORDER = ['active', 'blocked', 'planning'];
+
+function renderWork() {
+  const panel = $('work-panel');
+  $('work-count').textContent = workItems.length ? String(workItems.length) : '';
+  panel.replaceChildren();
+
+  for (const status of STATUS_ORDER) {
+    const group = workItems.filter((i) => i.status === status);
+    if (!group.length) continue;
+    const open = !collapsedGroups.has(status);
+
+    const hdr = el('button', 'group-head');
+    hdr.append(el('span', 'caret', open ? '▾' : '▸'));
+    hdr.append(el('span', 'group-name', status));
+    hdr.append(el('span', 'group-count', String(group.length)));
+    hdr.onclick = () => {
+      open ? collapsedGroups.add(status) : collapsedGroups.delete(status);
+      renderWork();
+    };
+    panel.append(hdr);
+
+    if (open) for (const item of group) panel.append(renderWorkItem(item));
+  }
+}
+
 function renderUsage(u) {
   const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
   $('usage-label').textContent =
@@ -196,6 +335,10 @@ const handlers = {
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
   },
   pending: renderPending,
+  work: (m) => {
+    workItems = m.items;
+    renderWork();
+  },
   cleared: () => {
     transcript.replaceChildren();
     askCards.clear();
@@ -264,13 +407,16 @@ stream.onmessage = (ev) => {
 const input = $('input');
 const send = () => {
   const text = input.value.trim();
-  if (!text) return;
+  // A turn can be pure gesture: click a plan, hit send, "tell me about this".
+  if (!text && !refs.length) return;
   input.value = '';
   input.style.height = 'auto';
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
-  post('/api/turn', { text });
+  post('/api/turn', { text, refs });
+  refs = [];
+  renderRefs();
 };
 $('send').onclick = send;
 $('interrupt').onclick = () => post('/api/interrupt');

@@ -2,6 +2,7 @@
 // Every plane (session, tools, ask gate, event log) publishes here; the web
 // server is currently the only subscriber. Speech (Phase 2) subscribes alongside.
 import type { HarnessEvent } from './eventlog.ts';
+import type { WorkItem, WorkRef } from './workItems.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -46,7 +47,9 @@ export type AskQuestion = {
 
 export type UIMessage =
   | { type: 'hello'; repo: string; mode: string; modeReason: string; model: string }
-  | { type: 'user'; text: string }
+  // `refs` are what Danny POINTED at for this turn — rendered as chips in the
+  // transcript so a turn stays readable next to what he actually typed.
+  | { type: 'user'; text: string; refs?: WorkRef[] }
   // `text` is what Danny READS (audio tags stripped); `voiceText` is what he HEARS.
   | { type: 'assistant'; text: string; voiceText?: string }
   | { type: 'say'; kind: string; text: string; voiceText?: string; ref?: string }
@@ -58,6 +61,7 @@ export type UIMessage =
   | { type: 'usage'; usage: UsageSnapshot }
   | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
+  | { type: 'work'; items: WorkItem[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
@@ -76,10 +80,11 @@ export class ConversationBus {
 
   publish(m: UIMessage) {
     // Transient state messages don't accumulate in replay — but the CURRENT
-    // status still has to reach a browser that connects mid-turn.
+    // status still has to reach a browser that connects mid-turn. `work`
+    // republishes on every file save, so replaying it would bury the transcript.
     if (m.type === 'status') {
       this.lastStatus = m;
-    } else if (m.type !== 'pending') {
+    } else if (m.type !== 'pending' && m.type !== 'work') {
       this.history.push(m);
       if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();
     }
