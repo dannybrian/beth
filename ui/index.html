@@ -14,7 +14,10 @@
         <span class="mode" id="mode-label"></span>
       </div>
       <div class="strip-right">
-        <button id="voice-toggle" class="voice off" title="Voice off">🎙 off</button>
+        <select id="model-select" title="Model for this conversation — switches live, context is kept">
+          <option value="claude-opus-5">Opus 5</option>
+          <option value="claude-fable-5">Fable 5</option>
+        </select>
         <span id="voice-cost"></span>
         <span id="usage-label"></span>
       </div>
@@ -33,6 +36,7 @@
     </main>
 
     <footer class="composer">
+      <button id="voice-toggle" class="voice off" title="Voice off">🎙</button>
       <textarea id="input" rows="1" placeholder="Talk to Beth…" autofocus></textarea>
       <button id="send">Send</button>
       <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>

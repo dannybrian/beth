@@ -45,7 +45,7 @@ export type AskQuestion = {
 };
 
 export type UIMessage =
-  | { type: 'hello'; repo: string; mode: string; modeReason: string }
+  | { type: 'hello'; repo: string; mode: string; modeReason: string; model: string }
   | { type: 'user'; text: string }
   // `text` is what Danny READS (audio tags stripped); `voiceText` is what he HEARS.
   | { type: 'assistant'; text: string; voiceText?: string }
@@ -60,6 +60,7 @@ export type UIMessage =
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
   | { type: 'cleared' }
+  | { type: 'model'; model: string }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {

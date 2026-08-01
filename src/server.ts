@@ -57,7 +57,13 @@ export function createServer(deps: {
         connection: 'keep-alive',
       });
       const send = (m: UIMessage) => res.write(`data: ${JSON.stringify(m)}\n\n`);
-      send({ type: 'hello', repo: cfg.repo, mode: session.role.mode, modeReason: session.role.reason });
+      send({
+        type: 'hello',
+        repo: cfg.repo,
+        mode: session.role.mode,
+        modeReason: session.role.reason,
+        model: session.chosenModel(),
+      });
       send({ type: 'voice', state: deps.voice.status().connected ? 'connected' : 'idle', status: deps.voice.status() });
       for (const m of bus.replay()) send(m);
       // Re-render anything still waiting on a human.
@@ -90,6 +96,12 @@ export function createServer(deps: {
           case '/api/approve': {
             const ok = gate.answerApproval(String(body.id), Boolean(body.allowed));
             return json(ok ? 200 : 404, { ok });
+          }
+          case '/api/model': {
+            const model = String(body.model ?? '').trim();
+            if (!model) return json(400, { error: 'no model' });
+            await session.setModel(model);
+            return json(200, { ok: true, model });
           }
           case '/api/clear': {
             await session.clear();

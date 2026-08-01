@@ -77,6 +77,8 @@ export class SessionManager {
   private modelValue = '';
   private turnSeq = 0;
   private interruptPending = false;
+  /** Survives /clear, so a model chosen in the UI sticks to the next conversation. */
+  private modelChoice = '';
   role: RoleAssessment;
 
   private cfg: HarnessConfig;
@@ -146,7 +148,7 @@ export class SessionManager {
       options: {
         cwd: this.cfg.repo,
         pathToClaudeCodeExecutable: this.cfg.claudeBin,
-        model: this.cfg.model,
+        model: this.modelChoice || this.cfg.model,
         ...(resume ? { resume } : {}),
         // settingSources omitted on purpose — defaults to user+project+local so
         // CLAUDE.md, skills, and repo hooks load exactly like a terminal session.
@@ -211,6 +213,21 @@ export class SessionManager {
   async setEffort(level: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null) {
     await this.q?.applyFlagSettings({ effortLevel: level });
   }
+
+  /**
+   * Switch models mid-conversation. `setModel` works on a live streaming query,
+   * so the context is kept — no restart, no lost history. Recorded so a later
+   * /clear starts its new session on the same choice.
+   */
+  async setModel(model: string) {
+    this.modelChoice = model;
+    await this.q?.setModel(model);
+    this.modelValue = model;
+    this.bus.publish({ type: 'model', model });
+  }
+
+  /** The model this conversation is running on. */
+  chosenModel = () => this.modelChoice || this.cfg.model;
 
   stop() {
     this.input.end();

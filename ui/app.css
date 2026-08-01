@@ -55,25 +55,47 @@ body {
 .strip-right { display: flex; align-items: center; gap: 12px; }
 #usage-label, #voice-cost { font-family: var(--mono); font-size: 11px; }
 #voice-cost { color: var(--say); }
-button.voice {
-  background: none;
+#model-select {
+  background: #1b1f26;
   border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: 10px;
-  padding: 2px 9px;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 2px 6px;
   font: inherit;
   font-family: var(--mono);
   font-size: 11px;
   cursor: pointer;
 }
-button.voice:hover { color: var(--text); }
-/* armed is FREE (local listening); connected is BILLED — they must not look alike */
-button.voice.armed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-button.voice.connected {
-  color: var(--err);
-  border-color: var(--err);
-  background: color-mix(in srgb, var(--err) 12%, transparent);
+#model-select:focus { outline: none; border-color: var(--accent); }
+
+/* Mic lives with the composer — it is an input control, not a status readout. */
+button.voice {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
+button.voice:hover { color: var(--text); border-color: var(--muted); }
+/* armed is FREE (local listening); connected is BILLED — they must not look alike */
+button.voice.armed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+button.voice.connected {
+  color: #fff;
+  border-color: var(--err);
+  background: var(--err);
+  animation: live 1.6s ease-in-out infinite;
+}
+@keyframes live { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--err) 22%, transparent); } }
 button.voice.error { color: var(--warn); border-color: var(--warn); }
 
 /* --- layout --- */
@@ -233,3 +255,10 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 }
 .composer button.ghost { background: none; border: 1px solid var(--line); color: var(--muted); }
 .composer button.ghost:hover { color: var(--err); border-color: var(--err); }
+
+/* Must out-specify `.composer button` above, which would otherwise paint the mic
+   like the Send button. */
+.composer button.voice { background: none; color: var(--muted); font-weight: 400; }
+.composer button.voice.armed { color: var(--ok); }
+.composer button.voice.connected { color: #fff; background: var(--err); }
+.composer button.voice.error { color: var(--warn); }

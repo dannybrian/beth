@@ -172,6 +172,10 @@ const handlers = {
     mode.textContent = m.mode;
     mode.className = `mode ${m.mode}`;
     mode.title = m.modeReason;
+    if (m.model) $('model-select').value = m.model;
+  },
+  model: (m) => {
+    $('model-select').value = m.model;
   },
   user: renderUser,
   assistant: renderAssistant,
@@ -208,7 +212,9 @@ const handlers = {
 // --- voice ------------------------------------------------------------------
 
 const voiceBtn = $('voice-toggle');
-const LABEL = { off: '🎙 off', armed: '🎧 listening', connected: '🔴 live', error: '⚠ voice' };
+// Icon only — the composer has no room for words, and colour already carries the
+// state (grey off, green armed-and-free, red live-and-billed).
+const LABEL = { off: '🎙', armed: '🎙', connected: '🎙', error: '⚠' };
 
 function renderVoice(status, detail) {
   if (!status) return;
@@ -269,6 +275,7 @@ const send = () => {
 $('send').onclick = send;
 $('interrupt').onclick = () => post('/api/interrupt');
 $('clear').onclick = () => post('/api/clear');
+$('model-select').onchange = (e) => post('/api/model', { model: e.target.value });
 input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
