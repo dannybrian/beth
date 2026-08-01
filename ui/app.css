@@ -97,12 +97,16 @@ button.voice {
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 4px;
-  font-size: 26px;
   line-height: 1;
   padding: 0;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
+button.voice svg { width: 25px; height: 25px; display: block; }
+/* One button, two glyphs — only the error state swaps the mic for a warning. */
+button.voice .i-warn { display: none; }
+button.voice.error .i-mic { display: none; }
+button.voice.error .i-warn { display: block; }
 button.voice:hover { color: var(--text); border-color: var(--muted); }
 /* armed is FREE (local listening); connected is BILLED — they must not look alike */
 button.voice.armed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
@@ -121,17 +125,45 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .side {
   border-left: 1px solid var(--line);
   background: var(--panel);
-  overflow-y: auto;
   padding: 14px;
+  /* A column of sections rather than one long scroll, so Plans can claim the
+     leftover height and scroll inside itself instead of being pushed off. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
+.sect { flex: none; min-height: 0; display: flex; flex-direction: column; }
+.sect.grow { flex: 1 1 auto; }
+.sect.grow > .panel { overflow-y: auto; min-height: 0; }
+/* The queues above are short but unbounded — cap them rather than let a busy
+   day's events squeeze Plans out. */
+.sect > .panel.capped { max-height: 22vh; overflow-y: auto; }
+.sect.collapsed > .panel { display: none; }
+
 .side h2 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
   margin: 14px 0 6px;
+  flex: none;
+  cursor: pointer;
+  user-select: none;
 }
-.side h2:first-child { margin-top: 0; }
+.side h2:hover { color: var(--text); }
+.sect:first-child h2 { margin-top: 0; }
+.side h2 .caret {
+  font-size: 10px;
+  line-height: 1;
+  width: 10px;
+  flex: none;
+  align-self: center;
+  /* A rotating triangle rather than swapped glyphs — no reflow on toggle. */
+  transition: transform 0.12s;
+}
+.side h2 .caret::before { content: "▾"; }
+.sect.collapsed h2 .caret { transform: rotate(-90deg); }
 .panel { display: flex; flex-direction: column; gap: 6px; }
 .panel:empty::after { content: "nothing"; color: var(--muted); font-size: 12px; font-style: italic; }
 
@@ -423,7 +455,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 
 /* Must out-specify `.composer button` above, which would otherwise paint the mic
    like the Send button — and reset its font-size, which `font: inherit` does. */
-.composer button.voice { background: none; color: var(--muted); font-weight: 400; font-size: 26px; }
+.composer button.voice { background: none; color: var(--muted); font-weight: 400; }
 .composer button.voice.armed { color: var(--ok); }
 .composer button.voice.connected { color: #fff; background: var(--err); }
 .composer button.voice.error { color: var(--warn); }

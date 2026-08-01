@@ -129,6 +129,7 @@ function renderApproval(m) {
 }
 
 function renderPending(m) {
+  setSectionCounts(m.decisions.length, m.workers.length);
   const dec = $('pending-decisions');
   dec.replaceChildren(
     ...m.decisions.map((d) => {
@@ -404,9 +405,10 @@ const handlers = {
 // --- voice ------------------------------------------------------------------
 
 const voiceBtn = $('voice-toggle');
-// Icon only — the composer has no room for words, and colour already carries the
-// state (grey off, green armed-and-free, red live-and-billed).
-const LABEL = { off: '🎙', armed: '🎙', connected: '🎙', error: '⚠' };
+// The glyphs are inline SVG in the markup and the state is carried entirely by
+// the class — grey off, green armed-and-free, red live-and-billed, and the CSS
+// swaps in a warning triangle on error. Nothing here may set textContent on the
+// button: that would delete the SVG children.
 
 // --- live speech preview -----------------------------------------------------
 //
@@ -446,7 +448,6 @@ function renderVoice(status, detail) {
 }
 
 const voice = new VoiceClient((state, detail) => {
-  voiceBtn.textContent = LABEL[state] ?? state;
   voiceBtn.className = `voice ${state}`;
   voiceBtn.title =
     (state === 'armed'
@@ -467,7 +468,6 @@ const toggleVoice = async () => {
     if (voice.state === 'off') await voice.arm();
     else await voice.off();
   } catch (e) {
-    voiceBtn.textContent = LABEL.error;
     voiceBtn.className = 'voice error';
     voiceBtn.title = String(e);
   }
@@ -482,6 +482,31 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   void toggleVoice();
 });
+
+// --- collapsible side sections ----------------------------------------------
+// Plans sits last and grows, so it survives whatever the queues above do. The
+// collapse state is remembered — a section Danny closed should stay closed.
+
+const COLLAPSE_KEY = 'harness.collapsedSections';
+const collapsedSections = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '[]'));
+
+for (const sect of document.querySelectorAll('.sect')) {
+  const name = sect.dataset.sect;
+  if (collapsedSections.has(name)) sect.classList.add('collapsed');
+  sect.querySelector('h2').onclick = (e) => {
+    // The scope toggle lives inside the heading and is not a collapse control.
+    if (e.target.closest('button')) return;
+    sect.classList.toggle('collapsed');
+    sect.classList.contains('collapsed') ? collapsedSections.add(name) : collapsedSections.delete(name);
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsedSections]));
+  };
+}
+
+/** Counts on the headings, so a collapsed section still says what is in it. */
+function setSectionCounts(decisions, workers) {
+  $('pending-count').textContent = decisions ? String(decisions) : '';
+  $('workers-count').textContent = workers ? String(workers) : '';
+}
 
 async function loadAllWork() {
   const r = await fetch('/api/work?scope=all').then((x) => x.json());

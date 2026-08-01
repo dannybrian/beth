@@ -25,18 +25,28 @@
 
     <main>
       <section class="transcript" id="transcript"></section>
+      <!-- Every section collapses, and Plans is the one that GROWS: the queues
+           above it are short but unbounded, and plans must not get pushed off. -->
       <aside class="side">
-        <h2>
-          Plans <span id="work-count" class="count"></span>
-          <button id="work-scope" class="scope" title="The panel shows work in flight. Show every plan, including shipped and parked.">show all</button>
-        </h2>
-        <div id="work-panel" class="panel work"></div>
-        <h2>Pending</h2>
-        <div id="pending-decisions" class="panel"></div>
-        <h2>Workers</h2>
-        <div id="pending-workers" class="panel"></div>
-        <h2>Events</h2>
-        <div id="event-feed" class="panel"></div>
+        <section class="sect" data-sect="pending">
+          <h2><span class="caret"></span>Pending <span class="count" id="pending-count"></span></h2>
+          <div id="pending-decisions" class="panel"></div>
+        </section>
+        <section class="sect" data-sect="workers">
+          <h2><span class="caret"></span>Workers <span class="count" id="workers-count"></span></h2>
+          <div id="pending-workers" class="panel"></div>
+        </section>
+        <section class="sect" data-sect="events">
+          <h2><span class="caret"></span>Events</h2>
+          <div id="event-feed" class="panel capped"></div>
+        </section>
+        <section class="sect grow" data-sect="plans">
+          <h2>
+            <span class="caret"></span>Plans <span id="work-count" class="count"></span>
+            <button id="work-scope" class="scope" title="The panel shows work in flight. Show every plan, including shipped and parked.">show all</button>
+          </h2>
+          <div id="work-panel" class="panel work"></div>
+        </section>
       </aside>
     </main>
 
@@ -45,7 +55,22 @@
            and a path Beth can resolve — the pair is the whole point. -->
       <div id="composer-refs" class="refs" hidden></div>
       <div class="composer-row">
-        <button id="voice-toggle" class="voice off" title="Voice off  (keypad 0)">🎙</button>
+        <!-- Inline SVG rather than the 🎙 emoji: the emoji renders as a chunky
+             colour glyph that ignores the button's state colour entirely. -->
+        <button id="voice-toggle" class="voice off" title="Voice off  (keypad 0)">
+          <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="11" rx="3" />
+            <path d="M5 10.5v1a7 7 0 0 0 14 0v-1" />
+            <path d="M12 18.5V21" />
+          </svg>
+          <svg class="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.8 1.8 20.2h20.4z" />
+            <path d="M12 9.5v5" />
+            <path d="M12 17.6v.01" />
+          </svg>
+        </button>
         <textarea id="input" rows="1" placeholder="Talk to Beth…" autofocus></textarea>
         <button id="send">Send</button>
         <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
