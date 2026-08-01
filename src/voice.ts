@@ -105,6 +105,20 @@ export class VoiceService {
     this.publishVoice('speak-request', text.slice(0, 80));
   }
 
+  /**
+   * Forget the session and settle the books. Idempotent, because the two
+   * callbacks that reach it can both fire for one ending.
+   */
+  private teardownSession() {
+    this.liveSession = null;
+    // A pending turn belongs to a session that no longer exists.
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.lastAnswered = '';
+    this.turnActive = false;
+    this.endSession();
+  }
+
   /** Speak whatever is still worth speaking, oldest first. */
   private flushAnnouncements() {
     if (!this.liveSession || this.pendingAnnouncements.length === 0) return;
@@ -248,14 +262,16 @@ export class VoiceService {
         }
         this.scheduleTurn(utterance, session);
       },
-      onClose: () => {
-        this.liveSession = null;
-        // A pending turn belongs to a session that no longer exists.
-        if (this.settleTimer) clearTimeout(this.settleTimer);
-        this.settleTimer = null;
-        this.lastAnswered = '';
-        this.endSession();
-      },
+      // ⚠️ TWO callbacks, not one. `close` fires only for an explicit protocol
+      // close message; a websocket that simply DROPS — which is what the
+      // browser ending the session produces — emits `disconnected` instead.
+      // Wiring only `close` left `liveSession` pointing at a dead session, so
+      // `!this.liveSession` stayed false, nothing queued, and sendResponse threw
+      // into a catch: announcements silently dropped again, by the very path
+      // that closes most often. It also stranded the cost meter and left voice
+      // effort pinned low for typed work.
+      onClose: () => this.teardownSession(),
+      onDisconnect: () => this.teardownSession(),
       onError: (err: unknown) => {
         this.publishVoice('error', String(err).slice(0, 200));
       },

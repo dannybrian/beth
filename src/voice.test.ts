@@ -190,6 +190,42 @@ test('the queue keeps the NEWEST lines when work outruns the channel', async () 
   assert.equal(speech.spoken.at(-1), 'line 9', 'the latest word survives');
 });
 
+test('after the socket drops, the next line queues instead of vanishing', async () => {
+  // The close path that actually happens: the browser ends the session, the
+  // websocket drops, and the SDK emits `disconnected` — NOT `close`, which is
+  // only sent for an explicit protocol close. Wiring just `close` left
+  // liveSession pointing at a dead session, so nothing queued and sendResponse
+  // threw into a catch: the announcement fix silently did not apply to the most
+  // common ending.
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  priv(v).liveSession = speech;
+
+  bus.publish({ type: 'say', kind: 'status', text: 'heard this one' } as never);
+  await settle(20);
+  assert.deepEqual(speech.spoken, ['heard this one']);
+
+  (v as unknown as { teardownSession(): void }).teardownSession();
+  assert.equal(priv(v).liveSession, null, 'a dropped socket must not leave a stale session');
+
+  bus.publish({ type: 'say', kind: 'status', text: 'said after the drop' } as never);
+  await settle(20);
+  assert.deepEqual(
+    priv(v).pendingAnnouncements.map((a) => a.text),
+    ['said after the drop'],
+    'queued for the next session rather than dropped'
+  );
+});
+
+test('teardown is idempotent — both callbacks may fire for one ending', async () => {
+  const v = new VoiceService(cfg(), new ConversationBus(), fakeSession() as never);
+  const t = v as unknown as { teardownSession(): void };
+  t.teardownSession();
+  t.teardownSession();
+  assert.equal(priv(v).liveSession, null);
+});
+
 test('the settled turn goes through sendPointed, so a clicked plan reaches voice', async () => {
   const session = fakeSession();
   let pointedCalls = 0;

@@ -87,6 +87,14 @@ These cost hours. Don't rediscover them.
   button, deliberately.
 - **A spoken turn must never return zero chunks** — ElevenLabs re-delivers the transcript
   when it gets nothing, which restarts that same loop.
+- **`onInit` hands back the SESSION, not just a conversation id** (`onInit(id, session)`).
+  Taking only the id meant a session opened without anyone speaking had nothing to speak
+  through — exactly the outbound-announcement case, so a long operation ended in silence.
+- **`close` and `disconnected` are different endings, and you need both.** `onClose` fires
+  only for an explicit protocol close message; a websocket that simply drops — what the
+  browser ending a session produces — fires `onDisconnect`. Wiring only `onClose` leaves
+  `liveSession` pointing at a dead session, so nothing queues, `sendResponse` throws into
+  a catch, the cost meter keeps accruing, and voice effort stays pinned low for typed work.
 - **ElevenLabs sends a GROWING utterance as several transcripts** while you are still
   talking, each with a new `event_id`. The SDK's model — abort the in-flight LLM call,
   start a new one — is right for a stateless completion and wrong for a long-lived
