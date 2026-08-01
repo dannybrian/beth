@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversationBus } from './bus.ts';
+import { SILENT_ACK } from './spoken.ts';
 import { VoiceService } from './voice.ts';
 import type { HarnessConfig } from './config.ts';
 
@@ -482,4 +483,58 @@ test('the level is switchable while the harness is up', async () => {
   bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
   await settle(20);
   assert.deepEqual(speech.spoken, [LONG_REPLY]);
+});
+
+/**
+ * Everything reaches the harness as a transcript — his speech, or the recogniser's
+ * filler at an empty room. There is no third way in: see the note in ui/voice.js.
+ */
+const transcriptOf = (v: VoiceService, text: string) =>
+  (v as unknown as { handleTranscript(t: string, s?: unknown): void }).handleTranscript(text);
+
+// The ONLY way a queued line ever gets said. Both routes to speaking first were
+// tried against the real service and both failed (see ui/voice.js), so what is
+// left is: something arrives, and the backlog rides it. Noise counts — and noise
+// is what an unattended session actually gets.
+test('the recogniser\'s filler at an empty room is a mouth', async () => {
+  const bus = new ConversationBus();
+  const session = fakeSession();
+  const v = new VoiceService(cfg(), bus, session as never);
+  const speech = recordingSpeech();
+
+  bus.publish({ type: 'say', kind: 'event', text: 'The deploy is green.' } as never);
+  connect(v, speech, false); // open, and it has heard nothing yet
+
+  transcriptOf(v, '...');
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, ['The deploy is green.'], 'the backlog rides the noise');
+  assert.deepEqual(session.sent, [], 'and noise never spends a director turn');
+});
+
+test('at off, a spoken turn still acknowledges — silence restarts the loop', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg({ speechLevel: 'off' }), bus, fakeSession() as never);
+
+  const it = priv(v).runTurn('what is the state of the geo work?')[Symbol.asyncIterator]();
+  const next = it.next();
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  bus.publish({ type: 'status', state: 'idle', turn: 1 } as never);
+
+  assert.equal((await next).value, SILENT_ACK);
+});
+
+test('at off, nothing queues for a channel to be opened for', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg({ speechLevel: 'off' }), bus, fakeSession() as never);
+  const requests: string[] = [];
+  bus.subscribe((m) => {
+    if (m.type === 'voice' && m.state === 'speak-request') requests.push(m.detail ?? '');
+  });
+
+  bus.publish({ type: 'say', kind: 'event', text: 'The deploy is green.' } as never);
+  await settle(20);
+
+  assert.deepEqual(priv(v).pendingAnnouncements, []);
+  assert.deepEqual(requests, [], 'no paid channel is asked for when she is silent');
 });

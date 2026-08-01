@@ -122,6 +122,19 @@ These cost hours. Don't rediscover them.
   (the last sentence — a zero-chunk response restarts the re-delivery loop), and a
   suppressed line must NOT queue as an announcement: that silence is a choice, not a
   lost line.
+- **She can never speak FIRST, and both documented routes are dead ends.** Speech
+  Engine only carries a response to something it HEARD, so a queued line waits for
+  a transcript. Tried against the real service on 2026-08-01, both failed:
+  `conversation.sendUserMessage(text)` really does put `{type:"user_message"}` on
+  the data channel, but ElevenLabs never turns it into a `user_transcript` for a
+  bring-your-own-LLM engine — the harness sees nothing. And
+  `overrides.agent.firstMessage`, which their own SDK warning recommends, is
+  REJECTED by a Speech Engine: "Server error: Unknown error", DataChannel errors on
+  both lossy and reliable, and the room torn down before it ever reaches our
+  websocket. Consequences to design around rather than retry: an announcement waits
+  6–14 s for the recogniser's own filler at an empty room, and **a muted mic means
+  she is mute too** — no audio, no transcript, no mouth. The mic is what opens a
+  channel, and that is a product constraint, not a policy.
 - **A permission card cannot be answered by voice.** `canUseTool` pends forever by
   design, so a prompt reaching the gate stops a spoken conversation dead — the paid
   channel bills while she waits and the only tell is silence, which reads as a hang.

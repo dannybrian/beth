@@ -206,6 +206,8 @@ export function loadConfig(): HarnessConfig {
     // 900ms was still firing mid-sentence: an ordinary pause for breath, or an
     // "uh", outlasts it. Cutting a turn early is far worse than answering a beat
     // later — it asks half a question and then asks the rest as a second turn.
-    voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 1800),
+    // 1800 was still short for Danny in practice, so 2500: the cost of waiting is
+    // a beat, and the cost of firing early is half a question.
+    voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 2500),
   };
 }

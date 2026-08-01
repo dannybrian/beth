@@ -26,6 +26,21 @@ const IDLE_CLOSE_MS = 120_000;
 // one line. Hold it briefly in case Danny answers (his voice promotes it to the
 // full window), then let it close rather than billing for a channel nobody is in.
 const ANNOUNCE_IDLE_CLOSE_MS = 30_000;
+/**
+ * How long a channel is held open WHILE SHE IS WORKING.
+ *
+ * The wait for a mouth is per SESSION, not per line: a channel that has already
+ * carried a transcript can speak immediately, and a fresh one costs a handshake
+ * plus 6-14 s of waiting for the recogniser to say something about an empty room
+ * (see the note on speaking first, below). During a long job that closed-and-
+ * reopened per announcement — paying the whole wait every time.
+ *
+ * So while a turn or a worker is in flight the window widens: pay the wait once
+ * at the start of the job and let the rest of the lines land in a channel that is
+ * already listening. Silence bills at 5% (~$0.004/min), so a ten-minute build
+ * holds a channel for about two cents.
+ */
+const WORKING_IDLE_CLOSE_MS = 10 * 60_000;
 const SPEECH_RMS = 0.02; // energy threshold that counts as "talking"
 const SPEECH_MS = 200; // sustained for this long, to ignore keyboard clicks
 
@@ -42,6 +57,8 @@ export class VoiceClient {
     // Danny actually speaks, so an announcement he replies to becomes a normal
     // conversation instead of hanging up on him.
     this.idleMs = IDLE_CLOSE_MS;
+    /** True while a turn or a worker is running — see setWorking. */
+    this.working = false;
   }
 
   get state() {
@@ -93,6 +110,10 @@ export class VoiceClient {
    * Open the paid session. Called by the VAD, or directly for an announcement
    * (`reason: 'announce'`), which the harness requests when it has something to
    * say and the channel has closed underneath it.
+   *
+   * ⚠️ It needs the mic ARMED, and that is a product constraint rather than a
+   * choice — see the note on `nudge` below. A muted session cannot be spoken
+   * through at all.
    */
   async connect(reason = 'speech') {
     if (this.mode === 'connected' || this.connecting) return;
@@ -137,6 +158,23 @@ export class VoiceClient {
   }
 
   /**
+   * ⚠️ THERE IS NO WAY TO MAKE HER SPEAK FIRST. Both documented routes were
+   * tried against the real service on 2026-08-01 and both failed:
+   *
+   *   - `sendUserMessage(text)` — the client really does put
+   *     `{type:"user_message"}` on the data channel, but ElevenLabs never turns
+   *     it into a `user_transcript` for a bring-your-own-LLM engine, so the
+   *     harness gets nothing to answer.
+   *   - `overrides.agent.firstMessage` — the mechanism their own SDK warning
+   *     points at. A Speech Engine REJECTS the `conversation_initiation_client_data`
+   *     override: "Server error: Unknown error", DataChannel errors on both lossy
+   *     and reliable, and the room is torn down before it ever reaches us.
+   *
+   * So a session speaks only in reply to something it HEARD, which is why the
+   * mic is what opens one. Do not re-derive this.
+   */
+
+  /**
    * Reset the idle countdown. Called by the local VAD when Danny speaks, and by
    * the page whenever the CONVERSATION moves — Beth answering, a turn starting.
    * Without the second kind, a long answer Danny listens to quietly counts as
@@ -145,7 +183,22 @@ export class VoiceClient {
   touch() {
     if (this.mode !== 'connected') return;
     clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => this.disconnect(), this.idleMs);
+    // `working` outranks the announce window: a channel opened to deliver one
+    // line becomes the channel the whole job speaks through.
+    const ms = this.working ? Math.max(this.idleMs, WORKING_IDLE_CLOSE_MS) : this.idleMs;
+    this.idleTimer = setTimeout(() => this.disconnect(), ms);
+  }
+
+  /**
+   * Whether something is running for her — a turn, or a background worker. Set
+   * from the page's own busy state, which is what the composer spinner shows.
+   */
+  setWorking(working) {
+    if (this.working === working) return;
+    this.working = working;
+    // Re-arm on both edges: widen the window when work starts, and start the
+    // ordinary countdown the moment it stops rather than a job later.
+    this.touch();
   }
 
   async disconnect() {

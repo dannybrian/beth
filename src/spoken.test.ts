@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spokenFor, lastParagraph, lastSentence } from './spoken.ts';
+import { spokenFor, lastParagraph, lastSentence, SILENT_ACK } from './spoken.ts';
 
 const reply = (text: string) => ({ type: 'assistant' as const, text });
 const say = (kind: string, text: string) => ({ type: 'say' as const, kind, text });
@@ -60,4 +60,18 @@ test('an empty or whitespace message is never spoken', () => {
 test('the last sentence is the fallback when a level would leave silence', () => {
   assert.equal(lastSentence(LONG), 'Nothing on that plan ever touched production.');
   assert.equal(lastSentence('no punctuation here'), 'no punctuation here');
+});
+
+test('off speaks nothing at all — the page carries every word', () => {
+  assert.equal(spokenFor(reply(LONG), 'off'), '');
+  assert.equal(spokenFor(reply('Let me check that.'), 'off'), '');
+  for (const kind of ['status', 'finding', 'event', 'answer']) {
+    assert.equal(spokenFor(say(kind, 'shipped'), 'off'), '', `${kind} is silent too`);
+  }
+});
+
+// It cannot be true silence when he SPOKE: a response with zero chunks makes
+// ElevenLabs re-deliver the transcript, which is the re-delivery loop.
+test('the silent ack exists and says where the answer went', () => {
+  assert.match(SILENT_ACK, /page/i);
 });

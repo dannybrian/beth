@@ -14,7 +14,7 @@ import type { ConversationBus, UIMessage } from './bus.ts';
 import type { SessionManager } from './session.ts';
 import type { HarnessConfig } from './config.ts';
 import { forVoice, isMeaningfulUtterance } from './audioTags.ts';
-import { spokenFor, lastSentence, type SpeechLevel } from './spoken.ts';
+import { spokenFor, lastSentence, SILENT_ACK, type SpeechLevel } from './spoken.ts';
 
 export const RATE_PER_MINUTE = 0.08;
 /** Path ElevenLabs connects to. The engine's wsUrl must end with this. */
@@ -137,15 +137,13 @@ export class VoiceService {
    * The browser owns the WebRTC leg, so the server cannot dial out — it can only
    * raise a hand. `speak-request` is that hand: the page opens a short session if
    * (and only if) the mic is armed, and the queue goes out on the first transcript
-   * that session carries. When voice is off entirely, nothing opens and the queue
-   * simply ages out — silence is what "voice off" means.
+   * that session carries — his voice, or the recogniser's own filler at an empty
+   * room, which lands 6 to 14 seconds after the channel opens.
    *
-   * ⚠️ Residual gap, and the only one left: if the room is quiet enough that the
-   * STT never emits so much as filler, an announce-session opens, hears nothing,
-   * and closes at ANNOUNCE_IDLE_CLOSE_MS with the line still queued. Speaking
-   * first, unprompted, is a Speech Engine feature (the conversation's "first
-   * message", set by the CLIENT at session start) rather than something this side
-   * of the socket can do.
+   * ⚠️ That wait is not a bug we have left in. There is NO way to make her speak
+   * first: both documented routes were tried against the real service and both
+   * failed — see the note in ui/voice.js. A session answers what it heard, or it
+   * says nothing.
    */
   private queueAnnouncement(text: string, at = Date.now()) {
     // `at` is the moment the line was WRITTEN, kept across re-queues so a line
@@ -341,7 +339,6 @@ export class VoiceService {
         // waits for the first transcript, which is the first real mouth.
       },
       onTranscript: (transcript: Transcript, signal: AbortSignal, session: any) => {
-        this.lastActivityAt = Date.now();
         // ⚠️ Do NOT call Query.interrupt() here. Speech Engine aborts the in-flight
         // response for ordinary transcript REVISIONS, not only for genuine barge-in.
         // Interrupting the director on every revision killed its turn mid-flight,
@@ -356,22 +353,7 @@ export class VoiceService {
         // answer was silently discarded and Beth simply never read it out.
         // Only the response's own completion may clear it.
         void signal;
-        this.liveSession = session;
-        // The SDK is inside a transcript handler from here until the session
-        // ends, which is the only state in which it will carry a response.
-        this.speakable = true;
-        const utterance = [...transcript].reverse().find((m) => m.role === 'user')?.content ?? '';
-        // Silence transcribes as "..." — never spend a Claude turn on it.
-        if (!isMeaningfulUtterance(utterance)) {
-          this.bus.publish({ type: 'voice', state: 'ignored', detail: utterance.trim(), status: this.status() });
-          // Noise is still a mouth, and it is the one an announce-session most
-          // often gets: the page opens a channel because we asked it to, nobody
-          // says anything, and the STT emits filler a few seconds later. Nothing
-          // else is going to answer this transcript, so the backlog rides it.
-          this.flushAnnouncements();
-          return;
-        }
-        this.scheduleTurn(utterance, session);
+        this.handleTranscript([...transcript].reverse().find((m) => m.role === 'user')?.content ?? '', session);
       },
       // ⚠️ TWO callbacks, not one. `close` fires only for an explicit protocol
       // close message; a websocket that simply DROPS — which is what the
@@ -399,6 +381,32 @@ export class VoiceService {
   /** Stop accepting Speech Engine connections without closing the HTTP server. */
   close() {
     this.attachment?.close?.();
+  }
+
+  /**
+   * Everything that arrives as a user transcript, whoever produced it.
+   *
+   * Three kinds reach here: something Danny SAID, the noise the STT emits at an
+   * empty room, and the page's own nudge asking for the backlog. Only the first
+   * may become a director turn; all three make the session speakable, which is
+   * the point — Speech Engine will not carry a response otherwise.
+   */
+  private handleTranscript(utterance: string, session?: any) {
+    this.lastActivityAt = Date.now();
+    if (session) this.liveSession = session;
+    // The SDK is inside a transcript handler from here until the session ends,
+    // which is the only state in which it will carry a response.
+    this.speakable = true;
+
+    // Silence transcribes as "..." — never spend a Claude turn on it.
+    if (!isMeaningfulUtterance(utterance)) {
+      this.bus.publish({ type: 'voice', state: 'ignored', detail: utterance.trim(), status: this.status() });
+      // Noise is a mouth too, and it is what an unnudged announce-session gets:
+      // nothing else is going to answer this transcript, so the backlog rides it.
+      this.flushAnnouncements();
+      return;
+    }
+    this.scheduleTurn(utterance, this.liveSession);
   }
 
   /**
@@ -513,6 +521,8 @@ export class VoiceService {
     // `this` inside the generator below is the returned object literal, so the
     // tag handling has to be captured out here.
     const speakable = (s: string) => forVoice(s, this.cfg.audioTagsSupported && this.tagsSupported);
+    // Captured for the generator below, which cannot reach `this`.
+    const level = this.verbosity;
 
     const push = (s: string) => {
       const text = speakable(s).trim();
@@ -604,7 +614,8 @@ export class VoiceService {
           // it gets nothing back, which is how the ping-pong loop started. She DID
           // answer if the level suppressed it — say the last sentence of it rather
           // than claim to have come up empty.
-          if (emitted === 0 && heldBack) yield lastSentence(speakable(heldBack));
+          if (emitted === 0 && level === 'off') yield SILENT_ACK;
+          else if (emitted === 0 && heldBack) yield lastSentence(speakable(heldBack));
           else if (emitted === 0) yield 'Sorry — I came up empty on that one.';
         } finally {
           // A stream abandoned mid-flight (the session closed) leaves the rest of

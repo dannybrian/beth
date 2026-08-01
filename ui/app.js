@@ -668,9 +668,10 @@ const handlers = {
     // costs him a channel but never carries his words. Silence is chosen with
     // the speech level (`off`), which stops anything queueing server-side — so
     // reaching here at all means he asked to be spoken to.
-    // The harness has something to say and no channel to say it through. Only
-    // an ARMED mic opens one: voice off is a deliberate choice for silence, and
-    // this must never be the thing that starts billing behind his back.
+    // She has something to say and no channel to say it through. Only an ARMED
+    // mic opens one — not a policy but a constraint: a session can only be spoken
+    // through in reply to a transcript, and a muted mic never produces one (see
+    // the note in voice.js). Voice off is therefore silence, deliberately.
     else if (m.state === 'speak-request' && voice?.state === 'armed') {
       voice.connect('announce').catch(() => {});
     }
@@ -760,6 +761,9 @@ function setBusy() {
 // --- voice ------------------------------------------------------------------
 
 const voiceBtn = $('voice-toggle');
+/** `?voicedebug` or localStorage — the transcript churn is diagnostic, not news. */
+const VOICE_DEBUG =
+  new URLSearchParams(location.search).has('voicedebug') || localStorage.getItem('voicedebug') === '1';
 // The glyphs are inline SVG in the markup and the state is carried entirely by
 // the class — grey off, green armed-and-free, red live-and-billed, and the CSS
 // swaps in a warning triangle on error. Nothing here may set textContent on the
@@ -813,7 +817,10 @@ function renderVoice(status, detail) {
     ? `voice $${status.totalUsd.toFixed(3)}${status.connected ? ` · ${status.connectedSeconds}s live` : ''}`
     : '';
   if (status.reason) voiceBtn.title = status.reason;
-  if (detail) console.log('[voice]', detail);
+  // Every ASR revision carries a detail, so this is one console line per partial
+  // transcript — forty of them while a television talks nearby, which reads as a
+  // runaway loop when it is only the recogniser changing its mind. Opt in.
+  if (detail && VOICE_DEBUG) console.log('[voice]', detail);
 }
 
 /**
