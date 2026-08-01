@@ -131,7 +131,10 @@ the panel fails to open.
 
 ## Order
 
-1. The dot/spinner split — minutes, and it makes the other two legible.
+1. ~~The dot/spinner split~~ — **done**. The dot pulses on `turnInFlight ||
+   workersRunning || decisionsWaiting` and carries the reason as its title; the
+   composer spinner shows only while the prediction is in flight, and the timer
+   beside it still counts the composite state.
 2. Stats behind the context meter — frees the top right before anything needs it.
 3. The test monitor — detector, then runner and light, then the log panel, then clickable
    failures. Each of those four is useful on its own, and the last one is the one that

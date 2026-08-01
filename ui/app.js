@@ -257,6 +257,7 @@ function renderApproval(m) {
 
 function renderPending(m) {
   setSectionCounts(m.decisions.length, m.workers.length);
+  decisionsWaiting = m.decisions.length;
   const dec = $('pending-decisions');
   dec.replaceChildren(
     ...m.decisions.map((d) => {
@@ -626,8 +627,8 @@ const handlers = {
     // A turn in flight is the conversation still happening, even in silence.
     if (m.state === 'thinking') keepVoiceAlive();
     turnInFlight = m.state === 'thinking';
+    statusState = m.state;
     setBusy();
-    $('status-dot').className = `dot ${m.state}`;
     // A deliberate stop is not a failure — mark it quietly.
     if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
@@ -695,9 +696,21 @@ const handlers = {
 // problem her spoken narration solves for the ear. Tracks a turn in flight AND
 // background workers, because "nothing is happening" and "a worker is building
 // images" look identical from the composer otherwise.
+//
+// Two indicators, two scopes, and they must not answer the same question:
+//   - the DOT (top left) — is anything running FOR her: a turn, a worker, or a
+//     decision queued against you. It is the glance from across the room.
+//   - the SPINNER (composer) — is she thinking RIGHT NOW. It sits by the input
+//     because that is where you are when deciding whether to keep typing.
+// The timer beside the spinner keeps counting the composite state, so a worker
+// grinding alone still shows its clock and its count.
 
 let turnInFlight = false;
 let workersRunning = 0;
+let decisionsWaiting = 0;
+/** The server's own view: idle | thinking | error. Only 'error' outranks ours. */
+let statusState = 'idle';
+let dotTitle = '';
 let busySince = 0;
 let busyTick = null;
 let ctxPct = 0;
@@ -707,9 +720,24 @@ const mmss = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+function paintDot() {
+  const dot = $('status-dot');
+  const reasons = [];
+  if (turnInFlight) reasons.push('thinking');
+  if (workersRunning) reasons.push(`${workersRunning} worker${workersRunning > 1 ? 's' : ''}`);
+  if (decisionsWaiting) reasons.push(`${decisionsWaiting} waiting on you`);
+  const err = statusState === 'error';
+  dot.className = `dot ${err ? 'error' : reasons.length ? 'busy' : 'idle'}`;
+  dot.title = err ? dotTitle : reasons.join(' · ');
+}
+
 function paintProgress() {
   const busy = turnInFlight || workersRunning > 0;
+  paintDot();
   $('progress').hidden = !busy;
+  // The spinner is the PREDICTION, not the work: a worker running on its own
+  // leaves the timer and its count, and stops claiming she is mid-sentence.
+  $('progress-spin').hidden = !turnInFlight;
   if (!busy) return;
   $('progress-time').textContent = mmss(Date.now() - busySince);
   const ctx = $('progress-ctx');
@@ -955,16 +983,16 @@ let reconnectDelay = 1000;
 
 function setStreamHealth(ok, detail) {
   document.body.classList.toggle('stream-down', !ok);
-  const dot = $('status-dot');
   if (!ok) {
-    dot.className = 'dot error';
-    dot.title = detail ?? 'Lost the connection to the harness — retrying…';
+    statusState = 'error';
+    dotTitle = detail ?? 'Lost the connection to the harness — retrying…';
   } else {
     // Clear OUR error, rather than leaving the dot stuck red. The replayed
     // status (or the next one) sets the real state a moment later.
-    dot.className = 'dot idle';
-    dot.title = '';
+    statusState = 'idle';
+    dotTitle = '';
   }
+  paintDot();
 }
 
 function openStream() {
