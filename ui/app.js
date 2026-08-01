@@ -589,16 +589,36 @@ function renderVoice(status, detail) {
   if (detail) console.log('[voice]', detail);
 }
 
+/**
+ * The composer placeholder is the readiness cue.
+ *
+ * Danny asked for an indicator of when it is OK to talk, independent of when he
+ * DOES talk — and the button alone is a poor carrier for that: it is 46px, in
+ * the corner, and he is looking at the text field he is about to speak into.
+ * The placeholder is where his eyes already are, and it is only ever visible
+ * when the field is empty, which is exactly when he is about to start.
+ */
+const PLACEHOLDER = {
+  off: 'Talk to Beth…',
+  connecting: 'Opening the mic — wait…',
+  connected: 'Listening — go ahead',
+  armed: 'Mic on, channel closed — speak to reopen',
+  error: 'Voice unavailable — type instead',
+};
+
 const voice = new VoiceClient((state, detail) => {
   voiceBtn.className = `voice ${state}`;
+  if (!speechOwnsInput) input.placeholder = PLACEHOLDER[state] ?? PLACEHOLDER.off;
   voiceBtn.title =
-    (state === 'armed'
-      ? 'Listening locally — free. A paid session opens when you speak.'
-      : state === 'connected'
-        ? 'Live session — billed per minute. Closes itself after silence.'
-        : state === 'error'
-          ? (detail ?? 'voice error')
-          : 'Voice off') + '  (keypad 0)';
+    (state === 'connecting'
+      ? 'Opening the channel — do not talk yet.'
+      : state === 'armed'
+        ? 'Mic held, channel closed after silence. Speak to reopen (the first words may clip).'
+        : state === 'connected'
+          ? 'Live — go ahead. Billed per minute; closes itself after silence.'
+          : state === 'error'
+            ? (detail ?? 'voice error')
+            : 'Voice off') + '  (keypad 0)';
   if (detail) console.log('[voice]', detail);
   fetch('/api/voice/status')
     .then((r) => r.json())

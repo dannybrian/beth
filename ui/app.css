@@ -108,7 +108,17 @@ button.voice .i-warn { display: none; }
 button.voice.error .i-mic { display: none; }
 button.voice.error .i-warn { display: block; }
 button.voice:hover { color: var(--text); border-color: var(--muted); }
-/* armed is FREE (local listening); connected is BILLED — they must not look alike */
+/* The three states must be tellable apart at a glance, because the whole point
+   is knowing whether it is safe to start talking:
+     connecting — amber, breathing: NOT yet
+     connected  — red, live ring:   go ahead
+     armed      — green outline:    mic held, channel shut */
+button.voice.connecting {
+  color: var(--warn);
+  border-color: var(--warn);
+  animation: opening 0.9s ease-in-out infinite;
+}
+@keyframes opening { 50% { opacity: 0.35; } }
 button.voice.armed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
 button.voice.connected {
   color: #fff;
@@ -509,6 +519,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
    `button.voice`'s own `padding: 0` and left a 12px content box for a 25px icon —
    pushing it off-centre. Invisible until the red recording background showed it. */
 .composer button.voice { background: none; color: var(--muted); font-weight: 400; padding: 0; }
+.composer button.voice.connecting { color: var(--warn); }
 .composer button.voice.armed { color: var(--ok); }
 .composer button.voice.connected { color: #fff; background: var(--err); }
 .composer button.voice.error { color: var(--warn); }

@@ -1,15 +1,26 @@
-// Voice client — demand-scoped, because Speech Engine bills CONNECTED time.
+// Voice client — the mic button opens the channel; your voice does not.
 //
-// The mic stream is local and free; the ElevenLabs session is not. So the page
-// listens on its own (Web Audio energy VAD), and only opens a paid session once
-// Danny actually starts talking. Silence past the idle timeout closes it again.
-// "Armed" therefore costs nothing; "connected" costs $0.08/min.
-// Holding the session open through a conversation is nearly free and reconnecting
-// is expensive in the only currency that matters here — the first second of what
-// Danny says. ElevenLabs discounts silence past 10s by 95%, so an idle minute is
-// about $0.004; a reconnect costs a WebRTC handshake during which his opening
-// words are simply not being captured. So: hold generously, and treat anything
-// happening in the conversation as activity (see touch() callers in app.js).
+// It used to: the page listened locally (free) and only opened the paid session
+// once the VAD heard speech. That cost Danny the first four or five words of
+// every utterance, because a token fetch plus a WebRTC handshake takes seconds
+// and nothing was being captured during them. Worse, it made the problem
+// unfixable by any indicator: the session only existed BECAUSE he had started
+// talking, so "ready to talk" could not be known until after the words were
+// already lost. The late red light was that same latency, seen a second time.
+//
+// So clicking the mic connects immediately, and readiness comes from the SDK's
+// own onConnect rather than being inferred. Billing starts at the click instead
+// of at first speech — worth roughly nothing, since ElevenLabs discounts silence
+// past 10s by 95% (~$0.004/min), and it buys a light that means what it says.
+//
+// STATES: off (mic released) → connecting (opening, do NOT talk) → live (talk).
+// Idle closes back to `armed`: mic still held, channel shut. That state is load
+// bearing — an outbound announcement can reopen a session only from there, and
+// speaking reopens it too (with the old clipping, which is now the rare path
+// rather than every single utterance).
+//
+// Hold generously once open: a reconnect costs the opening of a sentence, and
+// conversation activity counts as activity too (see touch() callers in app.js).
 const IDLE_CLOSE_MS = 120_000;
 // A session opened purely to SPEAK is not a conversation — it exists to deliver
 // one line. Hold it briefly in case Danny answers (his voice promotes it to the
@@ -21,7 +32,7 @@ const SPEECH_MS = 200; // sustained for this long, to ignore keyboard clicks
 export class VoiceClient {
   constructor(onState) {
     this.onState = onState;
-    this.mode = 'off'; // off → armed (free, listening locally) → connected (paid)
+    this.mode = 'off'; // off → connecting → connected; `armed` = mic held, channel shut
     this.conversation = null;
     this.audioCtx = null;
     this.micStream = null;
@@ -49,6 +60,9 @@ export class VoiceClient {
 
     this.mode = 'armed';
     this.onState(this.mode);
+    // Open the channel NOW rather than waiting to hear him. This is the whole
+    // point: the indicator can only be honest if readiness precedes speech.
+    void this.connect();
 
     const tick = () => {
       if (this.mode === 'off') return;
@@ -84,24 +98,38 @@ export class VoiceClient {
     if (this.mode === 'connected' || this.connecting) return;
     this.connecting = true;
     this.idleMs = reason === 'announce' ? ANNOUNCE_IDLE_CLOSE_MS : IDLE_CLOSE_MS;
+    // Announce this BEFORE the round trip, not after. These seconds are exactly
+    // the ones Danny must not be talking through, so they need their own visible
+    // state — reporting only the finished result is what made the red light look
+    // late when it was really just telling him something he needed earlier.
+    this.mode = 'connecting';
+    this.onState(this.mode);
+    const fallback = () => (this.mode = this.micStream ? 'armed' : 'off');
     try {
       const res = await fetch('/api/voice/token');
       const { token, error } = await res.json();
       if (error) {
+        fallback();
         this.onState('error', error);
         return;
       }
       this.conversation = await window.ElevenLabsClient.Conversation.startSession({
         conversationToken: token,
+        // The SDK's own readiness signal, rather than inferring it from the
+        // awaited promise. This is the exact moment the channel is carrying
+        // audio, which is the only honest moment to tell him to go ahead.
+        onConnect: () => {
+          this.mode = 'connected';
+          this.onState(this.mode);
+          this.touch();
+        },
         onDisconnect: () => {
-          this.mode = this.micStream ? 'armed' : 'off';
+          fallback();
           this.onState(this.mode);
         },
       });
-      this.mode = 'connected';
-      this.onState(this.mode);
-      this.touch();
     } catch (e) {
+      fallback();
       this.onState('error', String(e));
     } finally {
       this.connecting = false;
