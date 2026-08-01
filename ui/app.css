@@ -129,6 +129,18 @@ button.voice.connected {
 @keyframes live { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--err) 22%, transparent); } }
 button.voice.error { color: var(--warn); border-color: var(--warn); }
 
+/* Connection lost. The composer keeps its shape — this is a status, not a
+   modal — but it must be impossible to mistake for Beth simply being quiet. */
+body.stream-down .composer { border-top: 1px solid var(--err); }
+body.stream-down .composer::before {
+  content: "Reconnecting to the harness — messages are not arriving.";
+  display: block;
+  color: var(--err);
+  font-size: 11.5px;
+  font-family: var(--mono);
+  margin-bottom: 2px;
+}
+
 /* --- layout --- */
 main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .transcript { overflow-y: auto; padding: 20px 22px 28px; }

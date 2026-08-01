@@ -445,7 +445,11 @@ function feedEvent(e) {
 const handlers = {
   hello: (m) => {
     repoPath = m.repo;
-    $('repo-label').textContent = m.repo.split('/').pop();
+    const project = m.repo.split('/').pop();
+    $('repo-label').textContent = project;
+    // Several instances run side by side, one per repo — the tab title is the
+    // only way to tell them apart from the window switcher.
+    document.title = `Beth: ${project}`;
     const mode = $('mode-label');
     mode.textContent = m.mode;
     mode.className = `mode ${m.mode}`;
@@ -691,11 +695,82 @@ $('work-scope').onclick = async () => {
   await loadAllWork();
 };
 
-const stream = new EventSource('/api/stream');
-stream.onmessage = (ev) => {
-  const m = JSON.parse(ev.data);
-  handlers[m.type]?.(m);
-};
+// --- the stream, and surviving losing it -------------------------------------
+//
+// Danny hit the failure this guards: text stopped appearing in the transcript
+// while Beth could still be HEARD reading it. Both come off the same bus, so the
+// messages existed — the page's EventSource had died. Two things made that
+// silent. ConversationBus swallows a throwing subscriber, so a dead SSE writer
+// fails forever without complaint; and EventSource only auto-retries some
+// failures, so a closed one stays closed. The page looked like a director who
+// had stopped answering.
+//
+// So: watch the connection, say so on screen when it is down, and rebuild it.
+
+let streamSeenHello = false;
+let stream = null;
+let reconnectDelay = 1000;
+
+function setStreamHealth(ok, detail) {
+  document.body.classList.toggle('stream-down', !ok);
+  const dot = $('status-dot');
+  if (!ok) {
+    dot.className = 'dot error';
+    dot.title = detail ?? 'Lost the connection to the harness — retrying…';
+  } else {
+    // Clear OUR error, rather than leaving the dot stuck red. The replayed
+    // status (or the next one) sets the real state a moment later.
+    dot.className = 'dot idle';
+    dot.title = '';
+  }
+}
+
+function openStream() {
+  stream = new EventSource('/api/stream');
+
+  stream.onopen = () => {
+    reconnectDelay = 1000;
+    setStreamHealth(true);
+  };
+
+  stream.onmessage = (ev) => {
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    // The server replays the whole history on every connect, so a RECONNECT
+    // would append the entire transcript a second time. `hello` arrives first on
+    // each connection, which makes it the reliable signal to start clean.
+    if (m.type === 'hello') {
+      if (streamSeenHello) {
+        transcript.replaceChildren();
+        askCards.clear();
+      }
+      streamSeenHello = true;
+    }
+    try {
+      handlers[m.type]?.(m);
+    } catch (e) {
+      // One bad message must not take the transcript down with it, and a render
+      // fault should be visible rather than looking like silence from Beth.
+      console.error('[ui] handler failed', m.type, e);
+      entry('error', (n) => (n.textContent = `⚠ failed to render a ${m.type} message — ${String(e).slice(0, 160)}`));
+    }
+  };
+
+  stream.onerror = () => {
+    // EventSource retries CONNECTING itself; only a CLOSED one is ours to rebuild.
+    setStreamHealth(false);
+    if (stream.readyState === EventSource.CLOSED) {
+      stream.close();
+      setTimeout(openStream, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+    }
+  };
+}
+openStream();
 
 // --- composer --------------------------------------------------------------
 

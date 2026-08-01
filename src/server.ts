@@ -60,7 +60,22 @@ export function createServer(deps: {
         'cache-control': 'no-cache',
         connection: 'keep-alive',
       });
-      const send = (m: UIMessage) => res.write(`data: ${JSON.stringify(m)}\n\n`);
+      // ConversationBus deliberately swallows a throwing subscriber so one dead
+      // consumer cannot break the bus — which means a broken SSE socket would
+      // otherwise fail silently on every publish, forever. If a write throws,
+      // this connection is over: tear it down so the subscriber stops being
+      // called and the browser is free to reconnect.
+      let dead = false;
+      let cleanup = () => {};
+      const send = (m: UIMessage) => {
+        if (dead) return;
+        try {
+          res.write(`data: ${JSON.stringify(m)}\n\n`);
+        } catch {
+          dead = true;
+          cleanup();
+        }
+      };
       send({
         type: 'hello',
         repo: cfg.repo,
@@ -77,11 +92,22 @@ export function createServer(deps: {
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       send({ type: 'work', items: work.live(), total: work.all().length });
       const unsub = bus.subscribe(send);
-      const keepalive = setInterval(() => res.write(': ping\n\n'), 20_000);
-      req.on('close', () => {
+      // The keepalive is also how a half-open socket gets noticed at all: without
+      // traffic, a connection the browser has already abandoned looks alive here.
+      const keepalive = setInterval(() => {
+        try {
+          res.write(': ping\n\n');
+        } catch {
+          dead = true;
+          cleanup();
+        }
+      }, 20_000);
+      cleanup = () => {
         clearInterval(keepalive);
         unsub();
-      });
+        res.end();
+      };
+      req.on('close', cleanup);
       return;
     }
 
