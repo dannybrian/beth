@@ -184,6 +184,27 @@ These cost hours. Don't rediscover them.
   is no "Speech Engine" or "Conversational AI" entry. TTS/STT permissions are *not*
   needed — speech happens inside the Speech Engine session.
 
+## Design records
+
+`docs/` is where agreed-but-unbuilt work lives, so a fresh session can pick it up without
+the conversation that produced it. Where things stand:
+
+- **`voice-plane.md`** — DECIDED, not started. Leave Speech Engine for browser STT plus
+  server-side TTS, because she can never speak first and outbound speech is the premise.
+  Spike the echo/barge-in behaviour first, then land speak-out while Speech Engine still
+  carries input; each step leaves a working harness, and the last one is pure deletion.
+- **`status-surface.md`** — not started, and step 1 is minutes of work: the dot tracks
+  anything running, the spinner tracks the prediction. Then the stats move behind the
+  context meter, then the test monitor takes the top right.
+- **`personal-context.md`** — not started. A director who remembers the person, not only
+  the work.
+- **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff
+  all ship. Read it for why a reference is a pair rather than a string.
+
+Already done from the same list, so do not re-plan them: the spoken settle window is
+2500 ms, the speech levels and last-paragraph excerpt exist (`spoken.ts`), and the
+activity lines and in-progress indicator are in.
+
 ## Process
 
 Small repo, one developer, usually one session. It deliberately does **not** have
