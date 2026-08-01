@@ -74,7 +74,7 @@ export function createServer(deps: {
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
-      send({ type: 'work', items: work.inFlight() });
+      send({ type: 'work', items: work.inFlight(), total: work.all().length });
       const unsub = bus.subscribe(send);
       const keepalive = setInterval(() => res.write(': ping\n\n'), 20_000);
       req.on('close', () => {

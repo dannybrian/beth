@@ -19,7 +19,9 @@ const pending = new PendingStore();
 // One index, two consumers: the panel over the stream, and Beth via the `plans`
 // tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
 const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })]);
-work.subscribe((items) => bus.publish({ type: 'work', items: items.filter((i) => isInFlight(i.status)) }));
+work.subscribe((items) =>
+  bus.publish({ type: 'work', items: items.filter((i) => isInFlight(i.status)), total: items.length })
+);
 // A spoken turn consumes pointing server-side; tell the page so its chips clear.
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();

@@ -271,14 +271,32 @@ function renderWorkItem(item) {
   return n;
 }
 
-const STATUS_ORDER = ['active', 'blocked', 'planning'];
+// In-flight first, then the rest in roughly the order work moves through them.
+const IN_FLIGHT_ORDER = ['active', 'blocked', 'planning'];
+const ALL_ORDER = [...IN_FLIGHT_ORDER, 'idea', 'unknown', 'parked', 'shipped'];
+
+/** 'in-flight' (the default) or 'all'. The panel is a work surface, not an archive. */
+let workScope = 'in-flight';
+let workTotal = 0;
 
 function renderWork() {
   const panel = $('work-panel');
-  $('work-count').textContent = workItems.length ? String(workItems.length) : '';
+  // Say what is being shown AND what exists — "69" alone reads as the total.
+  // "69" alone reads as the total. "69 of 571" says what is shown and what exists,
+  // and still fits the 300px panel on one line.
+  $('work-count').textContent = workTotal
+    ? workScope === 'all'
+      ? `all ${workItems.length}`
+      : `${workItems.length} of ${workTotal}`
+    : '';
+  $('work-count').title =
+    workScope === 'all'
+      ? 'Every plan in the repo.'
+      : `${workItems.length} plans are in flight (active, blocked or planning). ${workTotal} exist in total — the rest are shipped, parked or ideas.`;
+  $('work-scope').textContent = workScope === 'all' ? 'in flight only' : 'show all';
   panel.replaceChildren();
 
-  for (const status of STATUS_ORDER) {
+  for (const status of workScope === 'all' ? ALL_ORDER : IN_FLIGHT_ORDER) {
     const group = workItems.filter((i) => i.status === status);
     if (!group.length) continue;
     const open = !collapsedGroups.has(status);
@@ -352,6 +370,10 @@ const handlers = {
   },
   pending: renderPending,
   work: (m) => {
+    workTotal = m.total ?? m.items.length;
+    // The stream only carries the in-flight slice; in 'all' mode re-pull so the
+    // panel still reflects a file that just changed.
+    if (workScope === 'all') return void loadAllWork();
     workItems = m.items;
     renderWork();
   },
@@ -460,6 +482,27 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   void toggleVoice();
 });
+
+async function loadAllWork() {
+  const r = await fetch('/api/work?scope=all').then((x) => x.json());
+  workItems = r.items;
+  workTotal = r.items.length;
+  renderWork();
+}
+
+$('work-scope').onclick = async () => {
+  if (workScope === 'all') {
+    workScope = 'in-flight';
+    const r = await fetch('/api/work').then((x) => x.json());
+    workItems = r.items;
+    renderWork();
+    return;
+  }
+  workScope = 'all';
+  // Everything past in-flight is reference material — collapsed until asked for.
+  for (const s of ALL_ORDER) if (s !== 'active') collapsedGroups.add(s);
+  await loadAllWork();
+};
 
 const stream = new EventSource('/api/stream');
 stream.onmessage = (ev) => {

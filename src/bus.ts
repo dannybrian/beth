@@ -61,7 +61,9 @@ export type UIMessage =
   | { type: 'usage'; usage: UsageSnapshot }
   | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
-  | { type: 'work'; items: WorkItem[] }
+  // `items` is the in-flight slice only; `total` is the whole corpus, so the
+  // panel can say "69 of 571" rather than implying 69 is all there is.
+  | { type: 'work'; items: WorkItem[]; total: number }
   // Server-owned pointing state. Published when a turn CONSUMES it, so the page
   // drops chips that a spoken turn just used.
   | { type: 'pointing'; refs: WorkRef[] }

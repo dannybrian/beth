@@ -25,7 +25,7 @@
 ::-webkit-scrollbar-track { background: var(--scroll-track); }
 ::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
-  border-radius: 6px;
+  border-radius: 4px;
   /* Inset the thumb so it reads as a bar, not a filled gutter. */
   border: 2px solid var(--scroll-track);
 }
@@ -63,7 +63,7 @@ body {
 .mode {
   padding: 1px 7px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   font-family: var(--mono);
   font-size: 11px;
 }
@@ -76,7 +76,7 @@ body {
   background: #1b1f26;
   border: 1px solid var(--line);
   color: var(--text);
-  border-radius: 7px;
+  border-radius: 4px;
   padding: 2px 6px;
   font: inherit;
   font-family: var(--mono);
@@ -88,16 +88,16 @@ body {
 /* Mic lives with the composer — it is an input control, not a status readout. */
 button.voice {
   flex: none;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   align-self: flex-end;
   display: grid;
   place-items: center;
   background: none;
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 50%;
-  font-size: 16px;
+  border-radius: 4px;
+  font-size: 26px;
   line-height: 1;
   padding: 0;
   cursor: pointer;
@@ -143,7 +143,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   text-align: left;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  border-radius: 12px 12px 2px 12px;
+  border-radius: 4px;
   padding: 8px 12px;
 }
 .entry .body { white-space: pre-wrap; word-wrap: break-word; }
@@ -153,7 +153,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .entry.say {
   border-left: 3px solid var(--say);
   background: color-mix(in srgb, var(--say) 8%, transparent);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 4px 4px 0;
   padding: 9px 12px;
 }
 .entry.say .tag {
@@ -180,7 +180,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .card {
   border: 1px solid color-mix(in srgb, var(--ask) 40%, transparent);
   background: color-mix(in srgb, var(--ask) 7%, transparent);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 12px 14px;
   margin-bottom: 14px;
   max-width: 70ch;
@@ -201,7 +201,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   background: #1b1f26;
   border: 1px solid var(--line);
   color: var(--text);
-  border-radius: 7px;
+  border-radius: 4px;
   padding: 7px 10px;
   cursor: pointer;
   font: inherit;
@@ -209,14 +209,14 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .card button.opt:hover { border-color: var(--ask); background: #20252d; }
 .card button.opt .d { display: block; color: var(--muted); font-size: 12px; }
 .card .free { display: flex; gap: 6px; margin-top: 7px; }
-.card .free input { flex: 1; background: #1b1f26; border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 7px 9px; font: inherit; }
+.card .free input { flex: 1; background: #1b1f26; border: 1px solid var(--line); color: var(--text); border-radius: 4px; padding: 7px 9px; font: inherit; }
 .card.answered { opacity: 0.55; border-style: dashed; }
 .card .answer { margin-top: 7px; color: var(--ok); font-family: var(--mono); font-size: 12px; }
 
 /* --- side panel items --- */
 .item {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 4px;
   padding: 7px 9px;
   font-size: 12.5px;
   background: #1b1f26;
@@ -231,7 +231,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   background: none;
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 3px 7px;
   font: inherit;
   font-size: 11px;
@@ -240,7 +240,24 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .item button.resolve:hover { color: var(--text); border-color: var(--accent); }
 
 /* --- plans panel --- */
-.side h2 .count { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.side h2 { display: flex; align-items: baseline; gap: 6px; }
+.side h2 .count { color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: none; letter-spacing: 0; }
+.side h2 .scope {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 1px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.side h2 .scope:hover { color: var(--text); border-color: var(--accent); }
 .panel.work { gap: 3px; }
 .panel.work:empty::after { content: "no plans in flight"; }
 
@@ -323,13 +340,17 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 
 /* --- references (the composer chips) --- */
 .refs { display: flex; flex-wrap: wrap; gap: 5px; }
+/* `display: flex` above out-specifies the UA's `[hidden] { display: none }`, so
+   the empty chip row kept claiming its share of the composer's flex gap — 19px
+   of space above the input against 10px below it. */
+.refs[hidden] { display: none; }
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   max-width: 34ch;
   padding: 2px 4px 2px 8px;
-  border-radius: 11px;
+  border-radius: 4px;
   font-size: 11.5px;
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
@@ -359,7 +380,9 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 14px;
+  /* Equal above and below — the row sits centred in the bar, not pushed to the
+     window edge. */
+  padding: 14px;
   border-top: 1px solid var(--line);
   background: var(--panel);
 }
@@ -370,7 +393,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   background: #1b1f26;
   border: 1px solid var(--line);
   color: var(--text);
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 9px 11px;
   font: inherit;
   max-height: 160px;
@@ -389,7 +412,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   border: none;
   color: #0e1013;
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 0 16px;
   cursor: pointer;
   font: inherit;
@@ -399,8 +422,8 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .composer button.ghost:hover { color: var(--err); border-color: var(--err); }
 
 /* Must out-specify `.composer button` above, which would otherwise paint the mic
-   like the Send button. */
-.composer button.voice { background: none; color: var(--muted); font-weight: 400; }
+   like the Send button — and reset its font-size, which `font: inherit` does. */
+.composer button.voice { background: none; color: var(--muted); font-weight: 400; font-size: 26px; }
 .composer button.voice.armed { color: var(--ok); }
 .composer button.voice.connected { color: #fff; background: var(--err); }
 .composer button.voice.error { color: var(--warn); }
