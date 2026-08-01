@@ -42,13 +42,67 @@ const renderUser = (m) =>
     }
     n.append(el('div', 'body', m.text));
   });
-const renderAssistant = (m) => entry('assistant', (n) => n.append(el('div', 'body', m.text)));
+// --- file links in what Beth writes ------------------------------------------
+//
+// The server proved each of these resolves before sending it, so a link here is
+// never a guess. Click opens the file where the work happens; Cmd/Ctrl-click on
+// a plan points Beth at it instead, which is the same gesture as the panel.
+
+/** The bound repo's absolute path, from `hello` — needed to build editor URLs. */
+let repoPath = '';
+
+function openInEditor(link) {
+  // vscode://file/<abs>[:line] is a well-defined scheme and needs no local server.
+  const abs = `${repoPath}/${link.path}`;
+  window.location.href = `vscode://file${abs}${link.line ? `:${link.line}` : ''}`;
+}
+
+function linkNode(link, label) {
+  const a = el('a', `filelink ${link.kind}`, label);
+  a.href = '#';
+  a.title =
+    link.kind === 'plan'
+      ? `${link.path}\nClick to open in VSCode · ${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}click to point Beth at it`
+      : `${link.path}\nClick to open in VSCode`;
+  a.onclick = (e) => {
+    e.preventDefault();
+    if ((e.metaKey || e.ctrlKey) && link.kind === 'plan') {
+      attachRef({ kind: 'item', path: link.path, spoken: link.spoken ?? link.path });
+      return;
+    }
+    openInEditor(link);
+  };
+  return a;
+}
+
+/** Body text with proven file references spliced in as links. */
+function bodyWithLinks(text, links) {
+  const div = el('div', 'body');
+  if (!links?.length) {
+    div.textContent = text;
+    return div;
+  }
+  let at = 0;
+  for (const link of links) {
+    if (link.start < at) continue; // defensive: never emit overlapping ranges
+    if (link.start > at) div.append(document.createTextNode(text.slice(at, link.start)));
+    div.append(linkNode(link, text.slice(link.start, link.end)));
+    at = link.end;
+  }
+  if (at < text.length) div.append(document.createTextNode(text.slice(at)));
+  return div;
+}
+
+const renderAssistant = (m) => entry('assistant', (n) => n.append(bodyWithLinks(m.text, m.links)));
 
 const renderSay = (m) =>
   entry('say', (n) => {
     n.append(el('span', 'tag', m.kind));
-    n.append(el('div', 'body', m.text));
-    if (m.ref) n.append(el('span', 'ref', m.ref));
+    n.append(bodyWithLinks(m.text, m.links));
+    // The announcement's own ref is already structured — make it the most
+    // obvious thing to click.
+    if (m.refLink) n.append(linkNode(m.refLink, m.refLink.spoken ?? m.ref));
+    else if (m.ref) n.append(el('span', 'ref', m.ref));
   });
 
 const renderActivity = (m) => entry('activity', (n) => (n.textContent = `⚙ ${m.tool} ${m.detail}`));
@@ -337,6 +391,7 @@ function feedEvent(e) {
 
 const handlers = {
   hello: (m) => {
+    repoPath = m.repo;
     $('repo-label').textContent = m.repo.split('/').pop();
     const mode = $('mode-label');
     mode.textContent = m.mode;

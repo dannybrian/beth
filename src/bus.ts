@@ -3,6 +3,7 @@
 // server is currently the only subscriber. Speech (Phase 2) subscribes alongside.
 import type { HarnessEvent } from './eventlog.ts';
 import type { WorkItem, WorkRef } from './workItems.ts';
+import type { TextLink } from './links.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -51,8 +52,11 @@ export type UIMessage =
   // transcript so a turn stays readable next to what he actually typed.
   | { type: 'user'; text: string; refs?: WorkRef[] }
   // `text` is what Danny READS (audio tags stripped); `voiceText` is what he HEARS.
-  | { type: 'assistant'; text: string; voiceText?: string }
-  | { type: 'say'; kind: string; text: string; voiceText?: string; ref?: string }
+  // `links` are file references found in `text`, with offsets into it — a render
+  // hint for the page only. The voice path never sees them, which is the point:
+  // Beth writes plain prose and stays sayable.
+  | { type: 'assistant'; text: string; voiceText?: string; links?: TextLink[] }
+  | { type: 'say'; kind: string; text: string; voiceText?: string; ref?: string; links?: TextLink[]; refLink?: TextLink }
   | { type: 'activity'; tool: string; detail: string }
   | { type: 'ask'; id: string; questions: AskQuestion[] }
   | { type: 'ask_resolved'; id: string; answers: Record<string, string> }

@@ -15,6 +15,7 @@ import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
+import { detectLinks } from './links.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
@@ -164,6 +165,11 @@ export class SessionManager {
     fs.writeFileSync(this.sessionFile(), JSON.stringify({ sessionId: id, cwd: this.cfg.repo }, null, 2));
   }
 
+  /** File references in text she has written, for the page to make clickable. */
+  private links(text: string) {
+    return detectLinks(text, { repo: this.cfg.repo, lookup: (p) => this.work.byPath(p) });
+  }
+
   publishPending = () => {
     this.bus.publish({
       type: 'pending',
@@ -192,6 +198,7 @@ export class SessionManager {
             publishPending: this.publishPending,
             voiceActive: this.voiceActive,
             work: this.work,
+            repo: this.cfg.repo,
           }),
         },
         canUseTool: this.gate.canUseTool,
@@ -384,7 +391,8 @@ export class SessionManager {
     for (const b of m.message?.content ?? []) {
       if (b.type === 'text' && b.text.trim()) {
         const raw = b.text.trim();
-        this.bus.publish({ type: 'assistant', text: stripAudioTags(raw), voiceText: raw });
+        const read = stripAudioTags(raw);
+        this.bus.publish({ type: 'assistant', text: read, voiceText: raw, links: this.links(read) });
       } else if (b.type === 'tool_use' && !String(b.name).endsWith('__say')) {
         const detail = JSON.stringify(b.input ?? {}).slice(0, 200);
         this.bus.publish({ type: 'activity', tool: String(b.name), detail });

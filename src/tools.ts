@@ -11,6 +11,7 @@ import type { PendingStore } from './state.ts';
 import type { WorkIndex } from './workIndex.ts';
 import { taskSummary } from './workItems.ts';
 import { stripAudioTags } from './audioTags.ts';
+import { detectLinks } from './links.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -22,7 +23,10 @@ export function createHarnessTools(deps: {
   publishPending: () => void;
   voiceActive: () => boolean;
   work: WorkIndex;
+  repo: string;
 }) {
+  const links = (text: string) =>
+    detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
   const say = tool(
     'say',
     'Deliver ONE discrete, announceable event to Danny: mid-work narration, a finding, an async announcement, or a direct answer. One item per call — call it again for the next item. The first sentence must stand alone (it may be heard, not read). `ref` is a plan path, commit sha, or event id.',
@@ -33,7 +37,17 @@ export function createHarnessTools(deps: {
     },
     async ({ text, kind, ref }) => {
       const read = stripAudioTags(text);
-      deps.bus.publish({ type: 'say', kind, text: read, voiceText: text, ref });
+      // `ref` is already a bare path — resolve it directly so the announcement's
+      // own reference is the first thing that is clickable.
+      deps.bus.publish({
+        type: 'say',
+        kind,
+        text: read,
+        voiceText: text,
+        ref,
+        links: links(read),
+        refLink: ref ? links(ref)[0] : undefined,
+      });
       // The event log is a reading surface too — store the stripped form.
       deps.events.append({ source: 'harness', session: deps.sessionId(), kind: 'say', text: read, ref });
       return ok({ delivered: true, voiced: deps.voiceActive() });

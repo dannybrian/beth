@@ -199,9 +199,24 @@ themselves for *what is true* — so the panel is fresh without becoming a secon
 
 - ~~**Reference format.**~~ Resolved: a chip carrying `{spoken, path}`, never a string in
   the input. See above.
-- **Claude Code handoff mechanism.** CLI with a seeded prompt, or a URL scheme? Verify
-  before designing. The index already carries `claim.live` and per-task `line`, which is
-  what the refusal and the VSCode jump need.
+- ~~**File links in chat.**~~ Built 2026-07-31. Detection is server-side and
+  high-precision: a candidate becomes a link only if it is a path in the index or a file
+  that provably exists in the repo (`links.ts`), so nothing is guessed. Beth emits no
+  markup at all — which matters because she is heard, and markdown in her prose would
+  either be spoken as punctuation or need another stripping pass. Click opens VSCode;
+  ⌘-click on a plan points her at it instead, reusing the reference chips.
+- ~~**Claude Code handoff mechanism.**~~ Verified: it is the **CLI with a seeded
+  prompt** — `claude [prompt]` takes a positional prompt, plus `--add-dir`, `-r/--resume`
+  and `--permission-mode`. No URL scheme needed. Deliberately NOT `--bg`: the point is to
+  take something over interactively, and a background agent is a second implementer with
+  nobody watching.
+  Still to build. The index already carries `claim.live` (re-check at click time, the way
+  `canPromote` does) and per-task `line`. Refuse on a live claim, naming the holder; allow
+  on a stale owner while saying so. The harness must not claim the plan itself — it seeds
+  Claude Code with a prompt telling *it* to run `/plans claim`, keeping `/plans` the only
+  writer.
+  Safe to build now only because the API is loopback-only; an endpoint that spawns a shell
+  on a tunnelled server would have been remote code execution.
 - **Umbrella plans.** Still open, and now has a lever: `name:` lets an umbrella plan take
   a name reflecting what hangs off it. Danny also wants naming from the **UI** — renaming
   a plan without editing its file. `WorkIndex.nameOverrides` is that seam: consulted
