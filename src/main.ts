@@ -24,7 +24,7 @@ events.onEvent((e) => {
 events.startTail();
 
 const KICKOFF =
-  'You just came online in the harness. In ONE short sentence, confirm the repo and branch you are on and your role mode. Then call the say tool once (kind "status") to announce you are ready. Nothing else — no status report.';
+  'You just came online. In ONE short sentence, greet Danny and confirm the repo and branch you are on. Then call the say tool once (kind "status") to say you are ready. Nothing else — no status report.';
 
 const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
 
