@@ -42,8 +42,18 @@ events.onEvent((e) => {
 });
 events.startTail();
 
+/**
+ * ONE line, and one carrier for it.
+ *
+ * This used to ask for a greeting AND a `say` item, because a `say` is spoken in
+ * full while an ordinary reply is excerpted — the second call was how you made
+ * sure the first was heard. Speak-out removed that reason and exposed the cost:
+ * both lines now reach the speakers, so booting said the same thing three times
+ * ("I'm on Tulito, branch main" · "Beth is online and ready" · "Ready when you
+ * are"). The fix is not a filter, it is asking for one line.
+ */
 const KICKOFF =
-  'You just came online. In ONE short sentence, greet Danny and confirm the repo and branch you are on. Then call the say tool once (kind "status") to say you are ready. Nothing else — no status report.';
+  'You just came online. Greet Danny in ONE short sentence naming the repo and branch — that sentence is the whole of it. Do not call the say tool, do not add a status report, and do not add a closing line: everything you write here is read aloud, so a second line that repeats the first is simply heard twice.';
 
 const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
 
