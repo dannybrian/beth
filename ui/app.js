@@ -187,7 +187,9 @@ const handlers = {
   usage: (m) => renderUsage(m.usage),
   status: (m) => {
     $('status-dot').className = `dot ${m.state}`;
-    if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
+    // A deliberate stop is not a failure — mark it quietly.
+    if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
+    else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
   },
   pending: renderPending,
   voice: (m) => renderVoice(m.status, m.detail),

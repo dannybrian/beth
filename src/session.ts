@@ -76,6 +76,7 @@ export class SessionManager {
   private lastCost = 0;
   private modelValue = '';
   private turnSeq = 0;
+  private interruptPending = false;
   role: RoleAssessment;
 
   private cfg: HarnessConfig;
@@ -187,10 +188,19 @@ export class SessionManager {
     return turn;
   }
 
+  /**
+   * Abort the in-flight turn — the Stop button, and the equivalent of Escape in
+   * Claude Code. The session survives; the next turn continues normally.
+   *
+   * The CLI closes an interrupted turn with an `error_during_execution` result,
+   * so the flag below lets the result handler report it as a deliberate stop
+   * rather than rendering a scary diagnostic at Danny for pressing a button.
+   */
   async interrupt() {
     if (!this.q) return undefined;
+    this.interruptPending = true;
     const receipt = await this.q.interrupt();
-    this.bus.publish({ type: 'status', state: 'idle', detail: 'interrupted' });
+    this.bus.publish({ type: 'status', state: 'idle', detail: 'stopped', turn: this.turnSeq });
     return receipt;
   }
 
@@ -309,11 +319,16 @@ export class SessionManager {
       model: this.modelValue,
     };
     this.bus.publish({ type: 'usage', usage });
+
+    // An interrupted turn always ends in error_during_execution. That is the
+    // expected shape of a deliberate stop, not a failure worth alarming about.
+    const wasStopped = m.is_error && this.interruptPending;
+    this.interruptPending = false;
     this.bus.publish({
       type: 'status',
-      state: m.is_error ? 'error' : 'idle',
+      state: m.is_error && !wasStopped ? 'error' : 'idle',
       turn: this.turnSeq,
-      detail: m.is_error ? (m.errors ?? []).join('; ').slice(0, 200) : undefined,
+      detail: wasStopped ? 'stopped' : m.is_error ? (m.errors ?? []).join('; ').slice(0, 200) : undefined,
     });
   }
 }
