@@ -301,6 +301,26 @@ function renderWorkItem(item) {
   name.title = `Point Beth at this plan — ${item.path}`;
   name.onclick = () => attachRef({ kind: 'item', path: item.path, spoken: item.spoken });
   head.append(name);
+
+  // Hand off to a fresh interactive Claude Code session. Disabled outright on a
+  // live claim — one implementer at a time, and the server refuses too.
+  const hand = el('button', 'handoff', '⌘');
+  hand.textContent = '›_';
+  hand.title = item.claim?.live
+    ? `Claimed by a live session (${item.claim.owner}) — hand off is blocked`
+    : `Open a Claude Code session on "${item.spoken}"`;
+  if (item.claim?.live) hand.classList.add('blocked');
+  hand.onclick = async (e) => {
+    e.stopPropagation();
+    const res = await post('/api/handoff', { path: item.path });
+    const body = await res.json();
+    if (!res.ok) {
+      hand.classList.add('blocked');
+      hand.title = body.reason ?? 'refused';
+      alert(`Handoff refused\n\n${body.reason}`);
+    }
+  };
+  head.append(hand);
   n.append(head);
 
   const bits = [item.priority, t ? `${t.done}/${t.total} tasks` : 'no tasks'].filter(Boolean);
@@ -405,10 +425,15 @@ const handlers = {
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
     clearInterim();
+    keepVoiceAlive();
     renderUser(m);
   },
-  assistant: renderAssistant,
+  assistant: (m) => {
+    keepVoiceAlive();
+    renderAssistant(m);
+  },
   say: (m) => {
+    keepVoiceAlive();
     renderSay(m);
     feedEvent({ ts: new Date().toISOString(), kind: `say/${m.kind}`, text: m.text });
   },
@@ -419,6 +444,8 @@ const handlers = {
   approval_resolved: () => {},
   usage: (m) => renderUsage(m.usage),
   status: (m) => {
+    // A turn in flight is the conversation still happening, even in silence.
+    if (m.state === 'thinking') keepVoiceAlive();
     $('status-dot').className = `dot ${m.state}`;
     // A deliberate stop is not a failure — mark it quietly.
     if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
@@ -473,6 +500,20 @@ const voiceBtn = $('voice-toggle');
 
 /** True while the composer is displaying speech rather than something typed. */
 let speechOwnsInput = false;
+
+/**
+ * Keep the paid session open while the CONVERSATION is moving. The local VAD only
+ * knows about Danny's voice, so a long answer he listens to quietly reads as idle
+ * — the session closes mid-exchange and his reply then pays for a reconnect,
+ * losing its first second. Declared before the handlers that call it.
+ */
+const keepVoiceAlive = () => {
+  try {
+    voice?.touch();
+  } catch {
+    /* voice may not be armed */
+  }
+};
 
 function showInterim(text) {
   // Never clobber something typed. His words win; speech only fills a box it

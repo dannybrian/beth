@@ -4,7 +4,13 @@
 // listens on its own (Web Audio energy VAD), and only opens a paid session once
 // Danny actually starts talking. Silence past the idle timeout closes it again.
 // "Armed" therefore costs nothing; "connected" costs $0.08/min.
-const IDLE_CLOSE_MS = 45_000;
+// Holding the session open through a conversation is nearly free and reconnecting
+// is expensive in the only currency that matters here — the first second of what
+// Danny says. ElevenLabs discounts silence past 10s by 95%, so an idle minute is
+// about $0.004; a reconnect costs a WebRTC handshake during which his opening
+// words are simply not being captured. So: hold generously, and treat anything
+// happening in the conversation as activity (see touch() callers in app.js).
+const IDLE_CLOSE_MS = 120_000;
 const SPEECH_RMS = 0.02; // energy threshold that counts as "talking"
 const SPEECH_MS = 200; // sustained for this long, to ignore keyboard clicks
 
@@ -85,8 +91,14 @@ export class VoiceClient {
     }
   }
 
-  /** Reset the idle countdown — any speech in either direction. */
+  /**
+   * Reset the idle countdown. Called by the local VAD when Danny speaks, and by
+   * the page whenever the CONVERSATION moves — Beth answering, a turn starting.
+   * Without the second kind, a long answer Danny listens to quietly counts as
+   * idle, the session closes mid-exchange, and his reply pays for a reconnect.
+   */
   touch() {
+    if (this.mode !== 'connected') return;
     clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => this.disconnect(), IDLE_CLOSE_MS);
   }

@@ -360,6 +360,26 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 }
 .work-name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .work-item .meta { margin-left: 17px; }
+/* Handoff: quiet until hover, because it starts real work. */
+.work-item .handoff {
+  flex: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.work-item:hover .handoff { opacity: 1; }
+.work-item .handoff:hover { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+/* A live claim is a hard no, and it should look like one. */
+.work-item .handoff.blocked { opacity: 1; color: var(--err); cursor: not-allowed; }
+.work-item .handoff.blocked:hover { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
 .work-item.status-blocked { border-left: 3px solid var(--err); }
 .work-item.status-active { border-left: 3px solid var(--ok); }
 .work-item.status-planning { border-left: 3px solid var(--line); }

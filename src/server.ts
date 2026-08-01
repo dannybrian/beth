@@ -18,6 +18,7 @@ import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
+import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -106,6 +107,35 @@ export function createServer(deps: {
             if (!text && !work.pointed().length) return json(400, { error: 'empty turn' });
             session.sendPointed(text);
             return json(200, { ok: true });
+          }
+          case '/api/handoff': {
+            // Local-only by construction: the main server binds to loopback. See
+            // handoff.ts — this spawns a shell and must never move to the public
+            // listener.
+            const target = String(body.path ?? '');
+            const verdict = canHandOff(work, target);
+            if (!verdict.ok) {
+              // Refuse loudly. The transcript records it, so a refusal is visible
+              // rather than a dialog Danny dismisses and forgets.
+              bus.publish({ type: 'activity', tool: 'handoff', detail: `refused — ${verdict.reason}` });
+              return json(409, verdict);
+            }
+            const prompt = seedPrompt(work, target);
+            const { command } = handOffToClaude({ repo: cfg.repo, claudeBin: cfg.claudeBin, prompt });
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'handoff',
+              text: `handed ${target} to Claude Code`,
+              ref: target,
+            });
+            bus.publish({ type: 'activity', tool: 'handoff', detail: `Claude Code ← ${target}` });
+            // Tell the director, so she is not surprised by work starting.
+            session.send(
+              `FYI — Danny just handed ${target} to a fresh Claude Code session in a terminal. It will claim the plan itself. Do not start work on it.`,
+              { silent: true }
+            );
+            return json(200, { ...verdict, command });
           }
           case '/api/answer': {
             const ok = gate.answerAsk(String(body.id), body.answers ?? {});

@@ -40,6 +40,8 @@ export class VoiceService {
   private turnActive = false;
   private lastActivityAt = 0;
   private accruedUsd = 0;
+  /** Serialises spoken lines — see the bus subscriber below. */
+  private speakQueue: Promise<unknown> = Promise.resolve();
 
   constructor(cfg: HarnessConfig, bus: ConversationBus, session: SessionManager) {
     this.cfg = cfg;
@@ -56,9 +58,14 @@ export class VoiceService {
       const text = forVoice(m.voiceText ?? m.text, this.cfg.audioTagsSupported && this.tagsSupported).trim();
       if (!text) return;
       this.lastActivityAt = Date.now();
-      Promise.resolve(this.liveSession.sendResponse(text)).catch(() => {
-        /* session may have closed underneath us */
-      });
+      // Serialised: each sendResponse ends by sending the is_final marker, so two
+      // overlapping ones truncate each other — the second line would cut the first
+      // short. Chain them instead of firing concurrently.
+      this.speakQueue = this.speakQueue
+        .then(() => this.liveSession?.sendResponse(text))
+        .catch(() => {
+          /* session may have closed underneath us */
+        });
     });
   }
 
@@ -158,16 +165,19 @@ export class VoiceService {
       onTranscript: (transcript: Transcript, signal: AbortSignal, session: any) => {
         this.lastActivityAt = Date.now();
         // ⚠️ Do NOT call Query.interrupt() here. Speech Engine aborts the in-flight
-        // response for ordinary transcript REVISIONS (partial → final), not only for
-        // genuine barge-in. Interrupting the director on every revision killed its
-        // turn mid-flight, produced an error result, returned zero chunks, and made
-        // ElevenLabs re-deliver the transcript — an endless ping-pong.
-        // The abort means "stop streaming THIS response", nothing more; the stream
-        // below simply stops feeding chunks. Explicit stop intent ("stop", "hold on")
-        // is what should reach interrupt(), per the plan's turn-taking policy.
-        signal.addEventListener('abort', () => {
-          this.turnActive = false;
-        });
+        // response for ordinary transcript REVISIONS, not only for genuine barge-in.
+        // Interrupting the director on every revision killed its turn mid-flight,
+        // produced an error result, returned zero chunks, and made ElevenLabs
+        // re-deliver the transcript — an endless ping-pong.
+        //
+        // ⚠️ And do not clear `turnActive` here either, which is what this used to
+        // do. `turnActive` is what stops the bus subscriber in the constructor from
+        // ALSO speaking the same lines: clearing it mid-response opened a second,
+        // concurrent sendResponse on the same session. Both streams then raced, and
+        // whichever finished first sent the is_final marker — so the rest of a long
+        // answer was silently discarded and Beth simply never read it out.
+        // Only the response's own completion may clear it.
+        void signal;
         this.liveSession = session;
         const utterance = [...transcript].reverse().find((m) => m.role === 'user')?.content ?? '';
         // Silence transcribes as "..." — never spend a Claude turn on it.
