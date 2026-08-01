@@ -8,6 +8,20 @@ export type HarnessConfig = {
   /** The bound project repo — the director session's cwd. */
   repo: string;
   port: number;
+  /**
+   * Interface the UI and API listen on. LOOPBACK BY DEFAULT, and that is a
+   * security boundary, not a detail: the tunnel forwards every path, so a
+   * publicly-bound API means anyone holding the tunnel URL can read /api/state
+   * and post turns as Danny. Set HARNESS_BIND=0.0.0.0 to expose it on the LAN
+   * deliberately — never point a tunnel at it.
+   */
+  bind: string;
+  /**
+   * Separate public port carrying ONLY the Speech Engine websocket. This is the
+   * one the tunnel points at, so nothing but an ElevenLabs-authenticated upgrade
+   * is reachable from outside this machine.
+   */
+  voicePort: number;
   /** Native CLI binary. The SDK's bundled Bun build hangs under Rosetta here. */
   claudeBin: string;
   /** Per-repo state (session id for resume). Never machine-global. */
@@ -97,9 +111,13 @@ export function loadConfig(): HarnessConfig {
   fs.mkdirSync(stateDir, { recursive: true });
   const env = repoEnv(repo);
 
+  const port = Number(process.env.HARNESS_PORT ?? 4620);
+
   return {
     repo,
-    port: Number(process.env.HARNESS_PORT ?? 4620),
+    port,
+    bind: process.env.HARNESS_BIND ?? '127.0.0.1',
+    voicePort: Number(process.env.HARNESS_VOICE_PORT ?? port + 1),
     claudeBin: process.env.HARNESS_CLAUDE_BIN ?? path.join(os.homedir(), '.local/bin/claude'),
     stateDir,
     eventLogPath: path.join(repo, '.claude', 'events.jsonl'),

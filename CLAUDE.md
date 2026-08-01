@@ -70,6 +70,14 @@ These cost hours. Don't rediscover them.
 - **ElevenLabs dials IN to us.** Speech Engine is the websocket *client*; the harness is
   the server. `localhost` is unreachable, so voice needs a public tunnel URL ending in
   `/voice-ws`. Its absence fails **silently** — audio connects and is never heard.
+- **The tunnel forwards EVERY path, so the API gets two listeners.** Hanging voice off the
+  UI's server published the whole thing: `GET https://<tunnel>/api/state` answered
+  strangers, and `/api/turn` let anyone with the URL talk to the director as Danny. The UI
+  and API now bind to loopback (`HARNESS_BIND`); voice gets its own port
+  (`HARNESS_VOICE_PORT`, default `port + 1`) carrying only the JWT-verified websocket
+  upgrade and a contentless `/healthz`. **Only ever tunnel the voice port.** Anything
+  added to the main server is local-only by construction — which is what makes a
+  shell-executing handoff safe to build later.
 - **`speechEngine.update()` ignores a top-level `wsUrl`.** It is nested under
   `speechEngine`. The bad call returns success and changes nothing, so the harness reads
   the config back and derives its listen path from what is actually stored.

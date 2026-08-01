@@ -28,6 +28,8 @@ if (flag('help')) {
   beth                 bind to the git root of the current directory
   beth --repo <path>   bind to a specific repo
   beth --port <n>      force a port (default: first free from 4620)
+                       the UI/API stay on localhost; only the voice websocket
+                       port (port+1) is tunnelled
   beth --model <id>    claude-opus-5 (default) | claude-fable-5
   beth --fresh         ignore any previous session
   beth --no-tunnel     do not start ngrok (voice will be text-only)
@@ -69,6 +71,12 @@ if (!(await portFree(port))) {
   process.exit(1);
 }
 
+// The PUBLIC port. The UI and API stay on loopback; only this one is tunnelled,
+// and it carries nothing but the ElevenLabs websocket upgrade. Keeping them
+// separate is what stops the tunnel from publishing /api/turn to the internet.
+let voicePort = Number(process.env.HARNESS_VOICE_PORT ?? port + 1);
+for (let i = 0; i < 20 && !(await portFree(voicePort)); i++) voicePort = port + 1 + i + 1;
+
 // --- config from the bound repo's .env ---
 const repoEnv = (() => {
   const out = {};
@@ -84,7 +92,7 @@ const conf = (k) => process.env[k] ?? repoEnv[k];
 const wsUrl = conf('HARNESS_PUBLIC_WS_URL');
 const voiceConfigured = Boolean(conf('ELEVENLABS_API_KEY') && conf('SPEECH_ENGINE_ID'));
 
-const env = { ...process.env, HARNESS_REPO: repo, HARNESS_PORT: String(port) };
+const env = { ...process.env, HARNESS_REPO: repo, HARNESS_PORT: String(port), HARNESS_VOICE_PORT: String(voicePort) };
 if (value('model', null)) env.HARNESS_MODEL = value('model', null);
 if (flag('fresh')) delete env.HARNESS_RESUME;
 
@@ -128,7 +136,7 @@ if (!voiceConfigured) {
 
   await waitFor(`http://localhost:${port}/api/state`, 30);
 
-  if (await reachable(`${origin}/api/state`)) {
+  if (await reachable(`${origin}/healthz`)) {
     console.log(`· tunnel already up → ${origin}`);
   } else {
     try {
@@ -136,9 +144,9 @@ if (!voiceConfigured) {
     } catch {
       console.log(`· ⚠ ngrok not installed — voice needs ${origin} to reach this process (brew install ngrok)`);
     }
-    tunnel = spawn('ngrok', ['http', String(port), '--url', host, '--log', 'stdout'], { stdio: 'ignore' });
+    tunnel = spawn('ngrok', ['http', String(voicePort), '--url', host, '--log', 'stdout'], { stdio: 'ignore' });
     tunnel.on('error', () => console.log('· ⚠ could not start ngrok'));
-    if (await waitFor(`${origin}/api/state`, 20)) {
+    if (await waitFor(`${origin}/healthz`, 20)) {
       console.log(`· tunnel up → ${origin}`);
     } else {
       console.log(`· ⚠ tunnel did not come up. If ngrok says the endpoint is already online,`);
