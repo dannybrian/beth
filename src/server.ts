@@ -95,6 +95,8 @@ export function createServer(deps: {
         director: cfg.directorName,
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.voice.speechLevel(),
+        browserStt: cfg.browserStt,
+        settleMs: cfg.voiceSettleMs,
       });
       send({ type: 'voice', state: deps.voice.status().connected ? 'connected' : 'idle', status: deps.voice.status() });
       for (const m of bus.replay()) send(m);

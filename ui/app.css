@@ -180,6 +180,13 @@ button.voice.connecting {
 }
 @keyframes opening { 50% { opacity: 0.35; } }
 button.voice.armed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+/* The browser's own ear: open and free. Deliberately NOT the red live ring —
+   that one means a metered channel, and this one costs nothing while you talk. */
+button.voice.listening {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
 button.voice.connected {
   color: #fff;
   border-color: var(--err);

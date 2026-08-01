@@ -87,6 +87,16 @@ export type HarnessConfig = {
    */
   speakOut: boolean;
   /**
+   * INBOUND speech: the browser recognises and posts an ordinary turn, instead of
+   * ElevenLabs dialling in over a tunnel to a public port.
+   *
+   * On wherever speak-out is, because the two halves are one migration and a mic
+   * cannot be in two places. HARNESS_BROWSER_STT=0 goes back to Speech Engine for
+   * one more step — the fallback exists so a bad night has a way out, and step 4
+   * deletes it along with the port, the tunnel and the singleton.
+   */
+  browserStt: boolean;
+  /**
    * Whose voice she speaks in. Read off the Speech Engine when absent, so the two
    * paths sound like the same person — the IDENTITY is worth inheriting even
    * though the model below is not.
@@ -218,6 +228,7 @@ export function loadConfig(): HarnessConfig {
     speechEngineId: conf('SPEECH_ENGINE_ID'),
     publicWsUrl: conf('HARNESS_PUBLIC_WS_URL'),
     speakOut: conf('HARNESS_SPEAK_OUT') !== '0',
+    browserStt: conf('HARNESS_SPEAK_OUT') !== '0' && conf('HARNESS_BROWSER_STT') !== '0',
     voiceId: conf('HARNESS_VOICE_ID') ?? conf('ELEVENLABS_VOICE_ID'),
     ttsModel: conf('HARNESS_TTS_MODEL') ?? 'eleven_flash_v2_5',
     audioTagsSupported: conf('HARNESS_AUDIO_TAGS') !== '0',

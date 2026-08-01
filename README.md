@@ -12,9 +12,16 @@ cd ~/Sources/beadgame && beth
 ```
 
 `beth` binds to the git root you are standing in, picks a free port (so several
-repos run side by side), **starts the ngrok tunnel** — voice does not work without
-one, because ElevenLabs dials *in* — opens the browser, and tears everything down
-together on Ctrl-C. `beth --help` for flags; `--no-tunnel` and `--no-open` opt out.
+repos run side by side), starts the ngrok tunnel, opens the browser, and tears
+everything down together on Ctrl-C. `beth --help` for flags; `--no-tunnel` and
+`--no-open` opt out.
+
+**The tunnel is no longer needed for voice.** Recognition happens in the browser
+and her voice is streamed from the harness over loopback, so nothing dials in,
+nothing public is opened, and nothing is billed while idle — `--no-tunnel` is now
+the ordinary way to run. Set `HARNESS_BROWSER_STT=0` to go back to Speech Engine
+(which does need the tunnel) while the old path is still there. See
+`docs/voice-plane.md`.
 
 Install the command once:
 

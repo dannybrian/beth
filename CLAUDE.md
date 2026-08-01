@@ -196,12 +196,14 @@ These cost hours. Don't rediscover them.
 `docs/` is where agreed-but-unbuilt work lives, so a fresh session can pick it up without
 the conversation that produced it. Where things stand:
 
-- **`voice-plane.md`** — steps 1 and 2 are BUILT. The spike (`spike/voice-plane/`) settled
-  the risk that could have sunk it: with the speakers up she does not hear herself, and
-  barge-in behaves. Speak-out has landed (`src/speakOut.ts`), so **she no longer waits for
-  a transcript to say something**. Next: swap input to browser STT and move the settle
-  window into the page, then tear out the transport tax — voice port, tunnel, singleton,
-  cost meter. That last step is pure deletion, which is the point.
+- **`voice-plane.md`** — steps 1–3 are BUILT, and the plane is now the DEFAULT. She speaks
+  over `src/speakOut.ts` (loopback audio, no session, no mic) and hears over
+  `ui/listen.js` (browser recognition posting an ordinary turn). Nothing dials in, nothing
+  public is opened, nothing is billed idle. `HARNESS_BROWSER_STT=0` still reaches the old
+  Speech Engine path, which is why everything below about it is still true — and why the
+  announcement queue, `speakable`, `SILENT_ACK` and `runTurn` are still in the tree.
+  **Step 4 is the deletion**: that fallback, the voice port, the tunnel, the singleton and
+  the cost meter, all at once.
 - **`status-surface.md`** — step 1 is BUILT: the dot tracks anything running, the spinner
   tracks the prediction. Next the stats move behind the context meter, then the test
   monitor takes the top right.

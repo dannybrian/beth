@@ -182,7 +182,28 @@ free when not, and no reason to ever hang up.
    tags are stripped on this path (`eleven_flash_v2_5` predates them). `HARNESS_SPEAK_OUT=0`
    goes back to waiting.
 3. **Swap input over**, move the settle window into the page, and delete the queue,
-   `speakable`, and the ack with it.
+   `speakable`, and the ack with it. BUILT — `ui/listen.js`. The browser recognises,
+   the composer shows the words arriving (punctuated as they will be sent), and a
+   settled utterance goes out through the SAME `send()` as a typed turn, so it carries
+   pointing chips and honours `/clear` and `/stop` for free. With `browserStt` on,
+   nothing attaches and no public port is opened.
+
+   The settle rule changed in the move, and this is the part worth keeping: **it waits
+   for the words to stop CHANGING, not for the events to stop arriving.** Chrome fires
+   `onresult` continuously while it revises its own guess, so restarting the timer per
+   event let a fiddling recogniser hold a finished sentence indefinitely — it reads as
+   the page chewing on your words. Compare the strings instead. And `isFinal` is a
+   stronger end-of-utterance signal than anything ElevenLabs sent — Chrome only sets it
+   after a real pause — so a final segment settles in 1200 ms rather than the full
+   window.
+
+   Half duplex is load-bearing rather than optional (echo cancellation cannot reach the
+   recogniser's own capture), and the RMS gate buys interruption back: sustained energy
+   over threshold stops playback, drops the rest of the backlog, and reopens the ear.
+
+   ⚠️ The announcement queue, `speakable`, `SILENT_ACK` and `runTurn` are still THERE,
+   because `HARNESS_BROWSER_STT=0` still reaches them. That fallback is a way out of a
+   bad night, not a feature — step 4 deletes it and everything under it.
 4. **Tear out the transport tax** — voice port, tunnel, singleton, cost meter — and
    simplify `beth` to a single local server.
 

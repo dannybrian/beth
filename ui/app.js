@@ -1,6 +1,7 @@
 // Minimal vanilla UI — no framework, no build step. The plan calls for
 // "Lit/vanilla"; at this size vanilla DOM keeps the dependency count at zero.
 import { VoiceClient } from '/voice.js';
+import { Listener, listenSupported } from '/listen.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
 const el = (tag, cls, text) => {
@@ -579,6 +580,7 @@ const handlers = {
     if (m.model) $('model-select').value = m.model;
     if (m.permissionMode) setPermissionMode(m.permissionMode);
     if (m.speechLevel) setSpeechLevel(m.speechLevel);
+    buildVoice(m);
   },
   model: (m) => {
     $('model-select').value = m.model;
@@ -714,6 +716,10 @@ function playNextSpoken() {
   const id = speakBacklog.shift();
   if (id === undefined) return;
   speakingId = id;
+  // HALF DUPLEX. The ear closes while she talks, because echo cancellation cannot
+  // reach the recogniser's own capture — it opens its own microphone and takes no
+  // constraints. Parking it is what stops her hearing herself and answering it.
+  voice?.park?.();
   speaker.src = `/api/voice/say/${encodeURIComponent(id)}`;
   speaker.play().catch((e) => {
     // Chrome refuses audio until the page has been interacted with. Say so:
@@ -727,7 +733,25 @@ function playNextSpoken() {
 function doneSpeaking(id) {
   if (speakingId !== id) return;
   speakingId = null;
-  playNextSpoken();
+  if (speakBacklog.length) return void playNextSpoken();
+  // Only reopen when she has genuinely finished — between two queued lines the
+  // ear would otherwise open into the gap and hear the second one.
+  voice?.unpark?.();
+}
+
+/**
+ * Cut her off. What half duplex costs is the ability to interrupt, and this is
+ * the meter buying it back — see the barge-in gate in listen.js.
+ */
+function bargeIn() {
+  speaker.pause();
+  // A backlog she was going to read is no longer wanted: you interrupted the
+  // whole thought, not one sentence of it. The transcript still has every word.
+  const dropped = speakBacklog.length;
+  speakBacklog.length = 0;
+  speakingId = null;
+  if (dropped) entry('activity', (n) => (n.textContent = `⏹ stopped speaking — ${dropped} line${dropped > 1 ? 's' : ''} not read aloud`));
+  voice?.unpark?.();
 }
 
 speaker.addEventListener('ended', () => doneSpeaking(speakingId));
@@ -865,15 +889,17 @@ const keepVoiceAlive = () => {
   }
 };
 
+/** True when speech owns the composer — false means something typed is in it. */
 function showInterim(text) {
   // Never clobber something typed. His words win; speech only fills a box it
   // either already owns or found empty.
-  if (!speechOwnsInput && input.value.trim()) return;
+  if (!speechOwnsInput && input.value.trim()) return false;
   speechOwnsInput = true;
   input.value = text;
   input.classList.add('interim');
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  return true;
 }
 
 function clearInterim() {
@@ -911,6 +937,7 @@ const PLACEHOLDER = {
   connecting: 'Opening the mic — wait…',
   connected: 'Listening — go ahead',
   armed: 'Mic on, channel closed — speak to reopen',
+  listening: 'Listening — go ahead',
   error: 'Voice unavailable — type instead',
 };
 
@@ -925,7 +952,16 @@ function setDirectorName(name) {
   if (!speechOwnsInput && voice?.state !== 'connected') input.placeholder = PLACEHOLDER[voice?.state ?? 'off'] ?? PLACEHOLDER.off;
 }
 
-const voice = new VoiceClient((state, detail) => {
+/**
+ * Which ear this harness has, decided by the server and learned at `hello`.
+ *
+ * The page cannot infer it: browser recognition and a Speech Engine session are
+ * two different microphones and only one may be open. Built lazily for the same
+ * reason — the answer does not exist until the first message arrives.
+ */
+let voice = null;
+
+function paintVoiceButton(state, detail) {
   voiceBtn.className = `voice ${state}`;
   if (!speechOwnsInput) input.placeholder = PLACEHOLDER[state] ?? PLACEHOLDER.off;
   voiceBtn.title =
@@ -935,16 +971,54 @@ const voice = new VoiceClient((state, detail) => {
         ? 'Mic held, channel closed after silence. Speak to reopen (the first words may clip).'
         : state === 'connected'
           ? 'Live — go ahead. Billed per minute; closes itself after silence.'
-          : state === 'error'
-            ? (detail ?? 'voice error')
-            : 'Voice off') + '  (keypad 0)';
+          : state === 'listening'
+            ? 'Listening. Recognition is local and nothing is billed while you talk.'
+            : state === 'error'
+              ? (detail ?? 'voice error')
+              : 'Voice off') + '  (keypad 0)';
   if (detail) console.log('[voice]', detail);
-  fetch('/api/voice/status')
-    .then((r) => r.json())
-    .then((s) => renderVoice(s));
-});
+}
+
+function buildVoice(hello) {
+  if (voice) return;
+  if (hello.browserStt && !listenSupported) {
+    // Say so rather than presenting a mic button that cannot work.
+    paintVoiceButton('error', 'This browser has no speech recognition — Chrome does.');
+    voiceBtn.disabled = true;
+    return;
+  }
+  voice = hello.browserStt
+    ? new Listener({
+        settleMs: hello.settleMs,
+        onState: (state, detail) => paintVoiceButton(state === 'listening' ? 'listening' : state, detail),
+        // The composer IS the preview: he watches the words arrive, punctuated as
+        // they will be sent, in the box they will be sent from.
+        onInterim: (text) => (text ? showInterim(text) : clearInterim()),
+        // Straight through the ordinary send, so a spoken turn carries the chips
+        // he pointed at and honours /clear and /stop exactly like a typed one.
+        // Only send what speech actually OWNS. If he is mid-way through typing
+        // something, the composer is his — sending would fire his half-written
+        // line instead, so the spoken turn waits in the log rather than
+        // hijacking it.
+        onSettled: (text) => {
+          if (showInterim(text)) send();
+          else entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not sent`));
+        },
+        isSpeaking: () => speakingId !== null,
+        stopSpeaking: bargeIn,
+      })
+    : new VoiceClient((state, detail) => {
+        paintVoiceButton(state, detail);
+        fetch('/api/voice/status')
+          .then((r) => r.json())
+          .then((s) => renderVoice(s));
+      });
+  paintVoiceButton(voice.state);
+}
 
 const toggleVoice = async () => {
+  // Nothing to toggle until `hello` has said which ear this harness has.
+  if (!voice) return;
   try {
     if (voice.state === 'off') await voice.arm();
     else await voice.off();

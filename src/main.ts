@@ -88,7 +88,10 @@ const voiceServer = http.createServer((req, res) => {
 voiceServer.on('error', (err: NodeJS.ErrnoException) => {
   console.error(`  voice: port ${cfg.voicePort} unavailable (${err.code}) — voice will not connect`);
 });
-await voice.attach(voiceServer);
+// With the browser doing the listening, nothing dials in — so nothing attaches
+// and nothing public is opened. A mic cannot be in two places, and holding a paid
+// channel that no longer carries anything would bill for the privilege.
+if (!cfg.browserStt) await voice.attach(voiceServer);
 
 server.listen(cfg.port, cfg.bind, () => {
   console.log(`director-harness → http://localhost:${cfg.port}`);
@@ -104,11 +107,14 @@ server.listen(cfg.port, cfg.bind, () => {
         : 'speak-out off — announcements wait for a transcript'
     }`
   );
+  console.log(
+    `  ear:    ${cfg.browserStt ? 'the browser (no tunnel, no public port, nothing billed idle)' : 'Speech Engine'}`
+  );
 });
 
 // Only listen publicly when voice is actually configured — otherwise nothing
 // about this process is reachable from outside the machine at all.
-if (voice.configured) {
+if (!cfg.browserStt && voice.configured) {
   voiceServer.listen(cfg.voicePort, () => console.log(`  voice: public port ${cfg.voicePort} (websocket only)`));
 }
 

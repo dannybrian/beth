@@ -73,7 +73,12 @@
           <option value="live">live · the real director</option>
         </select>
       </label>
-      <label>settle <input id="settle" type="number" value="2500" step="250" style="width: 84px" />ms</label>
+      <label title="How long the words must stop CHANGING while Chrome is still revising.">
+        settle <input id="settle" type="number" value="2500" step="250" style="width: 84px" />ms
+      </label>
+      <label title="Shorter window once Chrome marks the segment final — it only does that after a real pause.">
+        final <input id="finalSettle" type="number" value="1200" step="100" style="width: 84px" />ms
+      </label>
       <label title='Say "period", "comma", "question mark", "new paragraph". Stopgap — it will eat a real "the settle period".'>
         <input id="dictate" type="checkbox" checked /> spoken punctuation
       </label>
@@ -180,6 +185,10 @@
       let consumedUpTo = 0;
       let settleTimer = null;
       let pendingText = '';
+      /** The last words heard, so a REVISION restarts the window and a repeat does not. */
+      let lastHeard = '';
+      /** How long the running timer was set for, so going final can shorten it. */
+      let timerWait = 0;
       let speaking = false;
       let selfHeard = 0;
       let spokenWords = new Set();
@@ -249,7 +258,11 @@
 
       function onResult(e) {
         let text = '';
-        for (let i = consumedUpTo; i < e.results.length; i++) text += e.results[i][0].transcript;
+        let allFinal = true;
+        for (let i = consumedUpTo; i < e.results.length; i++) {
+          text += e.results[i][0].transcript;
+          if (!e.results[i].isFinal) allFinal = false;
+        }
         text = text.trim();
         // Show the SENT form, not the heard one: watching "period" become a full
         // stop as you say it is the only way to know the rewrite is right BEFORE the
@@ -274,9 +287,27 @@
           }
         }
 
-        clearTimeout(settleTimer);
+        // ⚠️ The window waits for the words to stop CHANGING, not for the events to
+        // stop arriving. Chrome fires onresult continuously while it revises its own
+        // guess, and restarting the timer on every event meant a recogniser that
+        // kept fiddling could hold a finished sentence indefinitely — it looked like
+        // the page was chewing on the text before sending it. Compare the strings.
+        //
+        // `isFinal` is a stronger end-of-utterance signal than anything ElevenLabs
+        // gave us — Chrome only sets it after a real pause — so a settled segment
+        // does not need the full window on top of the pause that produced it.
+        const wait = allFinal ? Number($('finalSettle').value) || 1200 : Number($('settle').value) || 2500;
+        const changed = text !== lastHeard;
+        lastHeard = text;
         pendingText = text;
+        // Restart only when the words moved, or when going final SHORTENS the wait.
+        if (!changed && wait >= timerWait && settleTimer) return;
+        clearTimeout(settleTimer);
+        timerWait = wait;
         settleTimer = setTimeout(() => {
+          settleTimer = null;
+          lastHeard = '';
+          timerWait = 0;
           consumedUpTo = e.results.length;
           $('interim').textContent = ' ';
           const raw = pendingText.trim();
@@ -288,7 +319,7 @@
           const t = $('dictate').checked ? punctuate(raw) : raw;
           if (t !== raw) log('t', `punctuated: "${raw}" → "${t}"`);
           sendTurn(t);
-        }, Number($('settle').value) || 2500);
+        }, wait);
       }
 
       $('mic').onclick = async () => {

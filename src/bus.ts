@@ -59,6 +59,11 @@ export type UIMessage =
       director: string;
       permissionMode: string;
       speechLevel: string;
+      // Which ear this harness has. The page cannot infer it: browser recognition
+      // and a Speech Engine session are two different mics, and only one of them
+      // can be open.
+      browserStt: boolean;
+      settleMs: number;
     }
   // `refs` are what Danny POINTED at for this turn — rendered as chips in the
   // transcript so a turn stays readable next to what he actually typed.
