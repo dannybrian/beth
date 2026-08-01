@@ -4,6 +4,7 @@
 import type { HarnessEvent } from './eventlog.ts';
 import type { WorkItem, WorkRef } from './workItems.ts';
 import type { TextLink } from './links.ts';
+import type { TextSpan } from './markdown.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -47,21 +48,45 @@ export type AskQuestion = {
 };
 
 export type UIMessage =
-  | { type: 'hello'; repo: string; mode: string; modeReason: string; model: string }
+  // `mode` is the director ROLE (shadow/director); `permissionMode` is how tool
+  // permissions resolve; `director` is what to call her on this page.
+  | {
+      type: 'hello';
+      repo: string;
+      mode: string;
+      modeReason: string;
+      model: string;
+      director: string;
+      permissionMode: string;
+      speechLevel: string;
+    }
   // `refs` are what Danny POINTED at for this turn — rendered as chips in the
   // transcript so a turn stays readable next to what he actually typed.
   | { type: 'user'; text: string; refs?: WorkRef[] }
-  // `text` is what Danny READS (audio tags stripped); `voiceText` is what he HEARS.
-  // `links` are file references found in `text`, with offsets into it — a render
-  // hint for the page only. The voice path never sees them, which is the point:
-  // Beth writes plain prose and stays sayable.
-  | { type: 'assistant'; text: string; voiceText?: string; links?: TextLink[] }
-  | { type: 'say'; kind: string; text: string; voiceText?: string; ref?: string; links?: TextLink[]; refLink?: TextLink }
+  // `text` is what Danny READS (audio tags and markdown markers stripped);
+  // `voiceText` is the raw form the speech path re-derives from. `links` and
+  // `spans` are both offset overlays on `text` — file references and the
+  // formatting her markdown carried. Render hints for the page only; the voice
+  // path never sees either, which is the point: one canonical string, and
+  // overlays that cannot disagree with it.
+  | { type: 'assistant'; text: string; voiceText?: string; links?: TextLink[]; spans?: TextSpan[] }
+  | {
+      type: 'say';
+      kind: string;
+      text: string;
+      voiceText?: string;
+      ref?: string;
+      links?: TextLink[];
+      spans?: TextSpan[];
+      refLink?: TextLink;
+    }
   | { type: 'activity'; tool: string; detail: string }
   | { type: 'ask'; id: string; questions: AskQuestion[] }
   | { type: 'ask_resolved'; id: string; answers: Record<string, string> }
-  | { type: 'approval'; id: string; tool: string; title: string; detail: string }
-  | { type: 'approval_resolved'; id: string; allowed: boolean }
+  // `canAlways` is false when the SDK offered no rule that would cover this call
+  // again — the card must not then show a button that quietly does nothing.
+  | { type: 'approval'; id: string; tool: string; title: string; detail: string; canAlways?: boolean }
+  | { type: 'approval_resolved'; id: string; allowed: boolean; always?: boolean }
   | { type: 'usage'; usage: UsageSnapshot }
   | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
@@ -74,6 +99,8 @@ export type UIMessage =
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
+  | { type: 'permission'; mode: string }
+  | { type: 'speech'; level: string }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {

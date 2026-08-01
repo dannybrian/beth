@@ -58,6 +58,8 @@ function openInEditor(link) {
 }
 
 function linkNode(link, label) {
+  // `label` is optional: inside a message body the anchor's contents are built
+  // from the range tree below, because a link may itself contain formatting.
   const a = el('a', `filelink ${link.kind}`, label);
   a.href = '#';
   a.title =
@@ -75,30 +77,73 @@ function linkNode(link, label) {
   return a;
 }
 
-/** Body text with proven file references spliced in as links. */
-function bodyWithLinks(text, links) {
+/**
+ * Two overlays over one string: proven file references, and the formatting her
+ * markdown carried (the server took the markers off — see markdown.ts — so both
+ * sets of offsets index the text exactly as it arrives here).
+ *
+ * They are spliced together as a TREE rather than two passes, because they nest:
+ * a path inside a bold clause is one range inside another. Never innerHTML —
+ * every node here is built, so nothing she writes can become markup.
+ */
+const SPAN_TAG = { bold: 'strong', italic: 'em', code: 'code', strike: 's', heading: 'strong' };
+
+function rangeTree(text, links, spans) {
+  const ranges = [
+    ...(spans ?? []).map((s) => ({ start: s.start, end: s.end, kind: s.kind })),
+    ...(links ?? []).map((l) => ({ start: l.start, end: l.end, link: l })),
+  ]
+    // Outermost first, and a link inside an equal-width span rather than around
+    // it — `**plans/foo.md**` should be a bold link, not a link containing bold.
+    .sort((a, b) => a.start - b.start || b.end - a.end || (a.link ? 1 : -1));
+
+  const root = { start: 0, end: text.length, children: [] };
+  const stack = [root];
+  for (const r of ranges) {
+    while (stack.length > 1 && r.start >= stack[stack.length - 1].end) stack.pop();
+    const parent = stack[stack.length - 1];
+    // A range that straddles its parent's edge cannot be nested without breaking
+    // one of them. Dropping it loses a bit of styling; splitting it would lose
+    // a link. Prefer the readable failure.
+    if (r.end > parent.end) continue;
+    r.children = [];
+    parent.children.push(r);
+    stack.push(r);
+  }
+  return root;
+}
+
+function buildRange(node, text) {
+  const frag = document.createDocumentFragment();
+  let at = node.start;
+  for (const c of node.children) {
+    if (c.start > at) frag.append(document.createTextNode(text.slice(at, c.start)));
+    const n = c.link ? linkNode(c.link) : el(SPAN_TAG[c.kind] ?? 'span', c.kind === 'heading' ? 'heading' : null);
+    n.append(buildRange(c, text));
+    frag.append(n);
+    at = c.end;
+  }
+  if (at < node.end) frag.append(document.createTextNode(text.slice(at, node.end)));
+  return frag;
+}
+
+/** Body text with its links and formatting spliced in. */
+function bodyWithLinks(text, links, spans) {
   const div = el('div', 'body');
-  if (!links?.length) {
+  if (!links?.length && !spans?.length) {
     div.textContent = text;
     return div;
   }
-  let at = 0;
-  for (const link of links) {
-    if (link.start < at) continue; // defensive: never emit overlapping ranges
-    if (link.start > at) div.append(document.createTextNode(text.slice(at, link.start)));
-    div.append(linkNode(link, text.slice(link.start, link.end)));
-    at = link.end;
-  }
-  if (at < text.length) div.append(document.createTextNode(text.slice(at)));
+  div.append(buildRange(rangeTree(text, links, spans), text));
   return div;
 }
 
-const renderAssistant = (m) => entry('assistant', (n) => n.append(bodyWithLinks(m.text, m.links)));
+const renderAssistant = (m) => entry('assistant', (n) => n.append(bodyWithLinks(m.text, m.links, m.spans)));
 
 const renderSay = (m) =>
   entry('say', (n) => {
     n.append(el('span', 'tag', m.kind));
-    n.append(bodyWithLinks(m.text, m.links));
+    n.append(bodyWithLinks(m.text, m.links, m.spans));
     // The announcement's own ref is already structured — make it the most
     // obvious thing to click.
     if (m.refLink) n.append(linkNode(m.refLink, m.refLink.spoken ?? m.ref));
@@ -161,23 +206,44 @@ function renderAsk(m) {
   card.querySelector('input')?.focus();
 }
 
+const approvalCards = new Map();
+
+/**
+ * Mark a card settled. Driven by the bus echo rather than by the click, so a
+ * RELOAD lands in the right state too: the transcript replays the approval, and
+ * without this the card comes back looking live and its buttons quietly 404.
+ */
+function resolveApprovalCard(id, allowed, always) {
+  const entry = approvalCards.get(id);
+  if (!entry) return;
+  approvalCards.delete(id);
+  entry.card.classList.add('answered');
+  entry.card.append(el('div', 'answer', !allowed ? '→ denied' : always ? '→ allowed, and not asking again' : '→ allowed'));
+  entry.opts.remove();
+}
+
 function renderApproval(m) {
   const card = el('div', 'card approval');
   card.append(el('span', 'hdr', `permission · ${m.tool}`));
   card.append(el('div', 'q', m.title));
   card.append(el('div', 'body', m.detail));
   const opts = el('div', 'opts');
-  const decide = (allowed) => {
-    post('/api/approve', { id: m.id, allowed });
-    card.classList.add('answered');
-    card.append(el('div', 'answer', allowed ? '→ allowed' : '→ denied'));
-    opts.remove();
-  };
+  approvalCards.set(m.id, { card, opts });
+  const decide = (allowed, always) => post('/api/approve', { id: m.id, allowed, always });
   const yes = el('button', 'opt', 'Allow');
-  yes.onclick = () => decide(true);
+  yes.onclick = () => decide(true, false);
+  opts.append(yes);
+  // Only when the SDK actually gave us a rule that covers this again — a button
+  // that silently fails to stop the next identical prompt is worse than no button.
+  if (m.canAlways) {
+    const always = el('button', 'opt always', 'Always');
+    always.title = 'Allow this, and stop asking for it — for this conversation only';
+    always.onclick = () => decide(true, true);
+    opts.append(always);
+  }
   const no = el('button', 'opt', 'Deny');
-  no.onclick = () => decide(false);
-  opts.append(yes, no);
+  no.onclick = () => decide(false, false);
+  opts.append(no);
   card.append(opts);
   add(card);
 }
@@ -493,16 +559,29 @@ const handlers = {
     const project = m.repo.split('/').pop();
     $('repo-label').textContent = project;
     // Several instances run side by side, one per repo — the tab title is the
-    // only way to tell them apart from the window switcher.
-    document.title = `Beth: ${project}`;
+    // only way to tell them apart from the window switcher. The name comes from
+    // the bound repo, so a different project's director is called what it calls
+    // her rather than what this harness assumes.
+    document.title = `${m.director ?? 'Director'}: ${project}`;
+    setDirectorName(m.director);
     const mode = $('mode-label');
     mode.textContent = m.mode;
     mode.className = `mode ${m.mode}`;
     mode.title = m.modeReason;
     if (m.model) $('model-select').value = m.model;
+    if (m.permissionMode) setPermissionMode(m.permissionMode);
+    if (m.speechLevel) setSpeechLevel(m.speechLevel);
   },
   model: (m) => {
     $('model-select').value = m.model;
+  },
+  permission: (m) => {
+    setPermissionMode(m.mode);
+    entry('activity', (n) => (n.textContent = `🔑 permissions → ${m.mode}`));
+  },
+  speech: (m) => {
+    setSpeechLevel(m.level);
+    entry('activity', (n) => (n.textContent = `🔈 speech → ${m.level}`));
   },
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
@@ -530,7 +609,7 @@ const handlers = {
   ask: renderAsk,
   ask_resolved: (m) => askCards.get(m.id)?.classList.add('answered'),
   approval: renderApproval,
-  approval_resolved: () => {},
+  approval_resolved: (m) => resolveApprovalCard(m.id, m.allowed, m.always),
   usage: (m) => renderUsage(m.usage),
   status: (m) => {
     // A turn in flight is the conversation still happening, even in silence.
@@ -557,6 +636,7 @@ const handlers = {
   cleared: () => {
     transcript.replaceChildren();
     askCards.clear();
+    approvalCards.clear();
     $('usage-label').textContent = '';
     entry('activity', (n) => (n.textContent = '— new conversation —'));
   },
@@ -570,6 +650,12 @@ const handlers = {
     // this must never be the thing that starts billing behind his back.
     else if (m.state === 'speak-request' && voice?.state === 'armed') {
       voice.connect('announce').catch(() => {});
+    }
+    // Something she wrote was never said. It is in the transcript, so the only
+    // thing he cannot otherwise know is that he never heard it — and silence is
+    // indistinguishable from a hang, which is the whole reason this is loud.
+    else if (m.state === 'unspoken') {
+      entry('activity', (n) => (n.textContent = `🔇 not spoken — ${m.detail ?? 'no channel was open'}`));
     }
     renderVoice(m.status, m.detail);
   },
@@ -648,12 +734,24 @@ function renderVoice(status, detail) {
  * when the field is empty, which is exactly when he is about to start.
  */
 const PLACEHOLDER = {
-  off: 'Talk to Beth…',
+  // Replaced on `hello` with the bound repo's director — see setDirectorName.
+  off: 'Talk to the director…',
   connecting: 'Opening the mic — wait…',
   connected: 'Listening — go ahead',
   armed: 'Mic on, channel closed — speak to reopen',
   error: 'Voice unavailable — type instead',
 };
+
+/**
+ * Call her what her project calls her. The harness holds the role and the bound
+ * repo holds the person, so the page cannot know the name until `hello` — and
+ * "Talk to Beth" on someone else's repo is just wrong.
+ */
+function setDirectorName(name) {
+  if (!name) return;
+  PLACEHOLDER.off = `Talk to ${name}…`;
+  if (!speechOwnsInput && voice?.state !== 'connected') input.placeholder = PLACEHOLDER[voice?.state ?? 'off'] ?? PLACEHOLDER.off;
+}
 
 const voice = new VoiceClient((state, detail) => {
   voiceBtn.className = `voice ${state}`;
@@ -792,6 +890,7 @@ function openStream() {
       if (streamSeenHello) {
         transcript.replaceChildren();
         askCards.clear();
+        approvalCards.clear();
       }
       streamSeenHello = true;
     }
@@ -839,6 +938,27 @@ $('send').onclick = send;
 $('interrupt').onclick = () => post('/api/interrupt');
 $('clear').onclick = () => post('/api/clear');
 $('model-select').onchange = (e) => post('/api/model', { model: e.target.value });
+
+/**
+ * Reflect the mode the SERVER is in, not the one that was clicked — the switch is
+ * a live call on the session and the strip must not claim it landed before it did.
+ * `data-mode` carries the colouring: looser than "ask" should be visible without
+ * reading the menu.
+ */
+function setPermissionMode(mode) {
+  const sel = $('perm-select');
+  sel.value = mode;
+  sel.dataset.mode = mode;
+}
+$('perm-select').onchange = (e) => post('/api/permission-mode', { mode: e.target.value });
+
+/** Same contract as the permission mode: the SERVER's level, not the click's. */
+function setSpeechLevel(level) {
+  const sel = $('speech-select');
+  sel.value = level;
+  sel.dataset.level = level;
+}
+$('speech-select').onchange = (e) => post('/api/speech', { level: e.target.value });
 input.addEventListener('input', () => {
   // Typing takes the box back from the speech preview.
   if (speechOwnsInput) {

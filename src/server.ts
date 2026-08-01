@@ -18,10 +18,17 @@ import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
+import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+
+/**
+ * What the page may switch to. An allowlist, not a passthrough: 'bypassPermissions'
+ * is a real SDK mode and a POST from a page must never be able to reach it.
+ */
+const PERMISSION_MODES = ['default', 'auto', 'acceptEdits', 'dontAsk'];
 
 async function readJson(req: http.IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
@@ -82,6 +89,9 @@ export function createServer(deps: {
         mode: session.role.mode,
         modeReason: session.role.reason,
         model: session.chosenModel(),
+        director: cfg.directorName,
+        permissionMode: session.chosenPermissionMode(),
+        speechLevel: deps.voice.speechLevel(),
       });
       send({ type: 'voice', state: deps.voice.status().connected ? 'connected' : 'idle', status: deps.voice.status() });
       for (const m of bus.replay()) send(m);
@@ -168,14 +178,37 @@ export function createServer(deps: {
             return json(ok ? 200 : 404, { ok });
           }
           case '/api/approve': {
-            const ok = gate.answerApproval(String(body.id), Boolean(body.allowed));
+            // "Always" is an ALLOW that also carries the SDK's suggested rules,
+            // scoped to this conversation — see forThisSession in askgate.ts.
+            const verdict = !body.allowed ? 'deny' : body.always ? 'always' : 'once';
+            const ok = gate.answerApproval(String(body.id), verdict);
             return json(ok ? 200 : 404, { ok });
+          }
+          case '/api/permission-mode': {
+            const mode = String(body.mode ?? '');
+            if (!PERMISSION_MODES.includes(mode)) return json(400, { error: 'unknown mode' });
+            await session.setPermissionMode(mode as HarnessConfig['permissionMode']);
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'permission_mode',
+              text: `permissions → ${mode}`,
+            });
+            return json(200, { ok: true, mode });
           }
           case '/api/model': {
             const model = String(body.model ?? '').trim();
             if (!model) return json(400, { error: 'no model' });
             await session.setModel(model);
             return json(200, { ok: true, model });
+          }
+          case '/api/speech': {
+            // How much of what she writes is read aloud. Voice-side only — the
+            // transcript is unaffected, which is the point of having a level.
+            const level = String(body.level ?? '');
+            if (!(SPEECH_LEVELS as string[]).includes(level)) return json(400, { error: 'unknown level' });
+            deps.voice.setSpeechLevel(level as SpeechLevel);
+            return json(200, { ok: true, level });
           }
           case '/api/clear': {
             await session.clear();
@@ -238,6 +271,9 @@ export function createServer(deps: {
           mode: session.role.mode,
           modeReason: session.role.reason,
           model: session.model(),
+          director: cfg.directorName,
+          permissionMode: session.chosenPermissionMode(),
+          speechLevel: deps.voice.speechLevel(),
           sessionId: session.sessionId(),
           decisions: pending.allDecisions(),
           workers: pending.allWorkers(),

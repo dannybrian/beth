@@ -25,6 +25,11 @@ test('voice keeps tags when supported and drops them when not', () => {
   assert.equal(forVoice(line, false), 'Found it.');
 });
 
+test('voice never carries markdown, tags or no tags', () => {
+  assert.equal(forVoice('[laughs] **Found it.**', true), '[laughs] Found it.');
+  assert.equal(forVoice('[laughs] **Found it.**', false), 'Found it.');
+});
+
 test('a line that is only a tag collapses to empty', () => {
   assert.equal(stripAudioTags('[sighs]'), '');
 });

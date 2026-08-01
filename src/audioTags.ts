@@ -8,6 +8,8 @@
 // The allowlist is deliberately small. It exists so the director can be warm at
 // the edges — a dry [laughs] at a good bug — not so it can perform. It also means
 // ordinary bracketed prose ("[see plan]", "[WIP]") is never mistaken for a cue.
+import { stripMarkdown } from './markdown.ts';
+
 export const AUDIO_TAGS = [
   'laughs',
   'laughs softly',
@@ -39,13 +41,15 @@ export function hasAudioTags(text: string): boolean {
 }
 
 /**
- * What Danny hears. Identity today — the tags pass through to TTS untouched.
- * If the configured Speech Engine model turns out not to support v3 audio tags
- * (realtime engines often run Flash/Turbo for latency), flip this to strip as
- * well, so the voice falls silent on the cue rather than reading "bracket laughs".
+ * What Danny hears. Audio tags pass through to TTS untouched when the engine's
+ * model understands them (realtime engines often run Flash/Turbo, which reads
+ * them as words) — but markdown NEVER does. She writes `**shipped**` because the
+ * base prompt tells her she is rendered as markdown, and the asterisks used to go
+ * straight down the wire to be pronounced.
  */
 export function forVoice(text: string, tagsSupported = true): string {
-  return tagsSupported ? text : stripAudioTags(text);
+  const spoken = stripMarkdown(text);
+  return tagsSupported ? spoken : stripAudioTags(spoken);
 }
 
 /**
@@ -72,4 +76,8 @@ export const VOCALIZATION_PROMPT = [
   `You can therefore use inline audio tags as performance direction. Supported tags, and only these: ${AUDIO_TAGS.map((t) => `[${t}]`).join(', ')}.`,
   'Use them rarely and only when genuinely felt — a dry [laughs] at a good bug, a [sighs] at a third flaky test, [softly] when the news is bad. Several per conversation, not per sentence. Never use one to perform enthusiasm you do not have.',
   'Tags are stripped from the text Danny reads, so they cost nothing on the page; write the sentence so it reads correctly with the tag removed.',
+  // The excerpt rule, stated as a writing instruction rather than a mechanism.
+  // He hears less than he reads by default (see src/spoken.ts), so a reply that
+  // buries its conclusion in the middle is a reply he does not hear the point of.
+  'He HEARS less than he reads: `say` items in full, plus the LAST PARAGRAPH of anything longer you write. So put the upshot last — a closing line that states the answer, the result, or what you are about to do. Never bury it mid-reply, and never end on a checklist or a caveat that would be the only thing spoken.',
 ].join(' ');

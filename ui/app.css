@@ -72,7 +72,9 @@ body {
 .strip-right { display: flex; align-items: center; gap: 12px; }
 #usage-label, #voice-cost { font-family: var(--mono); font-size: 11px; }
 #voice-cost { color: var(--say); }
-#model-select {
+#model-select,
+#perm-select,
+#speech-select {
   background: #1b1f26;
   border: 1px solid var(--line);
   color: var(--text);
@@ -83,7 +85,18 @@ body {
   font-size: 11px;
   cursor: pointer;
 }
-#model-select:focus { outline: none; border-color: var(--accent); }
+#model-select:focus,
+#perm-select:focus,
+#speech-select:focus { outline: none; border-color: var(--accent); }
+/* Speaking everything is the loud choice; headlines is the quiet one. Both are
+   worth seeing without opening the menu. */
+#speech-select[data-level="full"] { color: var(--say); border-color: color-mix(in srgb, var(--say) 45%, transparent); }
+#speech-select[data-level="headlines"] { color: var(--muted); }
+/* Anything looser than "ask" is a standing decision to be interrupted less, so it
+   should be legible from across the room rather than hidden in a menu. */
+#perm-select[data-mode="dontAsk"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+#perm-select[data-mode="acceptEdits"],
+#perm-select[data-mode="auto"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 
 /* Mic lives with the composer — it is an input control, not a status readout. */
 button.voice {
@@ -203,6 +216,15 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .entry .body { white-space: pre-wrap; word-wrap: break-word; }
 .entry code { font-family: var(--mono); font-size: 0.9em; background: #1d2128; padding: 1px 4px; border-radius: 3px; }
 
+/* Her markdown, rendered rather than displayed. The markers came off server-side
+   (markdown.ts) and arrive as offset spans, so this styles what they MEANT.
+   Emphasis has to read at a glance in a wall of prose without shouting — brighter
+   and heavier, not a different colour, which is already how links are spoken for. */
+.entry .body strong { font-weight: 600; color: #eef2f8; }
+.entry .body em { font-style: italic; color: #e6ebf2; }
+.entry .body s { color: var(--muted); }
+.entry .body .heading { display: inline-block; margin-top: 2px; letter-spacing: 0.01em; }
+
 /* say events read as announcements, never as ordinary reply text */
 .entry.say {
   border-left: 3px solid var(--say);
@@ -277,6 +299,10 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 }
 .card button.opt:hover { border-color: var(--ask); background: #20252d; }
 .card button.opt .d { display: block; color: var(--muted); font-size: 12px; }
+/* "Always" is a standing decision, not just a quicker yes — it should look like
+   the one that changes something. */
+.card button.opt.always { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.card button.opt.always:hover { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .card .free { display: flex; gap: 6px; margin-top: 7px; }
 .card .free input { flex: 1; background: #1b1f26; border: 1px solid var(--line); color: var(--text); border-radius: 4px; padding: 7px 9px; font: inherit; }
 .card.answered { opacity: 0.55; border-style: dashed; }

@@ -32,7 +32,7 @@ work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
 
 let session: SessionManager;
-const gate = new AskGate(bus, events, () => session.sessionId());
+const gate = new AskGate(bus, events, () => session.sessionId(), cfg.directorName);
 session = new SessionManager(cfg, bus, events, pending, gate, work);
 
 // Terminal-session and hook writes to the event log flow into the UI too.
@@ -89,6 +89,7 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  repo:  ${cfg.repo}`);
   console.log(`  bind:  ${cfg.bind}${cfg.bind === '127.0.0.1' ? ' (UI and API are local-only)' : ' ⚠ REACHABLE OFF THIS MACHINE'}`);
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);
+  console.log(`  who:   ${cfg.directorName} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
 });
 

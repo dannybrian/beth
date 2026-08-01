@@ -3,6 +3,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { directorName } from './directorName.ts';
+import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 
 export type HarnessConfig = {
   /** The bound project repo — the director session's cwd. */
@@ -38,6 +40,32 @@ export type HarnessConfig = {
    */
   planRoots: string[];
   model: string;
+  /**
+   * How tool permissions are resolved, using the SDK's own modes:
+   *   'auto'        — a model classifier settles the ordinary ones and escalates
+   *                   only what it will not take on itself
+   *   'default'     — everything the settings files do not pre-approve asks
+   *   'acceptEdits' — file edits go through; the rest still asks
+   *   'dontAsk'     — never ask, and deny anything not pre-approved
+   *
+   * 'auto' is the default because an approval card is UNANSWERABLE BY VOICE: the
+   * director stops mid-job, the paid channel keeps billing, and the only tell is
+   * silence — which is indistinguishable from a hang. The card still appears for
+   * whatever the classifier escalates, which is where the repo's own prod-safety
+   * rules land.
+   *
+   * 'bypassPermissions' is deliberately not offered: it needs the SDK's
+   * allowDangerouslySkipPermissions and it would delete the seam the bound repo's
+   * "production needs a per-action yes" rule depends on.
+   */
+  permissionMode: 'default' | 'auto' | 'acceptEdits' | 'dontAsk';
+  /**
+   * What to call the director in the UI's own words ("Beth wants to use Bash").
+   * Read from the bound repo's .claude/DIRECTOR.md, because the person is the
+   * project's to supply; HARNESS_DIRECTOR_NAME overrides a repo that phrases its
+   * identity somewhere the reader cannot see.
+   */
+  directorName: string;
   /** Voice is optional — absent credentials degrade the harness to text-only. */
   elevenLabsApiKey?: string;
   speechEngineId?: string;
@@ -54,6 +82,18 @@ export type HarnessConfig = {
    * tags are stripped from the voice path too, so the voice never reads them aloud.
    */
   audioTagsSupported: boolean;
+  /**
+   * How much of what she writes is read ALOUD. The transcript always has all of
+   * it; this only decides what is pronounced.
+   *   'full'      — every line, as it was before this existed
+   *   'brief'     — `say` items in full, and the LAST PARAGRAPH of a longer reply
+   *   'headlines' — findings, events, and short in-progress lines only
+   *
+   * 'brief' is the default because the two channels have different budgets: six
+   * paragraphs of real code work is a few seconds of skimming on the page and a
+   * minute and a half of unskippable audio. See src/spoken.ts.
+   */
+  speechLevel: SpeechLevel;
   /**
    * Reasoning effort applied for the life of a voice session, then restored.
    * Spoken conversation trades depth for latency; typed work keeps full effort.
@@ -149,10 +189,15 @@ export function loadConfig(): HarnessConfig {
       .map((s) => s.trim())
       .filter(Boolean),
     model: conf('HARNESS_MODEL') ?? DEFAULT_MODEL,
+    permissionMode: (conf('HARNESS_PERMISSION_MODE') ?? 'auto') as HarnessConfig['permissionMode'],
+    directorName: directorName(repo, conf('HARNESS_DIRECTOR_NAME') ?? ''),
     elevenLabsApiKey: conf('ELEVENLABS_API_KEY'),
     speechEngineId: conf('SPEECH_ENGINE_ID'),
     publicWsUrl: conf('HARNESS_PUBLIC_WS_URL'),
     audioTagsSupported: conf('HARNESS_AUDIO_TAGS') !== '0',
+    speechLevel: (SPEECH_LEVELS as string[]).includes(conf('HARNESS_SPEECH_LEVEL') ?? '')
+      ? (conf('HARNESS_SPEECH_LEVEL') as SpeechLevel)
+      : 'brief',
     voiceEffort:
       conf('HARNESS_VOICE_EFFORT') === 'off'
         ? null

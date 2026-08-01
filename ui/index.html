@@ -3,7 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Beth</title>
+    <!-- Replaced on `hello` with "<director>: <repo>" — the name is the bound
+         repo's to supply, so this is only what shows before the stream connects. -->
+    <title>director-harness</title>
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
@@ -17,6 +19,21 @@
         <select id="model-select" title="Model for this conversation — switches live, context is kept">
           <option value="claude-opus-5">Opus 5</option>
           <option value="claude-fable-5">Fable 5</option>
+        </select>
+        <!-- Permissions. A card cannot be answered by voice, so this is really a
+             control over how often a spoken conversation can be stopped dead. -->
+        <select id="perm-select" title="How tool permissions are resolved — switches live">
+          <option value="auto">auto</option>
+          <option value="default">ask</option>
+          <option value="acceptEdits">edits ok</option>
+          <option value="dontAsk">no asks</option>
+        </select>
+        <!-- How much of what she writes is read ALOUD. The transcript always has
+             all of it — a page skims in seconds where audio cannot. -->
+        <select id="speech-select" title="How much of what she writes is spoken aloud — the transcript always has all of it">
+          <option value="brief">say + last ¶</option>
+          <option value="full">speak all</option>
+          <option value="headlines">headlines</option>
         </select>
         <span id="voice-cost"></span>
         <span id="usage-label"></span>
@@ -71,7 +88,7 @@
             <path d="M12 17.6v.01" />
           </svg>
         </button>
-        <textarea id="input" rows="1" placeholder="Talk to Beth…" autofocus></textarea>
+        <textarea id="input" rows="1" placeholder="Talk to the director…" autofocus></textarea>
         <button id="send">Send</button>
         <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
         <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>

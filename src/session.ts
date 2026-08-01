@@ -19,6 +19,7 @@ import { detectLinks } from './links.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
+import { renderInline } from './markdown.ts';
 
 type InputStream = AsyncIterable<SDKUserMessage> & { push(m: SDKUserMessage): void; end(): void };
 
@@ -93,6 +94,8 @@ export class SessionManager {
   private interruptPending = false;
   /** Survives /clear, so a model chosen in the UI sticks to the next conversation. */
   private modelChoice = '';
+  /** Likewise for the permission mode — /clear drops context, not preferences. */
+  private permissionChoice: HarnessConfig['permissionMode'] | '' = '';
   role: RoleAssessment;
 
   private cfg: HarnessConfig;
@@ -190,6 +193,10 @@ export class SessionManager {
         cwd: this.cfg.repo,
         pathToClaudeCodeExecutable: this.cfg.claudeBin,
         model: this.modelChoice || this.cfg.model,
+        // 'auto' by default: a card cannot be answered by voice, so every prompt
+        // that reaches the gate stops a spoken conversation until Danny is back at
+        // the page. See config.ts for why bypass is not on the menu.
+        permissionMode: this.chosenPermissionMode(),
         ...(resume ? { resume } : {}),
         // settingSources omitted on purpose — defaults to user+project+local so
         // CLAUDE.md, skills, and repo hooks load exactly like a terminal session.
@@ -296,6 +303,20 @@ export class SessionManager {
   /** The model this conversation is running on. */
   chosenModel = () => this.modelChoice || this.cfg.model;
 
+  /** How this conversation resolves tool permissions. */
+  chosenPermissionMode = (): HarnessConfig['permissionMode'] => this.permissionChoice || this.cfg.permissionMode;
+
+  /**
+   * Switch permission mode mid-conversation. Like setModel, this works on a live
+   * streaming query — no restart, no lost context — so Danny can loosen it for a
+   * long unattended run and tighten it again when the work turns towards prod.
+   */
+  async setPermissionMode(mode: HarnessConfig['permissionMode']) {
+    this.permissionChoice = mode;
+    await this.q?.setPermissionMode(mode);
+    this.bus.publish({ type: 'permission', mode });
+  }
+
   stop() {
     this.input.end();
   }
@@ -395,8 +416,10 @@ export class SessionManager {
     for (const b of m.message?.content ?? []) {
       if (b.type === 'text' && b.text.trim()) {
         const raw = b.text.trim();
-        const read = stripAudioTags(raw);
-        this.bus.publish({ type: 'assistant', text: read, voiceText: raw, links: this.links(read) });
+        // Markers off BEFORE links are detected: both overlays index this exact
+        // string, so the page can never splice one against stale offsets.
+        const { text: read, spans } = renderInline(stripAudioTags(raw));
+        this.bus.publish({ type: 'assistant', text: read, spans, voiceText: raw, links: this.links(read) });
       } else if (b.type === 'tool_use' && !String(b.name).endsWith('__say')) {
         const detail = JSON.stringify(b.input ?? {}).slice(0, 200);
         this.bus.publish({ type: 'activity', tool: String(b.name), detail });

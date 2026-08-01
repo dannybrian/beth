@@ -45,9 +45,14 @@ write a plan file or repair frontmatter.
 pnpm test        # node --test src/*.test.ts
 ```
 
-Tests are thin and concentrated where behaviour is subtle (`audioTags`, `spokenName`,
-the `plansReader` parsers, the `workIndex` watcher). The turn-stream timing in `voice.ts`
-has produced two real bugs and has no tests — a good place to add some.
+Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
+`spokenName`, the `plansReader` parsers, the `workIndex` watcher, and the turn-stream
+timing in `voice.ts`, which has produced several real bugs).
+
+⚠️ A voice test that stands a session up must set `speakable` too — `connect()` in
+`voice.test.ts` does both. Setting `liveSession` alone models a session that can be
+spoken through, which is exactly the belief the SDK does not share; the suite passed
+green against it while the real thing was mute.
 
 Watcher tests poll for a condition rather than sleeping a fixed amount; filesystem event
 latency has no guarantee, and a fixed wait is how these go flaky.
@@ -107,6 +112,53 @@ These cost hours. Don't rediscover them.
   Deferring the response is safe: the SDK leaves `inTranscriptHandler` true until the
   session closes, and `streamResponse` captures the CURRENT `event_id`, so a late
   response lands against the newest transcript — the one you want to answer.
+- **The page and the ear have different budgets.** Six paragraphs of real code work
+  is seconds of skimming and ninety seconds of unskippable audio, so speech takes an
+  EXCERPT (`src/spoken.ts`): `say` items in full, plus the LAST PARAGRAPH of anything
+  longer she writes. Positional, not clever — there is no summarising step to get
+  wrong or to pay for, and the upshot is where she was already told to put it. The
+  transcript is always complete; only the pronunciation is reduced. Two rules follow:
+  a level that suppresses everything must still yield SOMETHING for a spoken turn
+  (the last sentence — a zero-chunk response restarts the re-delivery loop), and a
+  suppressed line must NOT queue as an announcement: that silence is a choice, not a
+  lost line.
+- **A permission card cannot be answered by voice.** `canUseTool` pends forever by
+  design, so a prompt reaching the gate stops a spoken conversation dead — the paid
+  channel bills while she waits and the only tell is silence, which reads as a hang.
+  That is why the session runs in the SDK's `'auto'` permission mode by default
+  (classifier settles the ordinary, escalates the rest) and why the card offers
+  **Always**, which returns the SDK's own `suggestions` as `updatedPermissions`.
+  Those suggestions are re-scoped to `'session'` on purpose: echoing them verbatim
+  would write permission rules into the bound repo's settings FILE from a button
+  click, durably and invisibly. `'bypassPermissions'` is never offered — it needs
+  `allowDangerouslySkipPermissions` and it would delete the seam a repo's
+  "production needs a per-action yes" rule depends on.
+- **The director's NAME comes from the bound repo** (`directorName.ts` reads "You are
+  **X**" out of `.claude/DIRECTOR.md`). It is not decoration: a card reading "Claude
+  wants to use Bash" is a stranger interrupting a conversation with someone else.
+  Nothing in `ui/` may hardcode it — the page learns it from `hello`.
+- **A connected voice session is not a mouth.** `sendResponse()` refuses unless the SDK
+  is inside a transcript handler (`inTranscriptHandler`), and that flag is set ONLY when
+  ElevenLabs delivers a transcript — never at `init`. Sending outside one returns early
+  with a `console.warn` and resolves happily, so flushing announcements from `onInit`
+  (where they used to be flushed) emptied the queue into nothing: Beth went silent for
+  the rest of the session while the page looked perfectly healthy. Speech Engine only
+  lets you ANSWER something it heard. `voice.ts` tracks `speakable`, holds the queue
+  until the first transcript — noise counts, "..." is a mouth — and re-queues anything
+  that fails to land. Speaking first, unprompted, is a client-side "first message"
+  feature, not something this side of the socket can do.
+- **One response per transcript.** Every `sendResponse` ends with `is_final`, which
+  closes the agent turn for that transcript, so a second response against the same one
+  is at best unheard. A backlog therefore rides the next turn's stream as its opening
+  chunks (`runTurn`) or goes out joined as a single response — never as N sends. There
+  is ONE chain (`speakQueue`) for turns and announcements alike; two chains could
+  interleave, which is the same bug wearing a different hat.
+- **She writes markdown, and the page renders offsets.** File links are character RANGES
+  into the message text, computed server-side, so nothing in `ui/` may transform that
+  string — the offsets would move underneath. Markdown markers come off in `markdown.ts`
+  BEFORE links are detected, and the formatting they carried travels as spans in the
+  same coordinates. One canonical string, two overlays that cannot disagree. The voice
+  path takes that string too, which is what stops TTS pronouncing asterisks.
 - **Two `beth` instances break voice in a way that blames the UI.** Voice is a SINGLETON:
   one Speech Engine, one stored `wsUrl`, one tunnel hostname forwarding to one voice port.
   So ElevenLabs talks to whichever instance owns the tunnel while you may be watching the

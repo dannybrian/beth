@@ -14,6 +14,7 @@ import type { ConversationBus, UIMessage } from './bus.ts';
 import type { SessionManager } from './session.ts';
 import type { HarnessConfig } from './config.ts';
 import { forVoice, isMeaningfulUtterance } from './audioTags.ts';
+import { spokenFor, lastSentence, type SpeechLevel } from './spoken.ts';
 
 export const RATE_PER_MINUTE = 0.08;
 /** Path ElevenLabs connects to. The engine's wsUrl must end with this. */
@@ -25,8 +26,14 @@ const SILENCE_RATE_MULTIPLIER = 0.05;
  * How long an unspoken announcement stays worth saying. News goes stale: if the
  * paid session cannot be opened (voice off, browser closed), replaying "that's
  * shipped" ten minutes later is worse than silence.
+ *
+ * It was 90 s, which was tuned for the announcement case and wrong for the one
+ * that actually happens: the channel closes DURING a long tool call, so what
+ * queues is the answer to the question he just asked. Ninety seconds is shorter
+ * than the read that caused the gap, so his answer aged out before he could
+ * possibly have heard it.
  */
-const ANNOUNCE_MAX_AGE_MS = 90_000;
+const ANNOUNCE_MAX_AGE_MS = 5 * 60_000;
 /** Backstop so a long unattended run cannot queue a monologue. */
 const ANNOUNCE_MAX_QUEUED = 6;
 
@@ -44,19 +51,57 @@ export class VoiceService {
   private tagsSupported = true;
   /** The live session, so text Danny TYPED can still be spoken. */
   private liveSession: any = null;
+  /**
+   * Whether the live session will actually CARRY a line.
+   *
+   * ⚠️ A connected session is not a mouth. `sendResponse()` returns early with
+   * nothing but a console.warn unless the SDK is inside a transcript handler
+   * (`inTranscriptHandler`), and that flag is set ONLY when a user transcript
+   * arrives — never at init. So flushing announcements from `onInit`, which is
+   * where they used to be flushed, could not ever have worked: at that instant
+   * the flag is false by construction. Every queued line was handed to the SDK,
+   * warned about on stderr, and dropped — a page that looked perfectly healthy
+   * while Beth said nothing for the rest of the session.
+   *
+   * Speech Engine will only let us answer something it heard, so this is true
+   * from the first transcript (noise included — "..." is a mouth) until the
+   * session ends.
+   */
+  private speakable = false;
   /** True while a spoken turn is streaming, so we don't double-speak it. */
   private turnActive = false;
   /** Lines produced while no paid session existed, waiting for one to open. */
   private pendingAnnouncements: { text: string; at: number }[] = [];
   private lastActivityAt = 0;
   private accruedUsd = 0;
-  /** Serialises spoken lines — see the bus subscriber below. */
+  /**
+   * Serialises EVERYTHING spoken — announcements, typed lines, and whole turns.
+   * Two chains meant a flush could overlap a turn, and whichever finished first
+   * sent is_final and truncated the other.
+   */
   private speakQueue: Promise<unknown> = Promise.resolve();
+
+  /** How much of what she writes is read aloud. See spoken.ts. */
+  private verbosity: SpeechLevel;
+
+  /** The excerpt to speak for a message — '' means the page carries it alone. */
+  private pickSpoken(m: UIMessage & { type: 'assistant' | 'say' }): string {
+    const raw = m.voiceText ?? m.text;
+    return spokenFor({ type: m.type, kind: m.type === 'say' ? m.kind : undefined, text: raw }, this.verbosity);
+  }
+
+  speechLevel = () => this.verbosity;
+
+  setSpeechLevel(level: SpeechLevel) {
+    this.verbosity = level;
+    this.bus.publish({ type: 'speech', level });
+  }
 
   constructor(cfg: HarnessConfig, bus: ConversationBus, session: SessionManager) {
     this.cfg = cfg;
     this.bus = bus;
     this.session = session;
+    this.verbosity = cfg.speechLevel;
     session.voiceActive = () => this.connectedAt !== null;
 
     // Speak turns Danny TYPED. A transcript-driven turn already streams its own
@@ -65,25 +110,24 @@ export class VoiceService {
     bus.subscribe((m: UIMessage) => {
       if (m.type !== 'assistant' && m.type !== 'say') return;
       if (this.turnActive) return;
-      const text = forVoice(m.voiceText ?? m.text, this.cfg.audioTagsSupported && this.tagsSupported).trim();
+      const text = forVoice(this.pickSpoken(m), this.cfg.audioTagsSupported && this.tagsSupported).trim();
+      // Empty means the level decided the page carries this one. No announcement
+      // queues for it: nobody is waiting on a transcript to hear it.
       if (!text) return;
-      // No paid session right now — the usual case being that the work took
-      // longer than the client's idle window, so the channel closed mid-job.
-      // Dropping the line here is what made long operations end in silence:
-      // the more valuable the result, the more certain it was inaudible.
-      if (!this.liveSession) {
+      // Nothing that will carry it right now — no paid session, or one that has
+      // not heard anything yet. The usual case is that the work took longer than
+      // the client's idle window, so the channel closed mid-job. Dropping the
+      // line here is what made long operations end in silence: the more valuable
+      // the result, the more certain it was inaudible.
+      if (!this.canSpeak()) {
         this.queueAnnouncement(text);
         return;
       }
       this.lastActivityAt = Date.now();
-      // Serialised: each sendResponse ends by sending the is_final marker, so two
-      // overlapping ones truncate each other — the second line would cut the first
-      // short. Chain them instead of firing concurrently.
-      this.speakQueue = this.speakQueue
-        .then(() => this.liveSession?.sendResponse(text))
-        .catch(() => {
-          /* session may have closed underneath us */
-        });
+      // ONE chain for everything spoken — see speakQueue. Each sendResponse ends
+      // by sending the is_final marker, so two overlapping ones truncate each
+      // other: the second line would cut the first short.
+      this.speakQueue = this.speakQueue.then(() => this.say(text));
     });
   }
 
@@ -92,17 +136,71 @@ export class VoiceService {
    *
    * The browser owns the WebRTC leg, so the server cannot dial out — it can only
    * raise a hand. `speak-request` is that hand: the page opens a short session if
-   * (and only if) the mic is armed, and `onInit` flushes whatever is waiting.
-   * When voice is off entirely, nothing opens and the queue simply ages out —
-   * silence is what "voice off" means.
+   * (and only if) the mic is armed, and the queue goes out on the first transcript
+   * that session carries. When voice is off entirely, nothing opens and the queue
+   * simply ages out — silence is what "voice off" means.
+   *
+   * ⚠️ Residual gap, and the only one left: if the room is quiet enough that the
+   * STT never emits so much as filler, an announce-session opens, hears nothing,
+   * and closes at ANNOUNCE_IDLE_CLOSE_MS with the line still queued. Speaking
+   * first, unprompted, is a Speech Engine feature (the conversation's "first
+   * message", set by the CLIENT at session start) rather than something this side
+   * of the socket can do.
    */
-  private queueAnnouncement(text: string) {
-    this.pendingAnnouncements.push({ text, at: Date.now() });
+  private queueAnnouncement(text: string, at = Date.now()) {
+    // `at` is the moment the line was WRITTEN, kept across re-queues so a line
+    // that keeps failing to land ages out instead of living forever.
+    this.pendingAnnouncements.push({ text, at });
+    this.pendingAnnouncements.sort((a, b) => a.at - b.at);
     // Keep the newest: if we are over the cap, the oldest news is the most stale.
     if (this.pendingAnnouncements.length > ANNOUNCE_MAX_QUEUED) {
       this.pendingAnnouncements.splice(0, this.pendingAnnouncements.length - ANNOUNCE_MAX_QUEUED);
     }
     this.publishVoice('speak-request', text.slice(0, 80));
+  }
+
+  /** A session that exists AND has heard something. Both are required to speak. */
+  private canSpeak(): boolean {
+    return Boolean(this.liveSession && this.speakable && this.liveSession.isOpen !== false);
+  }
+
+  /**
+   * Say one line, or put it back. Returns false when it was not heard.
+   *
+   * Everything that speaks goes through here, because "the SDK accepted it" and
+   * "Danny heard it" are different facts: sendResponse resolves happily when the
+   * session cannot carry a response, and throws when the socket has closed. Both
+   * used to land in a `.catch(() => {})`.
+   */
+  private async say(text: string, queuedAt = Date.now()): Promise<boolean> {
+    if (!this.canSpeak()) {
+      this.queueAnnouncement(text, queuedAt);
+      return false;
+    }
+    try {
+      await this.liveSession.sendResponse(text);
+      return true;
+    } catch {
+      // The session died under us — the line has not been heard, so it waits.
+      this.queueAnnouncement(text, queuedAt);
+      return false;
+    }
+  }
+
+  /** Fresh enough to still be worth saying, oldest first. Drops are announced. */
+  private takeFresh(): { text: string; at: number }[] {
+    if (this.pendingAnnouncements.length === 0) return [];
+    const now = Date.now();
+    const fresh = this.pendingAnnouncements.filter((a) => now - a.at <= ANNOUNCE_MAX_AGE_MS);
+    const dropped = this.pendingAnnouncements.length - fresh.length;
+    this.pendingAnnouncements = [];
+    if (dropped > 0) {
+      console.log(`  voice: dropped ${dropped} stale announcement(s)`);
+      // Never lose it silently. The line is still in the transcript; what he
+      // cannot otherwise know is that it was never SAID.
+      this.publishVoice('unspoken', `${dropped} line${dropped > 1 ? 's' : ''} went stale before a channel opened`);
+    }
+    return fresh;
   }
 
   /**
@@ -116,26 +214,28 @@ export class VoiceService {
     this.settleTimer = null;
     this.lastSettled = '';
     this.turnActive = false;
+    this.speakable = false;
     this.endSession();
   }
 
-  /** Speak whatever is still worth speaking, oldest first. */
+  /**
+   * Speak whatever is still worth speaking, as ONE response.
+   *
+   * Joined rather than sent line by line: each sendResponse ends with is_final,
+   * which closes the agent turn for that transcript, so a second response
+   * against the same one is at best unheard. Called when a transcript arrives
+   * that nothing else is going to answer — noise, or a repeat. A transcript that
+   * DOES start a turn carries the backlog inside that turn's stream instead
+   * (see runTurn), for the same reason.
+   */
   private flushAnnouncements() {
-    if (!this.liveSession || this.pendingAnnouncements.length === 0) return;
-    const now = Date.now();
-    const fresh = this.pendingAnnouncements.filter((a) => now - a.at <= ANNOUNCE_MAX_AGE_MS);
-    const dropped = this.pendingAnnouncements.length - fresh.length;
-    this.pendingAnnouncements = [];
-    if (dropped > 0) console.log(`  voice: dropped ${dropped} stale announcement(s)`);
+    if (!this.canSpeak()) return;
+    const fresh = this.takeFresh();
     if (fresh.length === 0) return;
-    this.lastActivityAt = now;
-    for (const a of fresh) {
-      this.speakQueue = this.speakQueue
-        .then(() => this.liveSession?.sendResponse(a.text))
-        .catch(() => {
-          /* session may have closed underneath us */
-        });
-    }
+    this.lastActivityAt = Date.now();
+    const oldest = fresh[0].at;
+    const joined = fresh.map((a) => a.text).join(' ');
+    this.speakQueue = this.speakQueue.then(() => this.say(joined, oldest));
   }
 
   get configured() {
@@ -234,8 +334,11 @@ export class VoiceService {
           console.log(`  voice: effort → ${this.cfg.voiceEffort} for this session`);
         }
         this.publishVoice('connected', `voice session ${String(conversationId).slice(0, 12)}…`);
-        // Anything that piled up while the channel was shut now has a mouth.
-        this.flushAnnouncements();
+        // ⚠️ NOT the place to flush. A connected session cannot be spoken
+        // through until it has delivered a transcript (see `speakable`), and at
+        // init it never has — flushing here handed every queued line to a
+        // sendResponse that discarded it and warned on stderr. The queue now
+        // waits for the first transcript, which is the first real mouth.
       },
       onTranscript: (transcript: Transcript, signal: AbortSignal, session: any) => {
         this.lastActivityAt = Date.now();
@@ -254,10 +357,18 @@ export class VoiceService {
         // Only the response's own completion may clear it.
         void signal;
         this.liveSession = session;
+        // The SDK is inside a transcript handler from here until the session
+        // ends, which is the only state in which it will carry a response.
+        this.speakable = true;
         const utterance = [...transcript].reverse().find((m) => m.role === 'user')?.content ?? '';
         // Silence transcribes as "..." — never spend a Claude turn on it.
         if (!isMeaningfulUtterance(utterance)) {
           this.bus.publish({ type: 'voice', state: 'ignored', detail: utterance.trim(), status: this.status() });
+          // Noise is still a mouth, and it is the one an announce-session most
+          // often gets: the page opens a channel because we asked it to, nobody
+          // says anything, and the STT emits filler a few seconds later. Nothing
+          // else is going to answer this transcript, so the backlog rides it.
+          this.flushAnnouncements();
           return;
         }
         this.scheduleTurn(utterance, session);
@@ -312,8 +423,6 @@ export class VoiceService {
   private pendingUtterance = '';
   /** The full utterance last acted on — what a continuation is measured against. */
   private lastSettled = '';
-  /** Serialises spoken TURNS. See the is_final note in scheduleTurn. */
-  private turnChain: Promise<unknown> = Promise.resolve();
 
   private scheduleTurn(utterance: string, session: any) {
     this.pendingUtterance = utterance;
@@ -330,6 +439,8 @@ export class VoiceService {
       // already asked, so an identical settled utterance is dropped.
       if (full === this.lastSettled) {
         this.bus.publish({ type: 'voice', state: 'duplicate', detail: full, status: this.status() });
+        // No turn will answer this one, so it is free to carry the backlog.
+        this.flushAnnouncements();
         return;
       }
 
@@ -343,6 +454,7 @@ export class VoiceService {
         toSend = full.slice(this.lastSettled.length).trim();
         if (!toSend) {
           this.bus.publish({ type: 'voice', state: 'duplicate', detail: full, status: this.status() });
+          this.flushAnnouncements();
           return;
         }
         this.bus.publish({ type: 'voice', state: 'continuation', detail: toSend, status: this.status() });
@@ -354,9 +466,10 @@ export class VoiceService {
       // finishes sooner close the agent turn — and the rest of the other answer
       // is discarded unheard. That is how "Let me check the evidence on disk."
       // became the last thing Danny heard: a turn fired early, its continuation
-      // fired a second one, and they cut each other off. Chain them instead.
+      // fired a second one, and they cut each other off. Chain them instead —
+      // on the SAME chain as announcements, which used to be a second one.
       this.turnActive = true;
-      this.turnChain = this.turnChain
+      this.speakQueue = this.speakQueue
         .then(() => session.sendResponse(this.runTurn(toSend)))
         .catch(() => {
           /* session may have closed underneath us */
@@ -383,19 +496,41 @@ export class VoiceService {
     let done = false;
     let myTurn = -1;
 
+    // Anything that queued while the channel was shut goes out FIRST, inside
+    // this response rather than as its own. One response per transcript is the
+    // rule (is_final closes the agent turn), so a backlog delivered separately
+    // would either truncate this answer or never be heard at all. Drained when
+    // the stream is actually consumed, and whatever is left when it ends —
+    // abandoned because the session closed — goes back on the queue.
+    const takeBacklog = () => this.takeFresh();
+    const putBack = (items: { text: string; at: number }[]) => {
+      for (const a of items) this.queueAnnouncement(a.text, a.at);
+    };
+
     const filler = this.pickFiller();
     const fillerDelayMs = this.cfg.fillerDelayMs;
 
+    // `this` inside the generator below is the returned object literal, so the
+    // tag handling has to be captured out here.
+    const speakable = (s: string) => forVoice(s, this.cfg.audioTagsSupported && this.tagsSupported);
+
     const push = (s: string) => {
-      const text = forVoice(s, this.cfg.audioTagsSupported && this.tagsSupported).trim();
+      const text = speakable(s).trim();
       if (!text) return;
       queue.push(text.endsWith('.') || text.endsWith('!') || text.endsWith('?') ? text : `${text}.`);
       wake?.();
     };
 
+    // What the verbosity level held back, in case it held back EVERYTHING — a
+    // spoken turn that yields nothing makes ElevenLabs re-deliver the transcript,
+    // and answering a question with silence is its own bug besides.
+    let heldBack = '';
+
     const unsub = this.bus.subscribe((m: UIMessage) => {
       if (m.type === 'assistant' || m.type === 'say') {
-        push(m.voiceText ?? m.text);
+        const picked = this.pickSpoken(m);
+        if (picked) push(picked);
+        else heldBack = m.voiceText ?? m.text;
       } else if (m.type === 'ask') {
         // A blocking ask must be heard, options and all, or voice would silently stall.
         for (const q of m.questions) {
@@ -438,7 +573,12 @@ export class VoiceService {
     return {
       async *[Symbol.asyncIterator]() {
         let emitted = 0;
+        const backlog = takeBacklog();
         try {
+          while (backlog.length) {
+            emitted++;
+            yield backlog.shift()!.text;
+          }
           for (;;) {
             if (queue.length) {
               emitted++;
@@ -461,9 +601,15 @@ export class VoiceService {
             await waitForText();
           }
           // Never end an empty response: ElevenLabs re-delivers the transcript when
-          // it gets nothing back, which is how the ping-pong loop started.
-          if (emitted === 0) yield 'Sorry — I came up empty on that one.';
+          // it gets nothing back, which is how the ping-pong loop started. She DID
+          // answer if the level suppressed it — say the last sentence of it rather
+          // than claim to have come up empty.
+          if (emitted === 0 && heldBack) yield lastSentence(speakable(heldBack));
+          else if (emitted === 0) yield 'Sorry — I came up empty on that one.';
         } finally {
+          // A stream abandoned mid-flight (the session closed) leaves the rest of
+          // the backlog unheard — it belongs back on the queue, not in the bin.
+          putBack(backlog);
           unsub();
         }
       },

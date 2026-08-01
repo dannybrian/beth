@@ -17,6 +17,7 @@ const cfg = (over: Partial<HarnessConfig> = {}) =>
     fillerDelayMs: 10_000,
     audioTagsSupported: false,
     voiceEffort: null,
+    speechLevel: 'brief',
     ...over,
   }) as HarnessConfig;
 
@@ -154,6 +155,8 @@ const priv = (v: VoiceService) =>
     pendingAnnouncements: { text: string; at: number }[];
     flushAnnouncements(): void;
     liveSession: unknown;
+    speakable: boolean;
+    runTurn(utterance: string): AsyncIterable<string>;
   };
 
 /** Speech session that records what it was asked to say. */
@@ -162,7 +165,21 @@ function recordingSpeech() {
   return { spoken, sendResponse: async (t: string) => void spoken.push(t) };
 }
 
-test('a line produced with no voice session is spoken once one opens', async () => {
+/**
+ * A session that can actually carry a line.
+ *
+ * ⚠️ Two facts, not one. The SDK refuses to send unless it is inside a transcript
+ * handler, and that only becomes true when ElevenLabs delivers a transcript —
+ * never at init. These tests used to set `liveSession` alone and pass, which is
+ * exactly the belief that made the real thing silent: a connected session is not
+ * a mouth.
+ */
+function connect(v: VoiceService, speech: unknown, heardSomething = true) {
+  priv(v).liveSession = speech;
+  priv(v).speakable = heardSomething;
+}
+
+test('a line produced with no voice session is spoken once one can hear', async () => {
   const bus = new ConversationBus();
   const v = new VoiceService(cfg(), bus, fakeSession() as never);
   const speech = recordingSpeech();
@@ -170,8 +187,7 @@ test('a line produced with no voice session is spoken once one opens', async () 
   bus.publish({ type: 'say', kind: 'status', text: 'Plan 157 is shipped.' } as never);
   assert.equal(priv(v).pendingAnnouncements.length, 1, 'held rather than dropped');
 
-  // The session arrives (onInit does exactly this, then flushes).
-  priv(v).liveSession = speech;
+  connect(v, speech);
   priv(v).flushAnnouncements();
   await settle(20);
 
@@ -179,17 +195,65 @@ test('a line produced with no voice session is spoken once one opens', async () 
   assert.equal(priv(v).pendingAnnouncements.length, 0, 'queue drains');
 });
 
-test('a live session speaks immediately and queues nothing', async () => {
+test('a session that has heard nothing is not a mouth — the line waits', async () => {
+  // THE bug. The page opens a channel because we asked it to, and the harness
+  // flushed into it immediately. sendResponse discards a response sent outside a
+  // transcript handler — it warns on stderr and resolves — so the queue emptied
+  // into nothing and Beth was silent for the rest of the session while the page
+  // looked perfectly healthy.
   const bus = new ConversationBus();
   const v = new VoiceService(cfg(), bus, fakeSession() as never);
   const speech = recordingSpeech();
-  priv(v).liveSession = speech;
+
+  bus.publish({ type: 'say', kind: 'status', text: 'the deploy is green' } as never);
+  connect(v, speech, false); // connected, nothing heard yet
+  priv(v).flushAnnouncements();
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, [], 'nothing was sent into a session that cannot carry it');
+  assert.deepEqual(
+    priv(v).pendingAnnouncements.map((a) => a.text),
+    ['the deploy is green'],
+    'and the line is still waiting, not lost'
+  );
+
+  // The first transcript — even noise — is what makes it speakable.
+  priv(v).speakable = true;
+  priv(v).flushAnnouncements();
+  await settle(20);
+  assert.deepEqual(speech.spoken, ['the deploy is green']);
+});
+
+test('a line published to a live session speaks immediately and queues nothing', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  connect(v, speech);
 
   bus.publish({ type: 'assistant', text: 'Suites are green.' } as never);
   await settle(20);
 
   assert.deepEqual(speech.spoken, ['Suites are green.']);
   assert.equal(priv(v).pendingAnnouncements.length, 0);
+});
+
+test('a send that throws puts the line back rather than swallowing it', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  connect(v, {
+    sendResponse: async () => {
+      throw new Error('Cannot send response: session is closed');
+    },
+  });
+
+  bus.publish({ type: 'say', kind: 'status', text: 'shipped it' } as never);
+  await settle(20);
+
+  assert.deepEqual(
+    priv(v).pendingAnnouncements.map((a) => a.text),
+    ['shipped it'],
+    'the socket died mid-send — he has not heard this'
+  );
 });
 
 test('stale news is dropped rather than blurted out late', async () => {
@@ -199,13 +263,29 @@ test('stale news is dropped rather than blurted out late', async () => {
 
   bus.publish({ type: 'say', kind: 'status', text: 'old news' } as never);
   // Age it past the freshness window — the browser never opened a session.
-  priv(v).pendingAnnouncements[0].at = Date.now() - 10 * 60_000;
+  priv(v).pendingAnnouncements[0].at = Date.now() - 30 * 60_000;
 
-  priv(v).liveSession = speech;
+  connect(v, speech);
   priv(v).flushAnnouncements();
   await settle(20);
 
-  assert.deepEqual(speech.spoken, [], 'ten-minute-old news is worse than silence');
+  assert.deepEqual(speech.spoken, [], 'half-hour-old news is worse than silence');
+});
+
+test('a dropped line is announced, never silently binned', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const seen: string[] = [];
+  bus.subscribe((m) => {
+    if (m.type === 'voice' && m.state === 'unspoken') seen.push(m.detail ?? '');
+  });
+
+  bus.publish({ type: 'say', kind: 'status', text: 'old news' } as never);
+  priv(v).pendingAnnouncements[0].at = Date.now() - 30 * 60_000;
+  connect(v, recordingSpeech());
+  priv(v).flushAnnouncements();
+
+  assert.equal(seen.length, 1, 'silence he did not choose has to be visible somewhere');
 });
 
 test('the queue keeps the NEWEST lines when work outruns the channel', async () => {
@@ -215,13 +295,42 @@ test('the queue keeps the NEWEST lines when work outruns the channel', async () 
 
   for (let i = 1; i <= 9; i++) bus.publish({ type: 'say', kind: 'status', text: `line ${i}` } as never);
 
-  priv(v).liveSession = speech;
+  connect(v, speech);
   priv(v).flushAnnouncements();
   await settle(20);
 
-  assert.equal(speech.spoken.length, 6, 'capped, not a monologue');
-  assert.equal(speech.spoken[0], 'line 4', 'oldest was dropped first');
-  assert.equal(speech.spoken.at(-1), 'line 9', 'the latest word survives');
+  // ONE response, not six: each sendResponse ends with is_final, which closes the
+  // agent turn for that transcript — six of them would leave five unheard.
+  assert.equal(speech.spoken.length, 1, 'the backlog goes out as a single response');
+  assert.equal(speech.spoken[0], 'line 4 line 5 line 6 line 7 line 8 line 9', 'capped, oldest dropped first');
+});
+
+test('a backlog rides the next spoken turn instead of racing it', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+
+  bus.publish({ type: 'say', kind: 'status', text: 'the ship landed' } as never);
+  const it = priv(v).runTurn('what happened?')[Symbol.asyncIterator]();
+
+  assert.equal((await it.next()).value, 'the ship landed', 'the backlog opens the turn she is about to answer');
+  await it.return?.();
+});
+
+test('a turn abandoned mid-stream hands the unsaid backlog back', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+
+  bus.publish({ type: 'say', kind: 'status', text: 'first' } as never);
+  bus.publish({ type: 'say', kind: 'status', text: 'second' } as never);
+  const it = priv(v).runTurn('what happened?')[Symbol.asyncIterator]();
+
+  assert.equal((await it.next()).value, 'first');
+  await it.return?.(); // the session closed under the stream
+  assert.deepEqual(
+    priv(v).pendingAnnouncements.map((a) => a.text),
+    ['second'],
+    'what he heard is gone; what he did not is still queued'
+  );
 });
 
 test('two spoken turns never stream at once', async () => {
@@ -262,7 +371,7 @@ test('after the socket drops, the next line queues instead of vanishing', async 
   const bus = new ConversationBus();
   const v = new VoiceService(cfg(), bus, fakeSession() as never);
   const speech = recordingSpeech();
-  priv(v).liveSession = speech;
+  connect(v, speech);
 
   bus.publish({ type: 'say', kind: 'status', text: 'heard this one' } as never);
   await settle(20);
@@ -300,4 +409,77 @@ test('the settled turn goes through sendPointed, so a clicked plan reaches voice
   schedule(v, 'what is left on this?', fakeSpeech());
   await settle();
   assert.equal(pointedCalls, 1);
+});
+
+/**
+ * How much of what she WRITES is what she SAYS. The excerpt rule lives in
+ * spoken.ts and is unit-tested there; these cover the WIRING, which is the part
+ * that decides whether Danny actually hears the point.
+ */
+const LONG_REPLY = [
+  "Here's the real state, and it's better than the board says.",
+  'The gazetteer builder landed on July sixteenth, in the same commits as the pin resolution.',
+  "So it's shipped and off the board.",
+].join('\n\n');
+
+test('a long reply is spoken as its last paragraph, and read in full', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  connect(v, speech);
+
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, ["So it's shipped and off the board."]);
+});
+
+test('at full, nothing is held back', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg({ speechLevel: 'full' }), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  connect(v, speech);
+
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, [LONG_REPLY]);
+});
+
+test('a suppressed line queues nothing — the page is carrying it', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg({ speechLevel: 'headlines' }), bus, fakeSession() as never);
+
+  bus.publish({ type: 'say', kind: 'status', text: 'Reading the runbook.' } as never);
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  await settle(20);
+
+  assert.deepEqual(priv(v).pendingAnnouncements, [], 'silence here is a choice, not a lost line');
+});
+
+test('a spoken turn whose answer was suppressed still says something', async () => {
+  // ⚠️ A turn that yields NOTHING makes ElevenLabs re-deliver the transcript —
+  // the ping-pong loop. Answering a question with silence is its own bug besides.
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg({ speechLevel: 'headlines' }), bus, fakeSession() as never);
+
+  const it = priv(v).runTurn('what is the state of the geo work?')[Symbol.asyncIterator]();
+  const next = it.next();
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  bus.publish({ type: 'status', state: 'idle', turn: 1 } as never);
+
+  assert.equal((await next).value, "So it's shipped and off the board.", 'falls back to the last sentence');
+});
+
+test('the level is switchable while the harness is up', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  connect(v, speech);
+
+  v.setSpeechLevel('full');
+  assert.equal(v.speechLevel(), 'full');
+  bus.publish({ type: 'assistant', text: LONG_REPLY } as never);
+  await settle(20);
+  assert.deepEqual(speech.spoken, [LONG_REPLY]);
 });

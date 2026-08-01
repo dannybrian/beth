@@ -11,6 +11,7 @@ import type { PendingStore } from './state.ts';
 import type { WorkIndex } from './workIndex.ts';
 import { taskSummary } from './workItems.ts';
 import { stripAudioTags } from './audioTags.ts';
+import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
@@ -36,13 +37,14 @@ export function createHarnessTools(deps: {
       ref: z.string().optional().describe('Plan path, commit sha, or event id this refers to.'),
     },
     async ({ text, kind, ref }) => {
-      const read = stripAudioTags(text);
+      const { text: read, spans } = renderInline(stripAudioTags(text));
       // `ref` is already a bare path — resolve it directly so the announcement's
       // own reference is the first thing that is clickable.
       deps.bus.publish({
         type: 'say',
         kind,
         text: read,
+        spans,
         voiceText: text,
         ref,
         links: links(read),
