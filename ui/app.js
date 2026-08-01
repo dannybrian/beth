@@ -221,6 +221,14 @@ function renderPending(m) {
 let refs = [];
 /** Expansion survives re-render; the index republishes on every file save. */
 const expanded = new Set();
+/**
+ * Umbrellas folded shut, by path. Persisted, because a tree you keep having to
+ * re-collapse is worse than no tree — and the index republishes on every file
+ * save, so in-memory state alone would not even survive someone else's commit.
+ */
+const COLLAPSED_KEY = 'harness.collapsedUmbrellas';
+const collapsedParents = new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]'));
+const rememberCollapsed = () => localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedParents]));
 const collapsedGroups = new Set(['blocked', 'planning']);
 // `awaiting-eyes` is deliberately absent: it opens by default, always.
 let workItems = [];
@@ -280,13 +288,29 @@ function renderTask(item, task) {
   return row;
 }
 
-function renderWorkItem(item, depth = 0, orphanParent = null) {
+function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   const n = el('div', `item work-item status-${item.status}`);
   if (depth) n.style.marginLeft = `${depth * 11}px`;
   const head = el('div', 'work-head');
 
   const t = taskSummary(item);
-  if (t) {
+  const folded = collapsedParents.has(item.path);
+
+  // The caret means STRUCTURE wherever there is structure: folding an umbrella
+  // is the more valuable move, and one plan (beadgame's Player UI umbrella) has
+  // both children and tasks, so they cannot share a control. Tasks stay reachable
+  // from the count in the meta line, which works the same way on every row.
+  if (childCount) {
+    const caret = el('button', 'caret', folded ? '▸' : '▾');
+    caret.title = folded ? `Show the ${childCount} plans under this` : `Fold this umbrella (${childCount} under)`;
+    caret.onclick = (e) => {
+      e.stopPropagation();
+      folded ? collapsedParents.delete(item.path) : collapsedParents.add(item.path);
+      rememberCollapsed();
+      renderWork();
+    };
+    head.append(caret);
+  } else if (t) {
     const caret = el('button', 'caret', expanded.has(item.path) ? '▾' : '▸');
     caret.title = 'Show tasks';
     caret.onclick = (e) => {
@@ -325,11 +349,27 @@ function renderWorkItem(item, depth = 0, orphanParent = null) {
   head.append(hand);
   n.append(head);
 
-  const bits = [item.priority, t ? `${t.done}/${t.total} tasks` : 'no tasks'].filter(Boolean);
+  const meta = el('div', 'meta');
+  if (item.priority) meta.append(document.createTextNode(`${item.priority} · `));
+  if (t) {
+    // Clickable everywhere, so opening tasks does not depend on whether this row
+    // happens to be an umbrella.
+    const count = el('button', 'task-toggle', `${t.done}/${t.total} tasks`);
+    count.title = expanded.has(item.path) ? 'Hide tasks' : 'Show tasks';
+    count.onclick = (e) => {
+      e.stopPropagation();
+      expanded.has(item.path) ? expanded.delete(item.path) : expanded.add(item.path);
+      renderWork();
+    };
+    meta.append(count);
+  } else {
+    meta.append(document.createTextNode('no tasks'));
+  }
+  // A folded umbrella must still account for what it is hiding.
+  if (childCount) meta.append(document.createTextNode(` · ${childCount} under`));
   // A live claim means an implementer is on it — the thing a handoff must respect.
-  if (item.claim?.live) bits.push('claimed');
-  else if (item.claim) bits.push('stale owner');
-  const meta = el('div', 'meta', bits.join(' · '));
+  if (item.claim?.live) meta.append(document.createTextNode(' · claimed'));
+  else if (item.claim) meta.append(document.createTextNode(' · stale owner'));
   n.append(meta);
 
   if (t) {
@@ -413,10 +453,15 @@ function renderWork() {
         if (!i.parent || !inGroup.has(i.parent)) continue;
         (kids.get(i.parent) ?? kids.set(i.parent, []).get(i.parent)).push(i);
       }
+      // How many rows a fold actually hides — the whole subtree, not one level.
+      // "2 under" while swallowing eleven plans is a worse lie than no number.
+      const descendants = (p) => (kids.get(p) ?? []).reduce((n, k) => n + 1 + descendants(k.path), 0);
       const emit = (item, depth) => {
+        const mine = kids.get(item.path) ?? [];
         const parentElsewhere = item.parent && !inGroup.has(item.parent) ? byPathAll.get(item.parent) : null;
-        panel.append(renderWorkItem(item, depth, depth === 0 ? parentElsewhere : null));
-        for (const k of kids.get(item.path) ?? []) emit(k, depth + 1);
+        panel.append(renderWorkItem(item, depth, depth === 0 ? parentElsewhere : null, descendants(item.path)));
+        if (collapsedParents.has(item.path)) return; // fold the whole subtree, not one level
+        for (const k of mine) emit(k, depth + 1);
       };
       for (const item of group) if (!item.parent || !inGroup.has(item.parent)) emit(item, 0);
     }
