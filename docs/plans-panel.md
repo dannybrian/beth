@@ -83,12 +83,38 @@ We just split role (harness) from person (`<repo>/.claude/DIRECTOR.md`). A plans
 that hard-codes beadgame's `/plans` conventions would undo that.
 
 The seam: the **harness defines a shape** — a work item with id, title, status, owner,
-tasks, links, and a spoken name — and the **repo supplies a reader** that produces it.
-beadgame's reader speaks `/plans` frontmatter and `INDEX.json`; another project might
-read GitHub issues, or a Linear export, or nothing at all. The harness never learns what
-a "plan" is in any particular repo.
+tasks, links, and a spoken name — and a **reader** produces it from whatever the project
+actually stores.
 
-That reader is the project adapter. Building this feature *is* Phase 4.
+**Correction to the obvious design (2026-08-01):** the instinct is "the repo supplies the
+reader", by analogy with `DIRECTOR.md`. That is wrong for this case. `/plans` is *Danny's
+convention*, not beadgame's private format — it is likely to be the shape in every repo
+he runs a director against. So:
+
+- **`/plans` is a BUILT-IN adapter in the harness**, one reader among N. beadgame ships
+  nothing and changes nothing; it just keeps having plans.
+- **Repo-supplied readers are the escape hatch**, for a project whose work lives
+  somewhere foreign (GitHub issues, Linear, a bespoke tracker).
+
+This keeps the harness honest — it still never assumes a single format — while not
+inventing a plugin ceremony for the format we will use 95% of the time.
+
+Building this feature *is* Phase 4.
+
+## Where to build it
+
+Almost all of it is harness-side: the watcher, the index, the panel, the tool, and the
+`/plans` reader all live in this repo. beadgame contributes only its existing plans.
+
+So: **build it from a fresh session in `director-harness`**, with this document as the
+handoff. Give that session read access to a real corpus — `--add-dir ~/Sources/beadgame`
+— because the reader must be written against real frontmatter and real `INDEX.json`,
+not against an idea of them. Test by running `beth` from beadgame as usual; the harness
+binds there while the code being edited lives here.
+
+The long design session that produced this document is in beadgame's history
+(`plans/future/2026-07-31-director-conversational-harness.md`, ~17 commits). That record
+stays where it was made. Forward work belongs here.
 
 ## Relationship to the dashboard Plans tab
 
