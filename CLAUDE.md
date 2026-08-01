@@ -107,6 +107,14 @@ These cost hours. Don't rediscover them.
   Deferring the response is safe: the SDK leaves `inTranscriptHandler` true until the
   session closes, and `streamResponse` captures the CURRENT `event_id`, so a late
   response lands against the newest transcript — the one you want to answer.
+- **Two `beth` instances break voice in a way that blames the UI.** Voice is a SINGLETON:
+  one Speech Engine, one stored `wsUrl`, one tunnel hostname forwarding to one voice port.
+  So ElevenLabs talks to whichever instance owns the tunnel while you may be watching the
+  other's page — which looks completely healthy, because from its side nothing is wrong;
+  it simply is not the harness in the conversation. Symptoms: your text appears in neither
+  chat, Beth answers aloud anyway, and a plan you clicked never reaches her (the click
+  POSTs to the instance that never got your turn). `beth` now refuses a second instance on
+  the same repo and warns when any other is running; see `bin/beth.mjs`.
 - **The ElevenLabs API-key permission is the row labelled "ElevenAgents"** (Write). There
   is no "Speech Engine" or "Conversational AI" entry. TTS/STT permissions are *not*
   needed — speech happens inside the Speech Engine session.

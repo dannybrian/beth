@@ -54,6 +54,46 @@ if (!fs.existsSync(path.join(repo, '.claude'))) {
   process.exit(1);
 }
 
+/**
+ * --- who else is already running ---
+ *
+ * Two beths at once cost Danny a debugging session, and the symptoms named
+ * nothing: his typed and spoken text appeared in neither chat, Beth answered him
+ * out loud anyway, and a plan he clicked never reached her.
+ *
+ * The cause is that VOICE IS A SINGLETON. There is one Speech Engine, holding
+ * one wsUrl, and one tunnel hostname that can forward to exactly one voice port.
+ * So ElevenLabs talks to whichever instance owns the tunnel, while the page in
+ * front of you may belong to the other — and that page stays perfectly healthy
+ * looking, because nothing is broken from its point of view. It simply is not
+ * the harness in the conversation.
+ *
+ * A second instance on the SAME repo has no legitimate use, so refuse it. A
+ * second one on a different repo is reasonable — but it must be said out loud
+ * that only one of them will have voice.
+ */
+const INSTANCE_DIR = path.join(process.env.HOME ?? '', '.director-harness', 'instances');
+
+const liveInstances = () => {
+  if (!fs.existsSync(INSTANCE_DIR)) return [];
+  const out = [];
+  for (const f of fs.readdirSync(INSTANCE_DIR)) {
+    const file = path.join(INSTANCE_DIR, f);
+    try {
+      const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+      // Signal 0 tests for existence without touching the process.
+      process.kill(rec.pid, 0);
+      out.push(rec);
+    } catch {
+      // Dead or unreadable — clear it out rather than let it haunt the check.
+      try {
+        fs.unlinkSync(file);
+      } catch {}
+    }
+  }
+  return out;
+};
+
 // --- a free port, so a second repo does not collide with the first ---
 const portFree = (p) =>
   new Promise((resolve) => {
@@ -62,6 +102,16 @@ const portFree = (p) =>
     s.once('listening', () => s.close(() => resolve(true)));
     s.listen(p, '127.0.0.1');
   });
+
+const running = liveInstances();
+const sameRepo = running.find((r) => r.repo === repo);
+if (sameRepo) {
+  console.error(`Already running for ${path.basename(repo)} — pid ${sameRepo.pid}, http://localhost:${sameRepo.port}`);
+  console.error('Two instances on one repo fight over the Speech Engine: you end up talking to one');
+  console.error('and watching the other, which looks exactly like the UI being broken.');
+  console.error(`Open http://localhost:${sameRepo.port}, or stop that one first.`);
+  process.exit(1);
+}
 
 const wanted = Number(value('port', process.env.HARNESS_PORT ?? 4620));
 let port = wanted;
@@ -99,6 +149,21 @@ const voiceConfigured = Boolean(conf('ELEVENLABS_API_KEY') && conf('SPEECH_ENGIN
 const env = { ...process.env, HARNESS_REPO: repo, HARNESS_PORT: String(port), HARNESS_VOICE_PORT: String(voicePort) };
 if (value('model', null)) env.HARNESS_MODEL = value('model', null);
 if (flag('fresh')) delete env.HARNESS_RESUME;
+
+// --- claim this instance, so the next `beth` can see us ---
+fs.mkdirSync(INSTANCE_DIR, { recursive: true });
+const instanceFile = path.join(INSTANCE_DIR, `${process.pid}.json`);
+fs.writeFileSync(instanceFile, JSON.stringify({ pid: process.pid, repo, port, voicePort, at: new Date().toISOString() }));
+
+// A second instance on ANOTHER repo is legitimate, but only one of them can have
+// voice — so say which, rather than letting it be discovered by talking into a
+// harness that is not listening.
+if (running.length && voiceConfigured && wsUrl && !flag('no-tunnel')) {
+  const other = running.map((r) => `${path.basename(r.repo)} (:${r.port})`).join(', ');
+  console.log(`· ⚠ already running: ${other}`);
+  console.log('    voice is a SINGLE Speech Engine — whichever instance owns the tunnel gets it,');
+  console.log('    and the other is text-only. Talking to the wrong window looks like a dead UI.');
+}
 
 // --- start the harness ---
 console.log(`· ${path.basename(repo)} → http://localhost:${port}`);
@@ -166,15 +231,22 @@ if (!flag('no-open') && process.platform === 'darwin') {
 
 // --- one Ctrl-C takes down both ---
 let stopping = false;
+const releaseInstance = () => {
+  try {
+    fs.unlinkSync(instanceFile);
+  } catch {}
+};
 const stop = () => {
   if (stopping) return;
   stopping = true;
+  releaseInstance();
   tunnel?.kill('SIGTERM');
   harness.kill('SIGTERM');
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 harness.on('exit', (code) => {
+  releaseInstance();
   tunnel?.kill('SIGTERM');
   process.exit(code ?? 0);
 });
