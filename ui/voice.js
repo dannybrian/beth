@@ -11,6 +11,10 @@
 // words are simply not being captured. So: hold generously, and treat anything
 // happening in the conversation as activity (see touch() callers in app.js).
 const IDLE_CLOSE_MS = 120_000;
+// A session opened purely to SPEAK is not a conversation — it exists to deliver
+// one line. Hold it briefly in case Danny answers (his voice promotes it to the
+// full window), then let it close rather than billing for a channel nobody is in.
+const ANNOUNCE_IDLE_CLOSE_MS = 30_000;
 const SPEECH_RMS = 0.02; // energy threshold that counts as "talking"
 const SPEECH_MS = 200; // sustained for this long, to ignore keyboard clicks
 
@@ -23,6 +27,10 @@ export class VoiceClient {
     this.micStream = null;
     this.idleTimer = null;
     this.speechStart = 0;
+    // Which idle window applies to the CURRENT session — widened the moment
+    // Danny actually speaks, so an announcement he replies to becomes a normal
+    // conversation instead of hanging up on him.
+    this.idleMs = IDLE_CLOSE_MS;
   }
 
   get state() {
@@ -54,7 +62,11 @@ export class VoiceClient {
         if (this.mode === 'armed' && performance.now() - this.speechStart > SPEECH_MS) {
           void this.connect();
         }
-        if (this.mode === 'connected') this.touch();
+        if (this.mode === 'connected') {
+          // He is talking: this is a conversation now, whatever opened it.
+          this.idleMs = IDLE_CLOSE_MS;
+          this.touch();
+        }
       } else {
         this.speechStart = 0;
       }
@@ -63,10 +75,15 @@ export class VoiceClient {
     requestAnimationFrame(tick);
   }
 
-  /** Open the paid session. Called by the VAD, or directly for an announcement. */
-  async connect() {
+  /**
+   * Open the paid session. Called by the VAD, or directly for an announcement
+   * (`reason: 'announce'`), which the harness requests when it has something to
+   * say and the channel has closed underneath it.
+   */
+  async connect(reason = 'speech') {
     if (this.mode === 'connected' || this.connecting) return;
     this.connecting = true;
+    this.idleMs = reason === 'announce' ? ANNOUNCE_IDLE_CLOSE_MS : IDLE_CLOSE_MS;
     try {
       const res = await fetch('/api/voice/token');
       const { token, error } = await res.json();
@@ -100,7 +117,7 @@ export class VoiceClient {
   touch() {
     if (this.mode !== 'connected') return;
     clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => this.disconnect(), IDLE_CLOSE_MS);
+    this.idleTimer = setTimeout(() => this.disconnect(), this.idleMs);
   }
 
   async disconnect() {

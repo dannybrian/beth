@@ -107,6 +107,89 @@ test('a genuinely new utterance after one was answered still runs', async () => 
   assert.deepEqual(session.sent, ['first question', 'second question']);
 });
 
+/**
+ * Announcement queueing. The failure these cover is the one Danny hit: a ship
+ * that worked and that he never heard. Work outlives the client's idle window,
+ * the paid session closes mid-job, and the closing line lands with no channel
+ * open. Silently dropping it made the most valuable results the least audible.
+ */
+
+/** Reach into the private queue/flush the way `schedule` reaches into scheduleTurn. */
+const priv = (v: VoiceService) =>
+  v as unknown as {
+    pendingAnnouncements: { text: string; at: number }[];
+    flushAnnouncements(): void;
+    liveSession: unknown;
+  };
+
+/** Speech session that records what it was asked to say. */
+function recordingSpeech() {
+  const spoken: string[] = [];
+  return { spoken, sendResponse: async (t: string) => void spoken.push(t) };
+}
+
+test('a line produced with no voice session is spoken once one opens', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+
+  bus.publish({ type: 'say', kind: 'status', text: 'Plan 157 is shipped.' } as never);
+  assert.equal(priv(v).pendingAnnouncements.length, 1, 'held rather than dropped');
+
+  // The session arrives (onInit does exactly this, then flushes).
+  priv(v).liveSession = speech;
+  priv(v).flushAnnouncements();
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, ['Plan 157 is shipped.']);
+  assert.equal(priv(v).pendingAnnouncements.length, 0, 'queue drains');
+});
+
+test('a live session speaks immediately and queues nothing', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+  priv(v).liveSession = speech;
+
+  bus.publish({ type: 'assistant', text: 'Suites are green.' } as never);
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, ['Suites are green.']);
+  assert.equal(priv(v).pendingAnnouncements.length, 0);
+});
+
+test('stale news is dropped rather than blurted out late', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+
+  bus.publish({ type: 'say', kind: 'status', text: 'old news' } as never);
+  // Age it past the freshness window — the browser never opened a session.
+  priv(v).pendingAnnouncements[0].at = Date.now() - 10 * 60_000;
+
+  priv(v).liveSession = speech;
+  priv(v).flushAnnouncements();
+  await settle(20);
+
+  assert.deepEqual(speech.spoken, [], 'ten-minute-old news is worse than silence');
+});
+
+test('the queue keeps the NEWEST lines when work outruns the channel', async () => {
+  const bus = new ConversationBus();
+  const v = new VoiceService(cfg(), bus, fakeSession() as never);
+  const speech = recordingSpeech();
+
+  for (let i = 1; i <= 9; i++) bus.publish({ type: 'say', kind: 'status', text: `line ${i}` } as never);
+
+  priv(v).liveSession = speech;
+  priv(v).flushAnnouncements();
+  await settle(20);
+
+  assert.equal(speech.spoken.length, 6, 'capped, not a monologue');
+  assert.equal(speech.spoken[0], 'line 4', 'oldest was dropped first');
+  assert.equal(speech.spoken.at(-1), 'line 9', 'the latest word survives');
+});
+
 test('the settled turn goes through sendPointed, so a clicked plan reaches voice', async () => {
   const session = fakeSession();
   let pointedCalls = 0;

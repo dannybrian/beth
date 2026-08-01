@@ -21,6 +21,14 @@ export const VOICE_WS_PATH = '/voice-ws';
 /** Silences past this get a 95% discount, per ElevenLabs voice-call billing. */
 const SILENCE_DISCOUNT_AFTER_S = 10;
 const SILENCE_RATE_MULTIPLIER = 0.05;
+/**
+ * How long an unspoken announcement stays worth saying. News goes stale: if the
+ * paid session cannot be opened (voice off, browser closed), replaying "that's
+ * shipped" ten minutes later is worse than silence.
+ */
+const ANNOUNCE_MAX_AGE_MS = 90_000;
+/** Backstop so a long unattended run cannot queue a monologue. */
+const ANNOUNCE_MAX_QUEUED = 6;
 
 type Transcript = { role: string; content: string }[];
 
@@ -38,6 +46,8 @@ export class VoiceService {
   private liveSession: any = null;
   /** True while a spoken turn is streaming, so we don't double-speak it. */
   private turnActive = false;
+  /** Lines produced while no paid session existed, waiting for one to open. */
+  private pendingAnnouncements: { text: string; at: number }[] = [];
   private lastActivityAt = 0;
   private accruedUsd = 0;
   /** Serialises spoken lines — see the bus subscriber below. */
@@ -54,9 +64,17 @@ export class VoiceService {
     // otherwise every line would be spoken twice.
     bus.subscribe((m: UIMessage) => {
       if (m.type !== 'assistant' && m.type !== 'say') return;
-      if (this.turnActive || !this.liveSession) return;
+      if (this.turnActive) return;
       const text = forVoice(m.voiceText ?? m.text, this.cfg.audioTagsSupported && this.tagsSupported).trim();
       if (!text) return;
+      // No paid session right now — the usual case being that the work took
+      // longer than the client's idle window, so the channel closed mid-job.
+      // Dropping the line here is what made long operations end in silence:
+      // the more valuable the result, the more certain it was inaudible.
+      if (!this.liveSession) {
+        this.queueAnnouncement(text);
+        return;
+      }
       this.lastActivityAt = Date.now();
       // Serialised: each sendResponse ends by sending the is_final marker, so two
       // overlapping ones truncate each other — the second line would cut the first
@@ -67,6 +85,43 @@ export class VoiceService {
           /* session may have closed underneath us */
         });
     });
+  }
+
+  /**
+   * Hold a line that has nobody to say it to, and ask the page to open a session.
+   *
+   * The browser owns the WebRTC leg, so the server cannot dial out — it can only
+   * raise a hand. `speak-request` is that hand: the page opens a short session if
+   * (and only if) the mic is armed, and `onInit` flushes whatever is waiting.
+   * When voice is off entirely, nothing opens and the queue simply ages out —
+   * silence is what "voice off" means.
+   */
+  private queueAnnouncement(text: string) {
+    this.pendingAnnouncements.push({ text, at: Date.now() });
+    // Keep the newest: if we are over the cap, the oldest news is the most stale.
+    if (this.pendingAnnouncements.length > ANNOUNCE_MAX_QUEUED) {
+      this.pendingAnnouncements.splice(0, this.pendingAnnouncements.length - ANNOUNCE_MAX_QUEUED);
+    }
+    this.publishVoice('speak-request', text.slice(0, 80));
+  }
+
+  /** Speak whatever is still worth speaking, oldest first. */
+  private flushAnnouncements() {
+    if (!this.liveSession || this.pendingAnnouncements.length === 0) return;
+    const now = Date.now();
+    const fresh = this.pendingAnnouncements.filter((a) => now - a.at <= ANNOUNCE_MAX_AGE_MS);
+    const dropped = this.pendingAnnouncements.length - fresh.length;
+    this.pendingAnnouncements = [];
+    if (dropped > 0) console.log(`  voice: dropped ${dropped} stale announcement(s)`);
+    if (fresh.length === 0) return;
+    this.lastActivityAt = now;
+    for (const a of fresh) {
+      this.speakQueue = this.speakQueue
+        .then(() => this.liveSession?.sendResponse(a.text))
+        .catch(() => {
+          /* session may have closed underneath us */
+        });
+    }
   }
 
   get configured() {
@@ -149,7 +204,11 @@ export class VoiceService {
       // Logs accepted/rejected upgrades. Worth the noise until a real ElevenLabs
       // connection has been seen at least once.
       debug: true,
-      onInit: (conversationId: string) => {
+      // ⚠️ The session arrives HERE too, not only on a transcript. Capturing it
+      // only in onTranscript meant a session opened without anyone speaking had
+      // nothing to speak THROUGH — which is precisely the announcement case.
+      onInit: (conversationId: string, session: any) => {
+        this.liveSession = session;
         this.connectedAt = Date.now();
         this.lastActivityAt = Date.now();
         // Spoken conversation wants answers in seconds; the director turn, not TTS,
@@ -161,6 +220,8 @@ export class VoiceService {
           console.log(`  voice: effort → ${this.cfg.voiceEffort} for this session`);
         }
         this.publishVoice('connected', `voice session ${String(conversationId).slice(0, 12)}…`);
+        // Anything that piled up while the channel was shut now has a mouth.
+        this.flushAnnouncements();
       },
       onTranscript: (transcript: Transcript, signal: AbortSignal, session: any) => {
         this.lastActivityAt = Date.now();

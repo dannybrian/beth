@@ -437,7 +437,14 @@ const handlers = {
     renderSay(m);
     feedEvent({ ts: new Date().toISOString(), kind: `say/${m.kind}`, text: m.text });
   },
-  activity: renderActivity,
+  // Tool calls are the conversation still moving. Without this, a long stretch
+  // of work emits nothing the idle timer recognises, the paid session closes
+  // mid-job, and the result Danny actually wanted to hear arrives to a shut
+  // channel — the exact reason a successful ship ended in silence.
+  activity: (m) => {
+    keepVoiceAlive();
+    renderActivity(m);
+  },
   ask: renderAsk,
   ask_resolved: (m) => askCards.get(m.id)?.classList.add('answered'),
   approval: renderApproval,
@@ -476,6 +483,12 @@ const handlers = {
     // means that utterance is over, one way or another.
     if (m.state === 'hearing') showInterim(m.detail ?? '');
     else if (m.state === 'ignored' || m.state === 'duplicate' || m.state === 'disconnected') clearInterim();
+    // The harness has something to say and no channel to say it through. Only
+    // an ARMED mic opens one: voice off is a deliberate choice for silence, and
+    // this must never be the thing that starts billing behind his back.
+    else if (m.state === 'speak-request' && voice?.state === 'armed') {
+      voice.connect('announce').catch(() => {});
+    }
     renderVoice(m.status, m.detail);
   },
   event: (m) => {
