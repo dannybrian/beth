@@ -1,12 +1,10 @@
 // Wiring. One process per instance, bound to one repo.
-import http from 'node:http';
 import { loadConfig } from './config.ts';
 import { ConversationBus } from './bus.ts';
 import { EventLog } from './eventlog.ts';
 import { PendingStore } from './state.ts';
 import { AskGate } from './askgate.ts';
 import { SessionManager } from './session.ts';
-import { VoiceService } from './voice.ts';
 import { SpeakOut } from './speakOut.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
@@ -57,13 +55,10 @@ const KICKOFF =
 
 const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
 
-const voice = new VoiceService(cfg, bus, session);
-// The OUTBOUND plane, and deliberately not part of VoiceService: it does not need
-// Speech Engine, a tunnel, a public port or an armed mic, and it is what survives
-// when those go. Handed to voice so announcements stop waiting for a transcript.
+// The speech plane, entire. No Speech Engine, no tunnel, no public port, no
+// session and no mic required to speak — she says a line because she wrote one.
 const speakOut = new SpeakOut(cfg, bus);
-if (speakOut.configured) voice.speakOut = speakOut;
-const server = createServer({ cfg, bus, events, pending, gate, session, voice, speakOut, work });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, work });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -74,66 +69,35 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 /**
- * TWO LISTENERS, ON PURPOSE.
+ * ONE LISTENER, on loopback.
  *
- * ElevenLabs must reach this process from the internet, and the tunnel that lets
- * it forwards EVERY path — so hanging the Speech Engine off the same server as
- * the UI published the whole API. `/api/state` answered strangers, and
- * `/api/turn` let anyone holding the tunnel URL talk to the director as Danny.
+ * There used to be two. ElevenLabs dialled IN to us, the tunnel that allowed it
+ * forwarded every path, and hanging voice off the UI's server published the whole
+ * API — `/api/state` answered strangers and `/api/turn` let anyone holding the URL
+ * talk to the director as Danny. The fix was a second port carrying only a
+ * JWT-verified websocket upgrade, and a standing rule to tunnel nothing else.
  *
- * So the UI and API bind to loopback, and voice gets its own port carrying
- * nothing but the websocket upgrade (which the SDK verifies against ElevenLabs'
- * JWT) plus an unauthenticated `/healthz` that reveals nothing. That port is the
- * only thing the tunnel should ever point at.
+ * Recognition now happens in the browser and her audio is streamed over loopback,
+ * so nothing dials in and the second port has nothing to carry. What that buys is
+ * bigger than the deletion: every byte of this harness is unreachable from off
+ * this machine by construction, which is what makes a shell-executing handoff
+ * safe to have at all.
  */
-const voiceServer = http.createServer((req, res) => {
-  if (req.url === '/healthz') {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end('{"ok":true}');
-    return;
-  }
-  res.writeHead(404, { 'content-type': 'application/json' });
-  res.end('{"error":"not found"}');
-});
-voiceServer.on('error', (err: NodeJS.ErrnoException) => {
-  console.error(`  voice: port ${cfg.voicePort} unavailable (${err.code}) — voice will not connect`);
-});
-// With the browser doing the listening, nothing dials in — so nothing attaches
-// and nothing public is opened. A mic cannot be in two places, and holding a paid
-// channel that no longer carries anything would bill for the privilege.
-if (!cfg.browserStt) await voice.attach(voiceServer);
-
 server.listen(cfg.port, cfg.bind, () => {
   console.log(`director-harness → http://localhost:${cfg.port}`);
   console.log(`  repo:  ${cfg.repo}`);
-  console.log(`  bind:  ${cfg.bind}${cfg.bind === '127.0.0.1' ? ' (UI and API are local-only)' : ' ⚠ REACHABLE OFF THIS MACHINE'}`);
+  console.log(`  bind:  ${cfg.bind}${cfg.bind === '127.0.0.1' ? ' (local-only, all of it)' : ' ⚠ REACHABLE OFF THIS MACHINE'}`);
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);
   console.log(`  who:   ${cfg.directorName} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
-  console.log(
-    `  speech: ${
-      speakOut.configured
-        ? `speak-out on (${cfg.ttsModel}) — she no longer waits for a transcript`
-        : 'speak-out off — announcements wait for a transcript'
-    }`
-  );
-  console.log(
-    `  ear:    ${cfg.browserStt ? 'the browser (no tunnel, no public port, nothing billed idle)' : 'Speech Engine'}`
-  );
+  console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);
 });
-
-// Only listen publicly when voice is actually configured — otherwise nothing
-// about this process is reachable from outside the machine at all.
-if (!cfg.browserStt && voice.configured) {
-  voiceServer.listen(cfg.voicePort, () => console.log(`  voice: public port ${cfg.voicePort} (websocket only)`));
-}
 
 const shutdown = () => {
   events.stop();
   work.stop();
   session.stop();
   server.close();
-  voiceServer.close();
   process.exit(0);
 };
 process.on('SIGINT', shutdown);

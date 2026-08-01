@@ -28,14 +28,14 @@ write a plan file or repair frontmatter.
   x: T)`) — declare the field and assign it.
 - **No framework in the UI.** `ui/` is vanilla DOM and plain CSS. It is small enough that
   a framework would cost more than it saves.
-- **Ask before adding any dependency.** Current total: the Agent SDK, zod, the ElevenLabs
-  SDK and browser client, and `ws`. Each was a deliberate decision. Prefer rolling a
-  small thing over taking a package.
+- **Ask before adding any dependency.** Current total: the Agent SDK, zod, and the
+  ElevenLabs SDK (for TTS, nothing else). Each was a deliberate decision. Prefer rolling
+  a small thing over taking a package. The browser client and `ws` both left with the
+  dial-in path, which is what a good deletion looks like.
 - **Secrets never live here.** Config comes from three layers, most specific first: real
   env vars → the BOUND REPO's `.env` → `~/.director-harness/.env`. The ElevenLabs
-  credentials belong in that machine file: one account and one tunnel hostname per Mac,
-  so a per-repo copy duplicates a secret, and forgetting one makes the new repo silently
-  text-only. See `src/config.ts` and `.env.example`. Nothing in this repo holds a key.
+  credentials belong in that machine file: one account per Mac, so a per-repo copy
+  duplicates a secret, and forgetting one makes the new repo silently text-only. See `src/config.ts` and `.env.example`. Nothing in this repo holds a key.
 - **Comments explain WHY.** Several of the trickiest bits exist because of a bug that was
   expensive to find; those comments are load-bearing. Don't strip them.
 
@@ -46,13 +46,8 @@ pnpm test        # node --test src/*.test.ts
 ```
 
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
-`spokenName`, the `plansReader` parsers, the `workIndex` watcher, and the turn-stream
-timing in `voice.ts`, which has produced several real bugs).
-
-⚠️ A voice test that stands a session up must set `speakable` too — `connect()` in
-`voice.test.ts` does both. Setting `liveSession` alone models a session that can be
-spoken through, which is exactly the belief the SDK does not share; the suite passed
-green against it while the real thing was mute.
+`spokenName`, the `plansReader` parsers, the `workIndex` watcher, and `speakOut` — which
+is now the whole speech plane, so what it does and does not pronounce is worth pinning).
 
 Watcher tests poll for a condition rather than sleeping a fixed amount; filesystem event
 latency has no guarantee, and a fixed wait is how these go flaky.
@@ -60,7 +55,7 @@ latency has no guarantee, and a fixed wait is how these go flaky.
 ## Running it
 
 ```bash
-cd <a-project-repo> && beth        # binds to that repo, brings the tunnel up
+cd <a-project-repo> && beth        # binds to that repo, opens a browser
 ```
 
 Edit the code here; run `beth` from the project you want to talk about. `beth --help`
@@ -74,75 +69,33 @@ These cost hours. Don't rediscover them.
   Rosetta, so the bundled Bun binary silently never responds ("CPU lacks AVX" on stderr
   is the only tell). Everything passes `pathToClaudeCodeExecutable` at the native arm64
   `claude`.
-- **ElevenLabs dials IN to us.** Speech Engine is the websocket *client*; the harness is
-  the server. `localhost` is unreachable, so voice needs a public tunnel URL ending in
-  `/voice-ws`. Its absence fails **silently** — audio connects and is never heard.
-- **The tunnel forwards EVERY path, so the API gets two listeners.** Hanging voice off the
-  UI's server published the whole thing: `GET https://<tunnel>/api/state` answered
-  strangers, and `/api/turn` let anyone with the URL talk to the director as Danny. The UI
-  and API now bind to loopback (`HARNESS_BIND`); voice gets its own port
-  (`HARNESS_VOICE_PORT`, default `port + 1`) carrying only the JWT-verified websocket
-  upgrade and a contentless `/healthz`. **Only ever tunnel the voice port.** Anything
-  added to the main server is local-only by construction — which is what makes a
-  shell-executing handoff safe to build later.
-- **`speechEngine.update()` ignores a top-level `wsUrl`.** It is nested under
-  `speechEngine`. The bad call returns success and changes nothing, so the harness reads
-  the config back and derives its listen path from what is actually stored.
-- **Never wire Speech Engine's abort signal to `Query.interrupt()`.** It aborts on
-  ordinary transcript revisions (partial → final), not just barge-in. Doing so kills the
-  director's turn on every utterance and produces an endless re-delivery loop. Stop is a
-  button, deliberately.
-- **A spoken turn must never return zero chunks** — ElevenLabs re-delivers the transcript
-  when it gets nothing, which restarts that same loop.
-- **`onInit` hands back the SESSION, not just a conversation id** (`onInit(id, session)`).
-  Taking only the id meant a session opened without anyone speaking had nothing to speak
-  through — exactly the outbound-announcement case, so a long operation ended in silence.
-- **`close` and `disconnected` are different endings, and you need both.** `onClose` fires
-  only for an explicit protocol close message; a websocket that simply drops — what the
-  browser ending a session produces — fires `onDisconnect`. Wiring only `onClose` leaves
-  `liveSession` pointing at a dead session, so nothing queues, `sendResponse` throws into
-  a catch, the cost meter keeps accruing, and voice effort stays pinned low for typed work.
-- **ElevenLabs sends a GROWING utterance as several transcripts** while you are still
-  talking, each with a new `event_id`. The SDK's model — abort the in-flight LLM call,
-  start a new one — is right for a stateless completion and wrong for a long-lived
-  director session, where every `session.send()` appends a user turn that cannot be
-  un-sent. Acting per transcript turned one sentence into five concurrent turns talking
-  over each other. `voice.ts` waits for the transcript to stop changing
-  (`HARNESS_VOICE_SETTLE_MS`) and sends exactly one.
-  Deferring the response is safe: the SDK leaves `inTranscriptHandler` true until the
-  session closes, and `streamResponse` captures the CURRENT `event_id`, so a late
-  response lands against the newest transcript — the one you want to answer.
+- **Nothing dials in any more, and that is the security story.** Speech Engine used to
+  be the websocket CLIENT — we were the server — so voice needed a public tunnel URL, a
+  second listener, a JWT-verified upgrade path, and a standing rule that only the voice
+  port may ever be tunnelled. All of it is gone: the browser listens (`ui/listen.js`) and
+  her audio streams over loopback (`src/speakOut.ts`). ONE listener, bound to 127.0.0.1,
+  carrying everything. That is what makes the shell-executing handoff safe by
+  construction rather than by rule.
+  ⚠ Do not reintroduce a public listener without re-reading `docs/voice-plane.md`. The
+  bugs it cost were expensive and none of them named themselves: `/api/state` answering
+  strangers, `/api/turn` letting anyone with the URL talk to the director as Danny, and a
+  4621 collision that broke voice while pointing at everything except the port.
 - **The page and the ear have different budgets.** Six paragraphs of real code work
   is seconds of skimming and ninety seconds of unskippable audio, so speech takes an
   EXCERPT (`src/spoken.ts`): `say` items in full, plus the LAST PARAGRAPH of anything
   longer she writes. Positional, not clever — there is no summarising step to get
   wrong or to pay for, and the upshot is where she was already told to put it. The
-  transcript is always complete; only the pronunciation is reduced. Two rules follow:
-  a level that suppresses everything must still yield SOMETHING for a spoken turn
-  (the last sentence — a zero-chunk response restarts the re-delivery loop), and a
-  suppressed line must NOT queue as an announcement: that silence is a choice, not a
-  lost line.
-- **She can never speak FIRST, and both documented routes are dead ends.** Speech
-  Engine only carries a response to something it HEARD, so a queued line waits for
-  a transcript. Tried against the real service on 2026-08-01, both failed:
-  `conversation.sendUserMessage(text)` really does put `{type:"user_message"}` on
-  the data channel, but ElevenLabs never turns it into a `user_transcript` for a
-  bring-your-own-LLM engine — the harness sees nothing. And
-  `overrides.agent.firstMessage`, which their own SDK warning recommends, is
-  REJECTED by a Speech Engine: "Server error: Unknown error", DataChannel errors on
-  both lossy and reliable, and the room torn down before it ever reaches our
-  websocket. Consequences to design around rather than retry: an announcement waits
-  6–14 s for the recogniser's own filler at an empty room, and **a muted mic means
-  she is mute too** — no audio, no transcript, no mouth. The mic is what opens a
-  channel, and that is a product constraint, not a policy.
-  ✅ **Solved, and not by Speech Engine.** `src/speakOut.ts` streams her audio to the
-  page over loopback, so she speaks whenever she likes with no session and no mic.
-  Everything above still describes the *Speech Engine* path, which now carries only
-  transcript-driven turns. Don't try either dead end again; don't add scaffolding to
-  the announcement queue either — step 3 deletes it.
+  transcript is always complete; only the pronunciation is reduced.
+  Silence is now genuinely silent: `off` speaks nothing and queues nothing. The old
+  rule that a suppressed turn must still yield SOMETHING existed only because a
+  zero-chunk response made ElevenLabs re-deliver the transcript, and nothing
+  re-delivers anything now.
+  ⚠ The corollary bites in the other direction: EVERYTHING she writes is heard, so a
+  prompt that asks for the same thing twice is heard twice. That is what made booting
+  say "I am here" three times — see the KICKOFF note in `main.ts`.
 - **A permission card cannot be answered by voice.** `canUseTool` pends forever by
-  design, so a prompt reaching the gate stops a spoken conversation dead — the paid
-  channel bills while she waits and the only tell is silence, which reads as a hang.
+  design, so a prompt reaching the gate stops a spoken conversation dead, and the only
+  tell is silence, which reads as a hang.
   That is why the session runs in the SDK's `'auto'` permission mode by default
   (classifier settles the ordinary, escalates the rest) and why the card offers
   **Always**, which returns the SDK's own `suggestions` as `updatedPermissions`.
@@ -155,55 +108,36 @@ These cost hours. Don't rediscover them.
   **X**" out of `.claude/DIRECTOR.md`). It is not decoration: a card reading "Claude
   wants to use Bash" is a stranger interrupting a conversation with someone else.
   Nothing in `ui/` may hardcode it — the page learns it from `hello`.
-- **A connected voice session is not a mouth.** `sendResponse()` refuses unless the SDK
-  is inside a transcript handler (`inTranscriptHandler`), and that flag is set ONLY when
-  ElevenLabs delivers a transcript — never at `init`. Sending outside one returns early
-  with a `console.warn` and resolves happily, so flushing announcements from `onInit`
-  (where they used to be flushed) emptied the queue into nothing: Beth went silent for
-  the rest of the session while the page looked perfectly healthy. Speech Engine only
-  lets you ANSWER something it heard. `voice.ts` tracks `speakable`, holds the queue
-  until the first transcript — noise counts, "..." is a mouth — and re-queues anything
-  that fails to land. Speaking first, unprompted, is a client-side "first message"
-  feature, not something this side of the socket can do.
-- **One response per transcript.** Every `sendResponse` ends with `is_final`, which
-  closes the agent turn for that transcript, so a second response against the same one
-  is at best unheard. A backlog therefore rides the next turn's stream as its opening
-  chunks (`runTurn`) or goes out joined as a single response — never as N sends. There
-  is ONE chain (`speakQueue`) for turns and announcements alike; two chains could
-  interleave, which is the same bug wearing a different hat.
 - **She writes markdown, and the page renders offsets.** File links are character RANGES
   into the message text, computed server-side, so nothing in `ui/` may transform that
   string — the offsets would move underneath. Markdown markers come off in `markdown.ts`
   BEFORE links are detected, and the formatting they carried travels as spans in the
   same coordinates. One canonical string, two overlays that cannot disagree. The voice
   path takes that string too, which is what stops TTS pronouncing asterisks.
-- **Two `beth` instances break voice in a way that blames the UI.** Voice is a SINGLETON:
-  one Speech Engine, one stored `wsUrl`, one tunnel hostname forwarding to one voice port.
-  So ElevenLabs talks to whichever instance owns the tunnel while you may be watching the
-  other's page — which looks completely healthy, because from its side nothing is wrong;
-  it simply is not the harness in the conversation. Symptoms: your text appears in neither
-  chat, Beth answers aloud anyway, and a plan you clicked never reaches her (the click
-  POSTs to the instance that never got your turn). `beth` now refuses a second instance on
-  the same repo and warns when any other is running; see `bin/beth.mjs`.
-- **The ElevenLabs API-key permission is the row labelled "ElevenAgents"** (Write). There
-  is no "Speech Engine" or "Conversational AI" entry. TTS/STT permissions are *not*
-  needed — speech happens inside the Speech Engine session. ⚠ The voice-plane spike DOES
-  need **Text to Speech**, because it calls the endpoint directly; today's key does not
-  have it, and that is the one thing standing between `spike/voice-plane/` and a run.
+- **The API key needs the Text to Speech permission**, and only that. The old dial-in
+  path needed the row labelled "ElevenAgents" instead (there is no "Speech Engine" or
+  "Conversational AI" entry), which is why a key that worked for years produced a 502
+  the first time the harness called TTS directly. Keep ElevenAgents only if
+  `SPEECH_ENGINE_ID` is still where the voice id is read from; `HARNESS_VOICE_ID` makes
+  it unnecessary.
+- **The engine's TTS model is NOT available to the standalone endpoint.**
+  `eleven_v3_conversational` is rejected outright, so the plane runs
+  `eleven_flash_v2_5` — the same voice, a different model. ⚠ Flash predates v3 audio
+  tags, so `speakOut` strips them; it derives that from the model in use, not from the
+  engine. Point `HARNESS_TTS_MODEL` at a v3 model and tags survive.
 
 ## Design records
 
 `docs/` is where agreed-but-unbuilt work lives, so a fresh session can pick it up without
 the conversation that produced it. Where things stand:
 
-- **`voice-plane.md`** — steps 1–3 are BUILT, and the plane is now the DEFAULT. She speaks
-  over `src/speakOut.ts` (loopback audio, no session, no mic) and hears over
-  `ui/listen.js` (browser recognition posting an ordinary turn). Nothing dials in, nothing
-  public is opened, nothing is billed idle. `HARNESS_BROWSER_STT=0` still reaches the old
-  Speech Engine path, which is why everything below about it is still true — and why the
-  announcement queue, `speakable`, `SILENT_ACK` and `runTurn` are still in the tree.
-  **Step 4 is the deletion**: that fallback, the voice port, the tunnel, the singleton and
-  the cost meter, all at once.
+- **`voice-plane.md`** — DONE, all four steps. She speaks over `src/speakOut.ts`
+  (loopback audio, no session, no mic) and hears over `ui/listen.js` (browser
+  recognition posting an ordinary turn). Speech Engine, the voice port, the tunnel, the
+  singleton, the announcement queue, `speakable`, `SILENT_ACK`, `runTurn` and the cost
+  meter are all gone. Read it for the reasoning, not for work — what is left is the
+  question it ends on: whether to move recognition to Scribe, which would punctuate
+  properly and let echo cancellation reach the recogniser at last.
 - **`status-surface.md`** — step 1 is BUILT: the dot tracks anything running, the spinner
   tracks the prediction. Next the stats move behind the context meter, then the test
   monitor takes the top right.

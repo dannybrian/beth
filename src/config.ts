@@ -11,19 +11,13 @@ export type HarnessConfig = {
   repo: string;
   port: number;
   /**
-   * Interface the UI and API listen on. LOOPBACK BY DEFAULT, and that is a
-   * security boundary, not a detail: the tunnel forwards every path, so a
-   * publicly-bound API means anyone holding the tunnel URL can read /api/state
-   * and post turns as Danny. Set HARNESS_BIND=0.0.0.0 to expose it on the LAN
-   * deliberately — never point a tunnel at it.
+   * Interface everything listens on. LOOPBACK BY DEFAULT, and now that is the
+   * WHOLE security story rather than half of it: there is no second listener and
+   * nothing dials in, so every byte of this harness — the API, the audio, the
+   * shell-executing handoff — is unreachable from off this machine by
+   * construction. Set HARNESS_BIND=0.0.0.0 to expose it on the LAN deliberately.
    */
   bind: string;
-  /**
-   * Separate public port carrying ONLY the Speech Engine websocket. This is the
-   * one the tunnel points at, so nothing but an ElevenLabs-authenticated upgrade
-   * is reachable from outside this machine.
-   */
-  voicePort: number;
   /** Native CLI binary. The SDK's bundled Bun build hangs under Rosetta here. */
   claudeBin: string;
   /** Per-repo state (session id for resume). Never machine-global. */
@@ -49,8 +43,8 @@ export type HarnessConfig = {
    *   'dontAsk'     — never ask, and deny anything not pre-approved
    *
    * 'auto' is the default because an approval card is UNANSWERABLE BY VOICE: the
-   * director stops mid-job, the paid channel keeps billing, and the only tell is
-   * silence — which is indistinguishable from a hang. The card still appears for
+   * director stops mid-job and the only tell is silence, which is
+   * indistinguishable from a hang. The card still appears for
    * whatever the classifier escalates, which is where the repo's own prod-safety
    * rules land.
    *
@@ -68,34 +62,13 @@ export type HarnessConfig = {
   directorName: string;
   /** Voice is optional — absent credentials degrade the harness to text-only. */
   elevenLabsApiKey?: string;
+  /**
+   * A Speech Engine is no longer used to speak or to listen. It survives as ONE
+   * thing: somewhere to read a voice id from, so an existing setup keeps sounding
+   * like the same person without anyone copying an id around. HARNESS_VOICE_ID
+   * makes it unnecessary.
+   */
   speechEngineId?: string;
-  /**
-   * Publicly reachable wss:// URL for THIS process, ending in the voice path.
-   * ElevenLabs dials in to us, so localhost is not reachable — this is a tunnel
-   * hostname. When set, the harness re-registers it on the engine at boot, which
-   * is what makes a rotating tunnel URL survivable.
-   */
-  publicWsUrl?: string;
-  /**
-   * OUTBOUND speech: stream TTS from the harness and let the page play it, rather
-   * than waiting for Speech Engine to carry a response to something it heard.
-   *
-   * This is the half of the voice plane Speech Engine cannot do at all — a queued
-   * line waits 6–14 s for the recogniser to remark on an empty room, and never
-   * arrives at all if the mic is muted. Set HARNESS_SPEAK_OUT=0 to go back to
-   * announcements-wait-for-a-transcript. See docs/voice-plane.md.
-   */
-  speakOut: boolean;
-  /**
-   * INBOUND speech: the browser recognises and posts an ordinary turn, instead of
-   * ElevenLabs dialling in over a tunnel to a public port.
-   *
-   * On wherever speak-out is, because the two halves are one migration and a mic
-   * cannot be in two places. HARNESS_BROWSER_STT=0 goes back to Speech Engine for
-   * one more step — the fallback exists so a bad night has a way out, and step 4
-   * deletes it along with the port, the tunnel and the singleton.
-   */
-  browserStt: boolean;
   /**
    * Whose voice she speaks in. Read off the Speech Engine when absent, so the two
    * paths sound like the same person — the IDENTITY is worth inheriting even
@@ -110,12 +83,6 @@ export type HarnessConfig = {
    */
   ttsModel: string;
   /**
-   * Whether the configured Speech Engine's TTS model understands v3 audio tags.
-   * Realtime engines often run Flash/Turbo for latency, which may not. When false,
-   * tags are stripped from the voice path too, so the voice never reads them aloud.
-   */
-  audioTagsSupported: boolean;
-  /**
    * How much of what she writes is read ALOUD. The transcript always has all of
    * it; this only decides what is pronounced.
    *   'full'      — every line, as it was before this existed
@@ -128,24 +95,22 @@ export type HarnessConfig = {
    */
   speechLevel: SpeechLevel;
   /**
-   * Reasoning effort applied for the life of a voice session, then restored.
+   * Reasoning effort applied while the MIC IS OPEN, then restored.
+   *
    * Spoken conversation trades depth for latency; typed work keeps full effort.
+   * It used to hang off the paid session opening and closing; with no session to
+   * hang off, the mic being on is the signal — which is what it always meant.
    * Set HARNESS_VOICE_EFFORT=off to disable the switch entirely.
    */
   voiceEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
   /**
-   * How long a spoken turn may stay silent before Beth says "let me check".
-   * The filler marks LATENESS — if the real answer lands inside this window it is
-   * never spoken, so quick replies are not prefaced with a stall.
-   */
-  fillerDelayMs: number;
-  /**
-   * How long the transcript must stop changing before a spoken turn is started.
+   * How long the words must stop CHANGING before a spoken turn is sent. Served
+   * to the page, which is where the window now lives.
    *
-   * ElevenLabs delivers a growing utterance as SEVERAL transcripts while you are
-   * still talking. Acting on each one starts a separate director turn, so one
-   * sentence became five. Raise this if turns still fire mid-sentence; lower it
-   * if the reply feels sluggish.
+   * A recogniser revises as you speak, and acting on each revision starts a
+   * separate director turn — one sentence became five. Note the rule is about the
+   * WORDS changing, not about events arriving: see ui/listen.js. Raise this if
+   * turns still fire mid-sentence; lower it if replies feel sluggish.
    */
   voiceSettleMs: number;
 };
@@ -187,11 +152,10 @@ export function loadConfig(): HarnessConfig {
    * .env, then a machine-wide file.
    *
    * The machine layer exists because the voice credentials are not project
-   * secrets. There is one ElevenLabs account, one Speech Engine and one tunnel
-   * hostname for this Mac — requiring a copy in every repo's .env duplicated the
-   * same key N times, which is both tedious and a worse place to leave a secret.
-   * Binding to a second repo silently produced a text-only harness, with the
-   * only symptom being a caution icon after speaking.
+   * secrets. There is one ElevenLabs account for this Mac — requiring a copy in
+   * every repo's .env duplicated the same key N times, which is both tedious and
+   * a worse place to leave a secret. Binding to a second repo silently produced a
+   * text-only harness, with the only symptom being a caution icon after speaking.
    *
    * A repo can still override any of it — a project with its own engine just
    * sets the key locally and wins.
@@ -206,7 +170,6 @@ export function loadConfig(): HarnessConfig {
     repo,
     port,
     bind: process.env.HARNESS_BIND ?? '127.0.0.1',
-    voicePort: Number(process.env.HARNESS_VOICE_PORT ?? port + 1),
     claudeBin: conf('HARNESS_CLAUDE_BIN') ?? path.join(os.homedir(), '.local/bin/claude'),
     stateDir,
     eventLogPath: path.join(repo, '.claude', 'events.jsonl'),
@@ -226,12 +189,8 @@ export function loadConfig(): HarnessConfig {
     directorName: directorName(repo, conf('HARNESS_DIRECTOR_NAME') ?? ''),
     elevenLabsApiKey: conf('ELEVENLABS_API_KEY'),
     speechEngineId: conf('SPEECH_ENGINE_ID'),
-    publicWsUrl: conf('HARNESS_PUBLIC_WS_URL'),
-    speakOut: conf('HARNESS_SPEAK_OUT') !== '0',
-    browserStt: conf('HARNESS_SPEAK_OUT') !== '0' && conf('HARNESS_BROWSER_STT') !== '0',
     voiceId: conf('HARNESS_VOICE_ID') ?? conf('ELEVENLABS_VOICE_ID'),
     ttsModel: conf('HARNESS_TTS_MODEL') ?? 'eleven_flash_v2_5',
-    audioTagsSupported: conf('HARNESS_AUDIO_TAGS') !== '0',
     speechLevel: (SPEECH_LEVELS as string[]).includes(conf('HARNESS_SPEECH_LEVEL') ?? '')
       ? (conf('HARNESS_SPEECH_LEVEL') as SpeechLevel)
       : 'brief',
@@ -239,7 +198,6 @@ export function loadConfig(): HarnessConfig {
       conf('HARNESS_VOICE_EFFORT') === 'off'
         ? null
         : ((conf('HARNESS_VOICE_EFFORT') ?? 'low') as HarnessConfig['voiceEffort']),
-    fillerDelayMs: Number(conf('HARNESS_FILLER_DELAY_MS') ?? 1500),
     // 900ms was still firing mid-sentence: an ordinary pause for breath, or an
     // "uh", outlasts it. Cutting a turn early is far worse than answering a beat
     // later — it asks half a question and then asks the rest as a second turn.

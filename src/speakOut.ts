@@ -10,8 +10,9 @@
 // Nothing dials in. The stream is served by the LOCAL server, which is the whole
 // security story — no tunnel, no public listener, no singleton.
 import type { HarnessConfig } from './config.ts';
-import type { ConversationBus } from './bus.ts';
+import type { ConversationBus, UIMessage } from './bus.ts';
 import { forVoice } from './audioTags.ts';
+import { spokenFor, type SpeechLevel } from './spoken.ts';
 
 export type HeldLine = { id: string; text: string; at: number };
 
@@ -35,14 +36,42 @@ export class SpeakOut {
   /** Reported to the page so a missing permission is legible rather than silent. */
   lastError: string | null = null;
 
+  /** How much of what she writes is read aloud. See spoken.ts. */
+  private verbosity: SpeechLevel;
+
   constructor(cfg: HarnessConfig, bus: ConversationBus) {
     this.cfg = cfg;
     this.bus = bus;
+    this.verbosity = cfg.speechLevel;
+
+    // The whole speech plane is this subscription. There is no turn to correlate
+    // with, no session to be inside, and no in-flight response to avoid racing:
+    // she says a line because she wrote one.
+    bus.subscribe((m: UIMessage) => {
+      if (m.type !== 'assistant' && m.type !== 'say') return;
+      this.speak(
+        spokenFor({ type: m.type, kind: m.type === 'say' ? m.kind : undefined, text: m.voiceText ?? m.text }, this.verbosity)
+      );
+    });
+  }
+
+  speechLevel = () => this.verbosity;
+
+  setSpeechLevel(level: SpeechLevel) {
+    this.verbosity = level;
+    this.bus.publish({ type: 'speech', level });
   }
 
   /** Needs a key and SOMEWHERE to get a voice id from — the engine counts. */
   get configured(): boolean {
-    return Boolean(this.cfg.speakOut && this.cfg.elevenLabsApiKey && (this.cfg.voiceId || this.cfg.speechEngineId));
+    return Boolean(this.cfg.elevenLabsApiKey && (this.cfg.voiceId || this.cfg.speechEngineId));
+  }
+
+  /** Why she cannot speak, in words the page can put on the mic button. */
+  get unavailableReason(): string | null {
+    if (this.configured) return null;
+    if (!this.cfg.elevenLabsApiKey) return 'no ELEVENLABS_API_KEY — the harness is text-only';
+    return 'no HARNESS_VOICE_ID and no SPEECH_ENGINE_ID to read one from';
   }
 
   /**
@@ -154,7 +183,8 @@ export class SpeakOut {
 
   status() {
     return {
-      speakOut: this.configured,
+      available: this.configured,
+      reason: this.unavailableReason,
       voiceId: this.resolved?.voiceId ?? this.cfg.voiceId ?? null,
       model: this.resolved?.modelId ?? this.cfg.ttsModel,
       held: this.held.size,

@@ -204,7 +204,36 @@ free when not, and no reason to ever hang up.
    ⚠️ The announcement queue, `speakable`, `SILENT_ACK` and `runTurn` are still THERE,
    because `HARNESS_BROWSER_STT=0` still reaches them. That fallback is a way out of a
    bad night, not a feature — step 4 deletes it and everything under it.
-4. **Tear out the transport tax** — voice port, tunnel, singleton, cost meter — and
-   simplify `beth` to a single local server.
+4. **Tear out the transport tax.** DONE. Gone in one commit: `voice.ts` and `ui/voice.js`
+   entirely, the voice port and its `/healthz`, the ngrok tunnel, `HARNESS_PUBLIC_WS_URL`,
+   the boot-time `wsUrl` re-registration, voice-as-a-singleton and the warnings around it,
+   the announcement queue with its staleness window and re-queue, `speakable`,
+   `SILENT_ACK`, `runTurn`, the filler, the connection-duration cost meter, the browser
+   token mint, the vendored ElevenLabs browser client, and two dependencies
+   (`@elevenlabs/client`, `ws`).
 
-Steps 2 and 3 each leave the harness working. Step 4 is pure deletion, which is the point.
+   What replaced all of it: one subscription in `speakOut.ts`, one route, and a `<audio>`
+   element. `beth` lost a third of its length and no longer starts anything but the
+   harness.
+
+   Two things moved rather than died. Reasoning effort followed the paid session opening
+   and closing; it now follows the MIC (`POST /api/listening`), which is what it always
+   meant. And the Speech Engine id survives as one thing only — somewhere to read a voice
+   id from, so an existing setup keeps sounding like the same person. `HARNESS_VOICE_ID`
+   makes even that unnecessary.
+
+Steps 2 and 3 each left the harness working. Step 4 was pure deletion, which was the point.
+
+## What is still open
+
+**Scribe.** Recognition is good but the Web Speech API punctuates barely at all and has no
+dictation mode, so the page rewrites spoken "period" and friends — a stopgap that will eat
+a real "the settle period". And because Chrome's recogniser opens its own microphone and
+takes no constraints, echo cancellation cannot reach it; half duplex is doing that work
+instead. Both limits are the same limit: **we do not own the capture**. Scribe reverses it
+— we would hold the `MediaStream`, so AEC applies to the audio the recogniser actually
+gets, and Scribe punctuates on its own. The cost is a `MediaRecorder` and chunk-posting
+loop, half a cent a minute, and the `speech_to_text` permission.
+
+It is not urgent. Half duplex measured fine with the speakers up, and the punctuation
+trick works. But it is the next thing this plane wants.

@@ -14,7 +14,6 @@ import type { EventLog } from './eventlog.ts';
 import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
-import type { VoiceService } from './voice.ts';
 import type { SpeakOut } from './speakOut.ts';
 import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
@@ -50,8 +49,7 @@ export function createServer(deps: {
   pending: PendingStore;
   gate: AskGate;
   session: SessionManager;
-  voice: VoiceService;
-  speakOut?: SpeakOut;
+  speakOut: SpeakOut;
   work: WorkIndex;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
@@ -94,11 +92,10 @@ export function createServer(deps: {
         model: session.chosenModel(),
         director: cfg.directorName,
         permissionMode: session.chosenPermissionMode(),
-        speechLevel: deps.voice.speechLevel(),
-        browserStt: cfg.browserStt,
+        speechLevel: deps.speakOut.speechLevel(),
         settleMs: cfg.voiceSettleMs,
       });
-      send({ type: 'voice', state: deps.voice.status().connected ? 'connected' : 'idle', status: deps.voice.status() });
+      send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
       for (const m of bus.replay()) send(m);
       // Re-render anything still waiting on a human.
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
@@ -212,8 +209,21 @@ export function createServer(deps: {
             // transcript is unaffected, which is the point of having a level.
             const level = String(body.level ?? '');
             if (!(SPEECH_LEVELS as string[]).includes(level)) return json(400, { error: 'unknown level' });
-            deps.voice.setSpeechLevel(level as SpeechLevel);
+            deps.speakOut.setSpeechLevel(level as SpeechLevel);
             return json(200, { ok: true, level });
+          }
+          case '/api/listening': {
+            // Reasoning effort follows the MIC now.
+            //
+            // It used to follow the paid session opening and closing, which was
+            // only ever a proxy for "he is talking to me" — spoken conversation
+            // trades depth for latency, typed work keeps full effort. With no
+            // session to hang off, the page says so directly, which is both
+            // simpler and more accurate: the mic being open is the actual fact.
+            if (!cfg.voiceEffort) return json(200, { ok: true, effort: null });
+            const on = Boolean(body.on);
+            await session.setEffort(on ? cfg.voiceEffort : null).catch(() => {});
+            return json(200, { ok: true, effort: on ? cfg.voiceEffort : null });
           }
           case '/api/clear': {
             await session.clear();
@@ -251,19 +261,14 @@ export function createServer(deps: {
             return json(404, { error: 'unknown endpoint' });
         }
       }
-      if (url.pathname === '/api/voice/token') {
-        // Short-lived browser token. The API key never leaves this process.
-        return json(200, await deps.voice.mintToken());
-      }
       if (url.pathname === '/api/voice/status') {
-        return json(200, { ...deps.voice.status(), ...(deps.speakOut?.status() ?? {}) });
+        return json(200, deps.speakOut.status());
       }
       // Audio for a line she has decided to say. This is the ENTIRE outbound
       // transport: an HTTP stream into an <audio> element, on the loopback
       // server, which is why the new plane needs no tunnel and no public port.
       if (url.pathname.startsWith('/api/voice/say/')) {
         const id = url.pathname.slice('/api/voice/say/'.length);
-        if (!deps.speakOut) return json(503, { error: 'speak-out is not configured' });
         try {
           const stream = await deps.speakOut.stream(id);
           res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store' });
@@ -277,7 +282,7 @@ export function createServer(deps: {
           // as "voice is broken" rather than as one checkbox.
           const msg = String(e?.body?.detail?.message ?? e?.message ?? e).slice(0, 300);
           console.log(`  speak-out: ${id} failed — ${msg}`);
-          bus.publish({ type: 'voice', state: 'unspoken', detail: msg, status: deps.voice.status() });
+          bus.publish({ type: 'voice', state: 'unspoken', detail: msg, status: deps.speakOut.status() });
           return json(502, { error: msg });
         }
       }
@@ -301,7 +306,7 @@ export function createServer(deps: {
           model: session.model(),
           director: cfg.directorName,
           permissionMode: session.chosenPermissionMode(),
-          speechLevel: deps.voice.speechLevel(),
+          speechLevel: deps.speakOut.speechLevel(),
           sessionId: session.sessionId(),
           decisions: pending.allDecisions(),
           workers: pending.allWorkers(),
@@ -309,28 +314,6 @@ export function createServer(deps: {
         });
       }
       return json(404, { error: 'unknown endpoint' });
-    }
-
-    // --- vendored browser client ---
-    // @elevenlabs/client ships a self-contained IIFE (global `ElevenLabsClient`),
-    // so it can be served straight from node_modules — no bundler, no CDN.
-    if (url.pathname === '/vendor/elevenlabs.js') {
-      const bundle = path.join(
-        path.dirname(fileURLToPath(import.meta.url)),
-        '..',
-        'node_modules',
-        '@elevenlabs',
-        'client',
-        'dist',
-        'lib.iife.js'
-      );
-      if (!fs.existsSync(bundle)) {
-        res.writeHead(404).end('// @elevenlabs/client not installed');
-        return;
-      }
-      res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'max-age=3600' });
-      res.end(fs.readFileSync(bundle));
-      return;
     }
 
     // --- static UI ---

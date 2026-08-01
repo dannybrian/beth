@@ -6,11 +6,10 @@ import type { HarnessConfig } from './config.ts';
 
 const cfg = (over: Partial<HarnessConfig> = {}): HarnessConfig =>
   ({
-    speakOut: true,
     elevenLabsApiKey: 'sk_test',
     voiceId: 'v_test',
     ttsModel: 'eleven_flash_v2_5',
-    audioTagsSupported: true,
+    speechLevel: 'full',
     ...over,
   }) as HarnessConfig;
 
@@ -21,6 +20,8 @@ function recording() {
   bus.subscribe((m) => seen.push(m));
   return { bus, seen };
 }
+
+const spoken = (seen: UIMessage[]) => seen.filter((m) => m.type === 'speak') as (UIMessage & { type: 'speak' })[];
 
 test('a spoken line is published as an id, and the words stay off the wire', () => {
   const { bus, seen } = recording();
@@ -67,8 +68,12 @@ test('tags SURVIVE when the model is a v3 one', () => {
 
 test('unconfigured is silent rather than throwing — voice is optional', () => {
   const { bus, seen } = recording();
-  for (const c of [cfg({ speakOut: false }), cfg({ elevenLabsApiKey: undefined }), cfg({ voiceId: undefined, speechEngineId: undefined })]) {
-    assert.equal(new SpeakOut(c, bus).speak('anything'), null);
+  for (const c of [cfg({ elevenLabsApiKey: undefined }), cfg({ voiceId: undefined, speechEngineId: undefined })]) {
+    const s = new SpeakOut(c, bus);
+    assert.equal(s.speak('anything'), null);
+    // And it says WHY, because a text-only harness that looks healthy is the
+    // failure mode this whole plane exists to remove.
+    assert.ok(s.unavailableReason);
   }
   assert.equal(seen.length, 0);
 });
@@ -77,6 +82,7 @@ test('an engine id alone is enough — the voice is inherited from it', () => {
   const { bus } = recording();
   const s = new SpeakOut(cfg({ voiceId: undefined, speechEngineId: 'seng_x' }), bus);
   assert.ok(s.speak('Ready.'));
+  assert.equal(s.unavailableReason, null);
 });
 
 test('held lines are capped, so an unattended run cannot grow forever', () => {
@@ -93,11 +99,7 @@ test('a `speak` message is never replayed — a reconnect must not re-perform', 
   // out loud again.
   const bus = new ConversationBus();
   new SpeakOut(cfg(), bus).speak('Tests are green.');
-  bus.publish({ type: 'assistant', text: 'and here is why' });
-  assert.deepEqual(
-    bus.replay().map((m) => m.type),
-    ['assistant']
-  );
+  assert.deepEqual(bus.replay().map((m) => m.type), []);
 });
 
 test('ids are unique across lines, so two never collide on one fetch', () => {
@@ -113,4 +115,53 @@ test('an id is not consumed by reading it — a reload can ask again', () => {
   const id = s.speak('Tests are green.')!;
   assert.equal(s.textFor(id), 'Tests are green.');
   assert.equal(s.textFor(id), 'Tests are green.');
+});
+
+// --- the whole speech plane is one subscription ------------------------------
+
+test('what she WRITES is what she says — no turn to correlate with', () => {
+  const { bus, seen } = recording();
+  new SpeakOut(cfg(), bus);
+  bus.publish({ type: 'assistant', text: 'Tests are green.' });
+  bus.publish({ type: 'say', kind: 'status', text: 'Shipped.' });
+  assert.deepEqual(
+    spoken(seen).map((m) => m.chars),
+    ['Tests are green.'.length, 'Shipped.'.length]
+  );
+});
+
+test('the speech LEVEL decides what is pronounced, and only that', () => {
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg({ speechLevel: 'brief' }), bus);
+  // 'brief' speaks the last paragraph — the upshot, not the essay in front of it.
+  bus.publish({ type: 'assistant', text: 'A long preamble about the change.\n\nSo the tree is green.' });
+  assert.equal(s.textFor(spoken(seen)[0].id), 'So the tree is green.');
+});
+
+test('silence is a real setting — `off` speaks nothing and queues nothing', () => {
+  // Nothing waits for later either: that silence is a choice, not a line held
+  // back for a channel that is never coming.
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg({ speechLevel: 'off' }), bus);
+  bus.publish({ type: 'assistant', text: 'Tests are green.' });
+  assert.equal(spoken(seen).length, 0);
+  assert.equal(s.status().held, 0);
+});
+
+test('the level switches live, and says so on the bus', () => {
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg({ speechLevel: 'off' }), bus);
+  s.setSpeechLevel('full');
+  assert.equal(s.speechLevel(), 'full');
+  assert.ok(seen.some((m) => m.type === 'speech' && m.level === 'full'));
+  bus.publish({ type: 'assistant', text: 'Now audible.' });
+  assert.equal(spoken(seen).length, 1);
+});
+
+test('her own transcript does not echo — only assistant and say are spoken', () => {
+  const { bus, seen } = recording();
+  new SpeakOut(cfg(), bus);
+  bus.publish({ type: 'user', text: 'run the tests' });
+  bus.publish({ type: 'activity', tool: 'Bash', detail: 'pnpm test' });
+  assert.equal(spoken(seen).length, 0);
 });

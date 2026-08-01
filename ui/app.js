@@ -1,6 +1,5 @@
 // Minimal vanilla UI — no framework, no build step. The plan calls for
 // "Lit/vanilla"; at this size vanilla DOM keeps the dependency count at zero.
-import { VoiceClient } from '/voice.js';
 import { Listener, listenSupported } from '/listen.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
@@ -596,15 +595,12 @@ const handlers = {
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
     clearInterim();
-    keepVoiceAlive();
     renderUser(m);
   },
   assistant: (m) => {
-    keepVoiceAlive();
     renderAssistant(m);
   },
   say: (m) => {
-    keepVoiceAlive();
     renderSay(m);
     feedEvent({ ts: new Date().toISOString(), kind: `say/${m.kind}`, text: m.text });
   },
@@ -613,7 +609,6 @@ const handlers = {
   // mid-job, and the result Danny actually wanted to hear arrives to a shut
   // channel — the exact reason a successful ship ended in silence.
   activity: (m) => {
-    keepVoiceAlive();
     renderActivity(m);
   },
   ask: renderAsk,
@@ -626,8 +621,6 @@ const handlers = {
     paintProgress();
   },
   status: (m) => {
-    // A turn in flight is the conversation still happening, even in silence.
-    if (m.state === 'thinking') keepVoiceAlive();
     turnInFlight = m.state === 'thinking';
     statusState = m.state;
     setBusy();
@@ -666,22 +659,10 @@ const handlers = {
     // means that utterance is over, one way or another.
     if (m.state === 'hearing') showInterim(m.detail ?? '');
     else if (m.state === 'ignored' || m.state === 'duplicate' || m.state === 'disconnected') clearInterim();
-    // She has something to say and no channel to say it through. Her voice does
-    // not depend on his mic: with the mic off the session opens MUTED, so this
-    // costs him a channel but never carries his words. Silence is chosen with
-    // the speech level (`off`), which stops anything queueing server-side — so
-    // reaching here at all means he asked to be spoken to.
-    // She has something to say and no channel to say it through. Only an ARMED
-    // mic opens one — not a policy but a constraint: a session can only be spoken
-    // through in reply to a transcript, and a muted mic never produces one (see
-    // the note in voice.js). Voice off is therefore silence, deliberately.
-    else if (m.state === 'speak-request' && voice?.state === 'armed') {
-      voice.connect('announce').catch(() => {});
-    }
     // Something she wrote was never said. It is in the transcript, so the only
     // thing he cannot otherwise know is that he never heard it — and silence is
     // indistinguishable from a hang, which is the whole reason this is loud.
-    else if (m.state === 'unspoken') {
+    if (m.state === 'unspoken') {
       entry('activity', (n) => (n.textContent = `🔇 not spoken — ${m.detail ?? 'no channel was open'}`));
     }
     renderVoice(m.status, m.detail);
@@ -830,14 +811,6 @@ async function pollContext() {
 
 function setBusy() {
   const busy = turnInFlight || workersRunning > 0;
-  // Hold the voice channel open for the duration of the work. The wait for a
-  // mouth is per session, so a job that closes and reopens one per announcement
-  // pays it over and over — see WORKING_IDLE_CLOSE_MS.
-  try {
-    voice?.setWorking(busy);
-  } catch {
-    /* voice may not be armed */
-  }
   if (busy && !busyTick) {
     busySince = Date.now();
     void pollContext();
@@ -875,20 +848,6 @@ const VOICE_DEBUG =
 /** True while the composer is displaying speech rather than something typed. */
 let speechOwnsInput = false;
 
-/**
- * Keep the paid session open while the CONVERSATION is moving. The local VAD only
- * knows about Danny's voice, so a long answer he listens to quietly reads as idle
- * — the session closes mid-exchange and his reply then pays for a reconnect,
- * losing its first second. Declared before the handlers that call it.
- */
-const keepVoiceAlive = () => {
-  try {
-    voice?.touch();
-  } catch {
-    /* voice may not be armed */
-  }
-};
-
 /** True when speech owns the composer — false means something typed is in it. */
 function showInterim(text) {
   // Never clobber something typed. His words win; speech only fills a box it
@@ -912,9 +871,8 @@ function clearInterim() {
 
 function renderVoice(status, detail) {
   if (!status) return;
-  $('voice-cost').textContent = status.totalUsd
-    ? `voice $${status.totalUsd.toFixed(3)}${status.connected ? ` · ${status.connectedSeconds}s live` : ''}`
-    : '';
+  // No cost readout: there is nothing to meter. What is left is whether she can
+  // speak at all — a missing key or voice id, said on the button.
   if (status.reason) voiceBtn.title = status.reason;
   // Every ASR revision carries a detail, so this is one console line per partial
   // transcript — forty of them while a television talks nearby, which reads as a
@@ -934,9 +892,6 @@ function renderVoice(status, detail) {
 const PLACEHOLDER = {
   // Replaced on `hello` with the bound repo's director — see setDirectorName.
   off: 'Talk to the director…',
-  connecting: 'Opening the mic — wait…',
-  connected: 'Listening — go ahead',
-  armed: 'Mic on, channel closed — speak to reopen',
   listening: 'Listening — go ahead',
   error: 'Voice unavailable — type instead',
 };
@@ -949,15 +904,12 @@ const PLACEHOLDER = {
 function setDirectorName(name) {
   if (!name) return;
   PLACEHOLDER.off = `Talk to ${name}…`;
-  if (!speechOwnsInput && voice?.state !== 'connected') input.placeholder = PLACEHOLDER[voice?.state ?? 'off'] ?? PLACEHOLDER.off;
+  if (!speechOwnsInput && voice?.state !== 'listening') input.placeholder = PLACEHOLDER[voice?.state ?? 'off'] ?? PLACEHOLDER.off;
 }
 
 /**
- * Which ear this harness has, decided by the server and learned at `hello`.
- *
- * The page cannot infer it: browser recognition and a Speech Engine session are
- * two different microphones and only one may be open. Built lazily for the same
- * reason — the answer does not exist until the first message arrives.
+ * The ear. Built at `hello` rather than at load, because it wants the settle
+ * window the server is configured with — one knob for both ends.
  */
 let voice = null;
 
@@ -965,54 +917,45 @@ function paintVoiceButton(state, detail) {
   voiceBtn.className = `voice ${state}`;
   if (!speechOwnsInput) input.placeholder = PLACEHOLDER[state] ?? PLACEHOLDER.off;
   voiceBtn.title =
-    (state === 'connecting'
-      ? 'Opening the channel — do not talk yet.'
-      : state === 'armed'
-        ? 'Mic held, channel closed after silence. Speak to reopen (the first words may clip).'
-        : state === 'connected'
-          ? 'Live — go ahead. Billed per minute; closes itself after silence.'
-          : state === 'listening'
-            ? 'Listening. Recognition is local and nothing is billed while you talk.'
-            : state === 'error'
-              ? (detail ?? 'voice error')
-              : 'Voice off') + '  (keypad 0)';
+    (state === 'listening'
+      ? 'Listening. Recognition is local, nothing is billed, and there is no channel to lose.'
+      : state === 'error'
+        ? (detail ?? 'voice error')
+        : 'Voice off') + '  (keypad 0)';
   if (detail) console.log('[voice]', detail);
 }
 
 function buildVoice(hello) {
   if (voice) return;
-  if (hello.browserStt && !listenSupported) {
+  if (!listenSupported) {
     // Say so rather than presenting a mic button that cannot work.
     paintVoiceButton('error', 'This browser has no speech recognition — Chrome does.');
     voiceBtn.disabled = true;
     return;
   }
-  voice = hello.browserStt
-    ? new Listener({
-        settleMs: hello.settleMs,
-        onState: (state, detail) => paintVoiceButton(state === 'listening' ? 'listening' : state, detail),
-        // The composer IS the preview: he watches the words arrive, punctuated as
-        // they will be sent, in the box they will be sent from.
-        onInterim: (text) => (text ? showInterim(text) : clearInterim()),
-        // Straight through the ordinary send, so a spoken turn carries the chips
-        // he pointed at and honours /clear and /stop exactly like a typed one.
-        // Only send what speech actually OWNS. If he is mid-way through typing
-        // something, the composer is his — sending would fire his half-written
-        // line instead, so the spoken turn waits in the log rather than
-        // hijacking it.
-        onSettled: (text) => {
-          if (showInterim(text)) send();
-          else entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not sent`));
-        },
-        isSpeaking: () => speakingId !== null,
-        stopSpeaking: bargeIn,
-      })
-    : new VoiceClient((state, detail) => {
-        paintVoiceButton(state, detail);
-        fetch('/api/voice/status')
-          .then((r) => r.json())
-          .then((s) => renderVoice(s));
-      });
+  voice = new Listener({
+    settleMs: hello.settleMs,
+    onState: (state, detail) => {
+      paintVoiceButton(state, detail);
+      // Reasoning effort follows the MIC. It used to follow a paid session opening
+      // and closing, which was only ever standing in for this: spoken conversation
+      // trades depth for latency, and typed work keeps full effort.
+      if (state === 'listening' || state === 'off') post('/api/listening', { on: state === 'listening' });
+    },
+    // The composer IS the preview: he watches the words arrive, punctuated as
+    // they will be sent, in the box they will be sent from.
+    onInterim: (text) => (text ? showInterim(text) : clearInterim()),
+    // Straight through the ordinary send, so a spoken turn carries the chips he
+    // pointed at and honours /clear and /stop exactly like a typed one. Only send
+    // what speech actually OWNS: if he is mid-way through typing something the
+    // composer is his, and sending would fire his half-written line instead.
+    onSettled: (text) => {
+      if (showInterim(text)) send();
+      else entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not sent`));
+    },
+    isSpeaking: () => speakingId !== null,
+    stopSpeaking: bargeIn,
+  });
   paintVoiceButton(voice.state);
 }
 
