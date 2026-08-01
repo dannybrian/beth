@@ -79,6 +79,16 @@ These cost hours. Don't rediscover them.
   button, deliberately.
 - **A spoken turn must never return zero chunks** — ElevenLabs re-delivers the transcript
   when it gets nothing, which restarts that same loop.
+- **ElevenLabs sends a GROWING utterance as several transcripts** while you are still
+  talking, each with a new `event_id`. The SDK's model — abort the in-flight LLM call,
+  start a new one — is right for a stateless completion and wrong for a long-lived
+  director session, where every `session.send()` appends a user turn that cannot be
+  un-sent. Acting per transcript turned one sentence into five concurrent turns talking
+  over each other. `voice.ts` waits for the transcript to stop changing
+  (`HARNESS_VOICE_SETTLE_MS`) and sends exactly one.
+  Deferring the response is safe: the SDK leaves `inTranscriptHandler` true until the
+  session closes, and `streamResponse` captures the CURRENT `event_id`, so a late
+  response lands against the newest transcript — the one you want to answer.
 - **The ElevenLabs API-key permission is the row labelled "ElevenAgents"** (Write). There
   is no "Speech Engine" or "Conversational AI" entry. TTS/STT permissions are *not*
   needed — speech happens inside the Speech Engine session.

@@ -175,13 +175,14 @@ export class VoiceService {
           this.bus.publish({ type: 'voice', state: 'ignored', detail: utterance.trim(), status: this.status() });
           return;
         }
-        this.turnActive = true;
-        session.sendResponse(this.runTurn(utterance)).finally(() => {
-          this.turnActive = false;
-        });
+        this.scheduleTurn(utterance, session);
       },
       onClose: () => {
         this.liveSession = null;
+        // A pending turn belongs to a session that no longer exists.
+        if (this.settleTimer) clearTimeout(this.settleTimer);
+        this.settleTimer = null;
+        this.lastAnswered = '';
         this.endSession();
       },
       onError: (err: unknown) => {
@@ -200,6 +201,54 @@ export class VoiceService {
   /** Stop accepting Speech Engine connections without closing the HTTP server. */
   close() {
     this.attachment?.close?.();
+  }
+
+  /**
+   * Start ONE director turn once Danny has stopped talking.
+   *
+   * ElevenLabs delivers a growing utterance as several transcripts while he is
+   * still speaking — "…on this plan." then "…on this plan, but let's review."
+   * then "…but let's review, uh, if anything was missed." The SDK's model is to
+   * abort the in-flight LLM call and start a new one per transcript, which is
+   * right for a stateless completion and WRONG here: every session.send() appends
+   * a user turn to a long-lived conversation that cannot be un-sent. Acting on
+   * each revision turned one sentence into five director turns, each doing its
+   * own tool calls, talking over each other.
+   *
+   * So revisions only reset a timer; the turn fires when the transcript has been
+   * still for `voiceSettleMs`. Deferring is safe because the SDK keeps
+   * `inTranscriptHandler` true until the session closes, and captures the CURRENT
+   * event id when the response starts — so a late response lands against the
+   * newest transcript, which is exactly the one we want to answer.
+   */
+  private settleTimer: NodeJS.Timeout | null = null;
+  private pendingUtterance = '';
+  private lastAnswered = '';
+
+  private scheduleTurn(utterance: string, session: any) {
+    this.pendingUtterance = utterance;
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    // Surfaced so an early or late turn is diagnosable without guessing.
+    this.bus.publish({ type: 'voice', state: 'hearing', detail: utterance, status: this.status() });
+
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      const text = this.pendingUtterance;
+
+      // ElevenLabs re-delivers a transcript it thinks went unanswered. Answering
+      // it again would repeat Beth's reply and burn a second turn on a question
+      // already asked, so an identical settled utterance is dropped.
+      if (text === this.lastAnswered) {
+        this.bus.publish({ type: 'voice', state: 'duplicate', detail: text, status: this.status() });
+        return;
+      }
+      this.lastAnswered = text;
+      this.turnActive = true;
+      session.sendResponse(this.runTurn(text)).finally(() => {
+        this.turnActive = false;
+      });
+    }, this.cfg.voiceSettleMs);
+    this.settleTimer.unref?.();
   }
 
   /**

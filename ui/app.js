@@ -328,7 +328,11 @@ const handlers = {
   model: (m) => {
     $('model-select').value = m.model;
   },
-  user: renderUser,
+  // The turn was sent — the preview has become a real message in the transcript.
+  user: (m) => {
+    clearInterim();
+    renderUser(m);
+  },
   assistant: renderAssistant,
   say: (m) => {
     renderSay(m);
@@ -362,7 +366,13 @@ const handlers = {
     $('usage-label').textContent = '';
     entry('activity', (n) => (n.textContent = '— new conversation —'));
   },
-  voice: (m) => renderVoice(m.status, m.detail),
+  voice: (m) => {
+    // 'hearing' is a transcript revision — he is mid-sentence. Anything else
+    // means that utterance is over, one way or another.
+    if (m.state === 'hearing') showInterim(m.detail ?? '');
+    else if (m.state === 'ignored' || m.state === 'duplicate' || m.state === 'disconnected') clearInterim();
+    renderVoice(m.status, m.detail);
+  },
   event: (m) => {
     renderEvent(m);
     feedEvent(m.event);
@@ -375,6 +385,34 @@ const voiceBtn = $('voice-toggle');
 // Icon only — the composer has no room for words, and colour already carries the
 // state (grey off, green armed-and-free, red live-and-billed).
 const LABEL = { off: '🎙', armed: '🎙', connected: '🎙', error: '⚠' };
+
+// --- live speech preview -----------------------------------------------------
+//
+// The transcript already arrives over the open websocket and billing is by
+// connection duration, so showing it costs nothing. It makes the settle window
+// legible: Danny can see what was heard and watch it grow before it is sent.
+
+/** True while the composer is displaying speech rather than something typed. */
+let speechOwnsInput = false;
+
+function showInterim(text) {
+  // Never clobber something typed. His words win; speech only fills a box it
+  // either already owns or found empty.
+  if (!speechOwnsInput && input.value.trim()) return;
+  speechOwnsInput = true;
+  input.value = text;
+  input.classList.add('interim');
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+}
+
+function clearInterim() {
+  if (!speechOwnsInput) return;
+  speechOwnsInput = false;
+  input.value = '';
+  input.classList.remove('interim');
+  input.style.height = 'auto';
+}
 
 function renderVoice(status, detail) {
   if (!status) return;
@@ -389,20 +427,20 @@ const voice = new VoiceClient((state, detail) => {
   voiceBtn.textContent = LABEL[state] ?? state;
   voiceBtn.className = `voice ${state}`;
   voiceBtn.title =
-    state === 'armed'
+    (state === 'armed'
       ? 'Listening locally — free. A paid session opens when you speak.'
       : state === 'connected'
         ? 'Live session — billed per minute. Closes itself after silence.'
         : state === 'error'
           ? (detail ?? 'voice error')
-          : 'Voice off';
+          : 'Voice off') + '  (keypad 0)';
   if (detail) console.log('[voice]', detail);
   fetch('/api/voice/status')
     .then((r) => r.json())
     .then((s) => renderVoice(s));
 });
 
-voiceBtn.onclick = async () => {
+const toggleVoice = async () => {
   try {
     if (voice.state === 'off') await voice.arm();
     else await voice.off();
@@ -412,6 +450,16 @@ voiceBtn.onclick = async () => {
     voiceBtn.title = String(e);
   }
 };
+voiceBtn.onclick = toggleVoice;
+
+// Keypad 0 toggles voice from anywhere, INCLUDING while the composer has focus —
+// the composer is autofocused, so a hotkey that deferred to it would never fire
+// when it is actually wanted. Only Numpad0 is taken; the top-row 0 still types.
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Numpad0' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  e.preventDefault();
+  void toggleVoice();
+});
 
 const stream = new EventSource('/api/stream');
 stream.onmessage = (ev) => {
@@ -428,6 +476,8 @@ const send = () => {
   if (!text && !refs.length) return;
   input.value = '';
   input.style.height = 'auto';
+  speechOwnsInput = false;
+  input.classList.remove('interim');
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
@@ -440,6 +490,11 @@ $('interrupt').onclick = () => post('/api/interrupt');
 $('clear').onclick = () => post('/api/clear');
 $('model-select').onchange = (e) => post('/api/model', { model: e.target.value });
 input.addEventListener('input', () => {
+  // Typing takes the box back from the speech preview.
+  if (speechOwnsInput) {
+    speechOwnsInput = false;
+    input.classList.remove('interim');
+  }
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
 });

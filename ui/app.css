@@ -11,9 +11,26 @@
   --err: #e06c75;
   --ok: #98c379;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --scroll-track: #101317;
+  --scroll-thumb: #333a44;
+  --scroll-thumb-hi: #48515e;
 }
 
 * { box-sizing: border-box; }
+
+/* Scrollbars. `color-scheme` alone fixes the native light-grey ones on macOS;
+   the rest styles them to match the panels rather than merely darkening them. */
+:root { color-scheme: dark; scrollbar-color: var(--scroll-thumb) var(--scroll-track); scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--scroll-track); }
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 6px;
+  /* Inset the thumb so it reads as a bar, not a filled gutter. */
+  border: 2px solid var(--scroll-track);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hi); }
+::-webkit-scrollbar-corner { background: var(--scroll-track); }
 
 body {
   margin: 0;
@@ -359,6 +376,14 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   max-height: 160px;
 }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
+/* Speech in flight — provisional, and sent by stopping, not by Enter. Styled
+   distinctly so it never reads as text he typed and is waiting to send. */
+.composer textarea.interim {
+  color: var(--say);
+  font-style: italic;
+  border-color: color-mix(in srgb, var(--say) 45%, transparent);
+  background: color-mix(in srgb, var(--say) 7%, #1b1f26);
+}
 .composer button {
   background: var(--accent);
   border: none;

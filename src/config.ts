@@ -52,6 +52,15 @@ export type HarnessConfig = {
    * never spoken, so quick replies are not prefaced with a stall.
    */
   fillerDelayMs: number;
+  /**
+   * How long the transcript must stop changing before a spoken turn is started.
+   *
+   * ElevenLabs delivers a growing utterance as SEVERAL transcripts while you are
+   * still talking. Acting on each one starts a separate director turn, so one
+   * sentence became five. Raise this if turns still fire mid-sentence; lower it
+   * if the reply feels sluggish.
+   */
+  voiceSettleMs: number;
 };
 
 // The director session runs all day and every turn carries full repo context, so
@@ -109,5 +118,6 @@ export function loadConfig(): HarnessConfig {
         ? null
         : ((process.env.HARNESS_VOICE_EFFORT ?? 'low') as HarnessConfig['voiceEffort']),
     fillerDelayMs: Number(process.env.HARNESS_FILLER_DELAY_MS ?? 1500),
+    voiceSettleMs: Number(process.env.HARNESS_VOICE_SETTLE_MS ?? 900),
   };
 }
