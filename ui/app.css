@@ -380,6 +380,9 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 /* A live claim is a hard no, and it should look like one. */
 .work-item .handoff.blocked { opacity: 1; color: var(--err); cursor: not-allowed; }
 .work-item .handoff.blocked:hover { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
+/* Danny's queue — the one status that is a call to action, so it gets the
+   attention colour rather than a progress colour. */
+.work-item.status-awaiting-eyes { border-left: 3px solid var(--warn); }
 .work-item.status-blocked { border-left: 3px solid var(--err); }
 .work-item.status-active { border-left: 3px solid var(--ok); }
 .work-item.status-planning { border-left: 3px solid var(--line); }

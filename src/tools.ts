@@ -117,12 +117,12 @@ export function createHarnessTools(deps: {
       scope: z
         .enum(['in-flight', 'all'])
         .default('in-flight')
-        .describe('in-flight = active, blocked and planning. Use all only when explicitly asked about parked or shipped work.'),
+        .describe('in-flight = awaiting-eyes, active, blocked and planning. Use all only when explicitly asked about parked or shipped work.'),
       match: z.string().optional().describe('Filter to plans whose spoken name, title or path contains this.'),
       tasks: z.boolean().default(false).describe('Include the full task list per plan, not just counts. Verbose — ask for it only when the tasks themselves are the question.'),
     },
     async ({ scope, match, tasks }) => {
-      const base = scope === 'all' ? deps.work.all() : deps.work.inFlight();
+      const base = scope === 'all' ? deps.work.all() : deps.work.live();
       const needle = match?.toLowerCase();
       const hits = needle
         ? base.filter((i) =>

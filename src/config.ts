@@ -121,7 +121,13 @@ export function loadConfig(): HarnessConfig {
     claudeBin: process.env.HARNESS_CLAUDE_BIN ?? path.join(os.homedir(), '.local/bin/claude'),
     stateDir,
     eventLogPath: path.join(repo, '.claude', 'events.jsonl'),
-    directorPlan: process.env.HARNESS_DIRECTOR_PLAN ?? 'plans/2026-07-30-director-consolidation.md',
+    // Read from the bound repo's .env like every other setting. It was
+    // process.env only, so a non-beadgame repo needed a shell wrapper to export
+    // it — and the default below is beadgame's own plan path, which is exactly
+    // the project-specific knowledge this harness is not supposed to hold. Set
+    // HARNESS_DIRECTOR_PLAN in each repo's .env and the default stops mattering.
+    directorPlan:
+      process.env.HARNESS_DIRECTOR_PLAN ?? env.HARNESS_DIRECTOR_PLAN ?? 'plans/2026-07-30-director-consolidation.md',
     planRoots: (process.env.HARNESS_PLAN_ROOTS ?? '')
       .split(',')
       .map((s) => s.trim())

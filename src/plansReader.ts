@@ -14,7 +14,22 @@ import { liveRecords } from './directorRole.ts';
 import { stripMarkdown, taskSpoken } from './spokenName.ts';
 import type { WorkClaim, WorkItemDraft, WorkStatus, WorkTask } from './workItems.ts';
 
-const KNOWN_STATUS: WorkStatus[] = ['idea', 'planning', 'active', 'blocked', 'shipped', 'parked', 'unknown'];
+// Union of the vocabularies across Danny's repos: beadgame's plans/README adds
+// `review`; tulito adds `awaiting-eyes`, which its own README calls "the reason
+// this workflow was ported". A status the harness does not know falls to
+// `unknown`, drops out of the live set, and becomes invisible — which is what
+// happened to every awaiting-eyes plan.
+const KNOWN_STATUS: WorkStatus[] = [
+  'idea',
+  'planning',
+  'active',
+  'blocked',
+  'awaiting-eyes',
+  'review',
+  'shipped',
+  'parked',
+  'unknown',
+];
 
 /** Directories never worth walking, whatever they contain. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'tmp', 'logs', 'releases', 'old', '.next', 'Library']);

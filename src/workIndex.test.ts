@@ -121,6 +121,56 @@ test('a reference to a plan that has gone is reported, not silently dropped', as
   });
 });
 
+test('awaiting-eyes reaches the LIVE set and leads the grouping', async () => {
+  // Two separate failures were possible here. It has to be in the live set at
+  // all — main.ts filters the stream by exactly that, so a status outside it
+  // never reaches the panel. And it has to lead: this is Danny's queue, and
+  // burying it under thirty active plans is what made it invisible in practice.
+  const idx = new WorkIndex([
+    {
+      name: 'test',
+      watchRoots: () => [],
+      read: () => [
+        { path: 'p/a.md', title: 'Active one', status: 'active' as const, tags: [], claim: null, tasks: [], reader: 't' },
+        { path: 'p/e.md', title: 'Eyes one', status: 'awaiting-eyes' as const, tags: [], claim: null, tasks: [], reader: 't' },
+        { path: 'p/s.md', title: 'Shipped one', status: 'shipped' as const, tags: [], claim: null, tasks: [], reader: 't' },
+      ],
+    },
+  ]);
+  idx.refresh();
+
+  assert.ok(
+    idx.live().some((i) => i.status === 'awaiting-eyes'),
+    'must be in the live set or the panel never receives it'
+  );
+  assert.equal(idx.live().length, 2, 'shipped stays out');
+  assert.equal(idx.grouped()[0].status, 'awaiting-eyes', 'leads the panel');
+
+  // …but it is NOT work in progress, and must not be reported as such.
+  assert.ok(!idx.inFlight().some((i) => i.status === 'awaiting-eyes'));
+  idx.stop();
+});
+
+test('review is recognised but stays out of the live panel', async () => {
+  // beadgame's plans/README defines review as "an audit assigned it and a human
+  // must reclassify" — bookkeeping owed to /tidyrepo, not a deliverable awaiting
+  // judgement. Recognised so it stops falling to `unknown`; out of the live set
+  // so it does not dilute the confirmation queue.
+  const idx = new WorkIndex([
+    {
+      name: 'test',
+      watchRoots: () => [],
+      read: () => [
+        { path: 'p/r.md', title: 'Reclassify me', status: 'review' as const, tags: [], claim: null, tasks: [], reader: 't' },
+      ],
+    },
+  ]);
+  idx.refresh();
+  assert.equal(idx.all()[0].status, 'review', 'not unknown');
+  assert.deepEqual(idx.live(), []);
+  idx.stop();
+});
+
 test('pointing is consumed by the turn that uses it, not merely read', async () => {
   // A spoken turn takes the same references a typed one would, so clicking a
   // plan and then TALKING works. Consuming (not peeking) matches the composer

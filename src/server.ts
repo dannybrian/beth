@@ -75,7 +75,7 @@ export function createServer(deps: {
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
-      send({ type: 'work', items: work.inFlight(), total: work.all().length });
+      send({ type: 'work', items: work.live(), total: work.all().length });
       const unsub = bus.subscribe(send);
       const keepalive = setInterval(() => res.write(': ping\n\n'), 20_000);
       req.on('close', () => {
@@ -204,7 +204,7 @@ export function createServer(deps: {
         // The whole index, for anything the stream's in-flight slice can't answer
         // (search over parked/shipped work, resolving a stale reference).
         const scope = url.searchParams.get('scope');
-        return json(200, { items: scope === 'all' ? work.all() : work.inFlight() });
+        return json(200, { items: scope === 'all' ? work.all() : work.live() });
       }
       if (url.pathname === '/api/state') {
         return json(200, {

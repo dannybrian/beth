@@ -11,7 +11,7 @@
 // instead of the dashboard's 30-second poll.
 import fs from 'node:fs';
 import { assignSpokenNames } from './spokenName.ts';
-import { IN_FLIGHT, isInFlight, taskSummary } from './workItems.ts';
+import { LIVE, isInFlight, isLive, taskSummary } from './workItems.ts';
 import type { WorkItem, WorkReader, WorkRef, WorkStatus } from './workItems.ts';
 
 /** Editors save in bursts (write, rename, chmod). Coalesce before re-reading. */
@@ -110,6 +110,8 @@ export class WorkIndex {
   /** Sorted freshest-first: 30+ plans are active at once, so recency is the only
    *  ordering that keeps the top of the panel worth looking at. */
   inFlight = () => this.items.filter((i) => isInFlight(i.status));
+  /** What the panel and the `plans` tool show: in-flight PLUS awaiting-eyes. */
+  live = () => this.items.filter((i) => isLive(i.status));
   byPath = (p: string) => this.items.find((i) => i.path === p);
 
   /** Resolve a reference back to what it points at. */
@@ -252,7 +254,7 @@ export class WorkIndex {
 
   /** Grouped for display and for the tool, in the harness's in-flight order. */
   grouped(): { status: WorkStatus; items: WorkItem[] }[] {
-    return IN_FLIGHT.map((status) => ({ status, items: this.items.filter((i) => i.status === status) })).filter(
+    return LIVE.map((status) => ({ status, items: this.items.filter((i) => i.status === status) })).filter(
       (g) => g.items.length
     );
   }

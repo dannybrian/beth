@@ -8,15 +8,58 @@
 // (GitHub issues, Linear, a bespoke tracker) supplies its own reader instead.
 
 /** Harness vocabulary. A reader maps whatever the project stores into this. */
-export type WorkStatus = 'idea' | 'planning' | 'active' | 'blocked' | 'shipped' | 'parked' | 'unknown';
+export type WorkStatus =
+  | 'idea'
+  | 'planning'
+  | 'active'
+  | 'blocked'
+  | 'awaiting-eyes'
+  | 'review'
+  | 'shipped'
+  | 'parked'
+  | 'unknown';
 
 /**
- * "In flight" — what the panel shows and what `plans` answers with by default.
- * Ordered: this is also the order the panel groups them in.
+ * Work that is genuinely IN PROGRESS. Note what is not here: `awaiting-eyes` is
+ * not in-flight work, which is exactly why it needs its own set below.
  */
 export const IN_FLIGHT: WorkStatus[] = ['active', 'blocked', 'planning'];
 
+/**
+ * Work that is finished except for DANNY.
+ *
+ * `awaiting-eyes` is tulito's invention and, per its own plans/README, "the
+ * reason this workflow was ported": every mechanical gate has passed and only
+ * his read or listen is owed. That makes it the batched-confirmation queue —
+ * "here are the four things needing your eyes, let's clear them in one sitting"
+ * — which is the single most useful thing the panel can surface.
+ *
+ * It is deliberately NOT folded into IN_FLIGHT. It is not work in progress; it
+ * is work stopped on him, and conflating the two would both misreport progress
+ * and bury the queue among thirty active plans.
+ */
+export const NEEDS_EYES: WorkStatus[] = ['awaiting-eyes'];
+
+/**
+ * What the panel renders, what the stream carries, and what `plans` answers with
+ * by default — ordered, and this is the order the panel groups them in.
+ *
+ * NEEDS_EYES comes FIRST. tulito's terminal board ranks it third (after active
+ * and blocked) and that is right for that reader: an implementer session asking
+ * what is running. This panel has a different reader. It is Danny's surface, and
+ * the one pile here that only he can clear belongs at the top of it.
+ *
+ * `review` is absent on purpose. beadgame's plans/README defines it as a status
+ * an audit assigns when the outcome is unclear and a human must reclassify — it
+ * is bookkeeping owed to /tidyrepo, not a deliverable awaiting judgement, and
+ * mixing it in would dilute the confirmation queue with audit debris. It is a
+ * recognised status (so it stops falling to `unknown`) and shows under "show all".
+ */
+export const LIVE: WorkStatus[] = [...NEEDS_EYES, ...IN_FLIGHT];
+
 export const isInFlight = (s: WorkStatus) => IN_FLIGHT.includes(s);
+export const needsEyes = (s: WorkStatus) => NEEDS_EYES.includes(s);
+export const isLive = (s: WorkStatus) => LIVE.includes(s);
 
 export type WorkTask = {
   /** Ordinal within the item. Identity for a task reference. */

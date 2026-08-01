@@ -10,7 +10,7 @@ import { VoiceService } from './voice.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
-import { isInFlight } from './workItems.ts';
+import { isLive } from './workItems.ts';
 
 const cfg = loadConfig();
 const bus = new ConversationBus();
@@ -21,7 +21,7 @@ const pending = new PendingStore();
 // tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
 const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })]);
 work.subscribe((items) =>
-  bus.publish({ type: 'work', items: items.filter((i) => isInFlight(i.status)), total: items.length })
+  bus.publish({ type: 'work', items: items.filter((i) => isLive(i.status)), total: items.length })
 );
 // A spoken turn consumes pointing server-side; tell the page so its chips clear.
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));

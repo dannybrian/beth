@@ -222,6 +222,7 @@ let refs = [];
 /** Expansion survives re-render; the index republishes on every file save. */
 const expanded = new Set();
 const collapsedGroups = new Set(['blocked', 'planning']);
+// `awaiting-eyes` is deliberately absent: it opens by default, always.
 let workItems = [];
 
 const refKey = (r) => `${r.path}#${r.taskIndex ?? ''}`;
@@ -346,9 +347,11 @@ function renderWorkItem(item) {
   return n;
 }
 
-// In-flight first, then the rest in roughly the order work moves through them.
-const IN_FLIGHT_ORDER = ['active', 'blocked', 'planning'];
-const ALL_ORDER = [...IN_FLIGHT_ORDER, 'idea', 'unknown', 'parked', 'shipped'];
+// awaiting-eyes leads: it is the one pile only Danny can clear, and burying it
+// under thirty active plans is what hid the batched-confirmation queue entirely.
+// Then work in progress, then everything else in roughly lifecycle order.
+const LIVE_ORDER = ['awaiting-eyes', 'active', 'blocked', 'planning'];
+const ALL_ORDER = [...LIVE_ORDER, 'idea', 'review', 'unknown', 'parked', 'shipped'];
 
 /** 'in-flight' (the default) or 'all'. The panel is a work surface, not an archive. */
 let workScope = 'in-flight';
@@ -371,7 +374,7 @@ function renderWork() {
   $('work-scope').textContent = workScope === 'all' ? 'in flight only' : 'show all';
   panel.replaceChildren();
 
-  for (const status of workScope === 'all' ? ALL_ORDER : IN_FLIGHT_ORDER) {
+  for (const status of workScope === 'all' ? ALL_ORDER : LIVE_ORDER) {
     const group = workItems.filter((i) => i.status === status);
     if (!group.length) continue;
     const open = !collapsedGroups.has(status);

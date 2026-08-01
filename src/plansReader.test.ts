@@ -124,6 +124,21 @@ test('reader produces the harness shape from a real tree', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('awaiting-eyes and review survive as themselves, not as unknown', () => {
+  // tulito's vocabulary adds `awaiting-eyes` and its own plans/README calls it
+  // "the reason this workflow was ported" — the batched-confirmation signal.
+  // Falling to `unknown` dropped it out of the live set entirely, so the one
+  // queue only Danny can clear was the one thing the panel hid.
+  const dir = fixture();
+  fs.writeFileSync(path.join(dir, 'plans', '2026-01-05-eyes.md'), '---\nstatus: awaiting-eyes\n---\n\n# Needs a look\n');
+  fs.writeFileSync(path.join(dir, 'plans', '2026-01-06-rev.md'), '---\nstatus: review\n---\n\n# Needs reclassifying\n');
+  const items = createPlansReader({ repo: dir }).read();
+  const byPath = new Map(items.map((i) => [i.path, i]));
+  assert.equal(byPath.get('plans/2026-01-05-eyes.md')?.status, 'awaiting-eyes');
+  assert.equal(byPath.get('plans/2026-01-06-rev.md')?.status, 'review');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('a plan under future/ without frontmatter is parked, not unknown', () => {
   // Mirrors the /plans skill's inference. Without it, dozens of long-abandoned
   // parking-lot ideas surface as `unknown` and land in the panel.
