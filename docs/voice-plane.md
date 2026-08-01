@@ -95,8 +95,14 @@ loopback", which also makes the shell-executing handoff unambiguously safe.
 mic and speakers, the recogniser will happily transcribe HER. That is the television
 problem, self-inflicted. Three defences, cheap and stacking:
 
+> **Settled, 2026-08-01, in the spike with the speakers up: she does not hear herself, and
+> barge-in behaves.** This was the risk that could have sunk the migration, and it did not.
+> The three defences below are enough, and the fifteen lines were fifteen lines.
+
 - `getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })` — the
-  browser's AEC is built for exactly speaker-into-mic,
+  browser's AEC is built for exactly speaker-into-mic. ⚠ But it does **not** reach the
+  Web Speech API recogniser, which opens its own capture and accepts no constraints. This
+  cleans the stream the barge-in gate runs on, and nothing else,
 - pause recognition while audio is playing, resume on `ended`,
 - reuse the RMS meter already in `ui/voice.js` as a barge-in detector: sustained energy
   while she is speaking stops playback and starts listening. That is the interruption
@@ -110,6 +116,25 @@ half a cent a minute. A local whisper is the private option at ~100–300 MB. St
 Web Speech API because it costs nothing to try, and keep the recogniser behind a small
 interface so swapping it is a file, not a rewrite.
 
+**Tried, 2026-08-01.** Recognition itself is good — it hears him accurately. Two things
+it cannot do, and they are the same thing twice:
+
+- **No punctuation, and no way to dictate it.** Chrome returns a flat run of words and has
+  no dictation mode, so "period" arrives as the word "period". The spike ships a spoken-
+  punctuation rewrite as a stopgap; it works, and it also eats a real "the settle period",
+  which is exactly why it is a checkbox and not the answer.
+- **Echo cancellation cannot reach it.** It opens its own microphone and accepts no
+  constraints, so `getUserMedia({ echoCancellation: true })` cleans a stream the recogniser
+  never sees.
+
+Both follow from the same root: with the Web Speech API **we do not own the capture**.
+Scribe reverses that — we hold the `MediaStream`, so AEC applies to the audio the
+recogniser actually gets, and Scribe punctuates properly on its own. The cost is a
+`MediaRecorder` and chunk-posting loop we would otherwise not write, plus half a cent a
+minute and the `speech_to_text` permission. That now looks like the better trade, but the
+echo numbers from the spike decide it: if parking the ear turns out to be enough, owning
+the capture buys only punctuation.
+
 ## Cost
 
 Speech Engine bills $0.08/min **connected**: about $4.80 for an hour of real conversation,
@@ -120,10 +145,27 @@ free when not, and no reason to ever hang up.
 
 ## Order
 
-1. **Spike, half a day.** A throwaway page: Web Speech API → `/api/turn`, plus one
-   endpoint streaming TTS back. Measure round-trip against tonight's trace, and — the
-   part that actually matters — find out how bad the echo is with the speakers up. If
-   barge-in feels wrong here, it will feel wrong shipped.
+1. **Spike, half a day.** BUILT — `spike/voice-plane/`, its own server on 4630, no
+   imports either way. Web Speech API → `/api/turn`, one endpoint streaming TTS back,
+   three duplex modes (open / half / half+barge-in) and a meter that separates the
+   *echo floor* Chrome's AEC lets through from your own voice. Three findings already,
+   before anyone has listened to the echo:
+
+   - the key needed the **`text_to_speech`** permission, because Speech Engine never did
+     the speaking through it. Added; one checkbox in exchange for deleting the tunnel.
+   - **time to first sound is 160 ms warm** (1.16 s on the first request of a process,
+     which is connection setup). Outbound latency is a non-issue.
+   - **the engine's TTS model is not reachable from the standalone endpoint.**
+     `eleven_v3_conversational` is rejected; the spike falls back to `eleven_flash_v2_5`.
+     Same voice, different model — and Flash predates v3 audio tags, so the new plane must
+     strip them. The migration inherits the VOICE, not the engine's speech settings.
+
+   One asymmetry the spike surfaced that the design above assumed away:
+   `SpeechRecognition` grabs its own microphone and **takes no constraints**, so
+   `getUserMedia({ echoCancellation: true })` can only clean up *our* capture. Defence
+   one therefore does not protect the recogniser at all — it protects the barge-in gate.
+   That makes parking the ear during playback load-bearing rather than optional, and
+   makes the RMS gate the only way interruption survives. Worth knowing before step 3.
 2. **Speak-out first, while Speech Engine still handles input.** Outbound is the half that
    is broken today, and it can land on its own: `say` items and announcements go out over
    the new path immediately, with no waiting.

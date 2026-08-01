@@ -182,7 +182,9 @@ These cost hours. Don't rediscover them.
   the same repo and warns when any other is running; see `bin/beth.mjs`.
 - **The ElevenLabs API-key permission is the row labelled "ElevenAgents"** (Write). There
   is no "Speech Engine" or "Conversational AI" entry. TTS/STT permissions are *not*
-  needed — speech happens inside the Speech Engine session.
+  needed — speech happens inside the Speech Engine session. ⚠ The voice-plane spike DOES
+  need **Text to Speech**, because it calls the endpoint directly; today's key does not
+  have it, and that is the one thing standing between `spike/voice-plane/` and a run.
 
 ## Design records
 
@@ -193,9 +195,9 @@ the conversation that produced it. Where things stand:
   server-side TTS, because she can never speak first and outbound speech is the premise.
   Spike the echo/barge-in behaviour first, then land speak-out while Speech Engine still
   carries input; each step leaves a working harness, and the last one is pure deletion.
-- **`status-surface.md`** — not started, and step 1 is minutes of work: the dot tracks
-  anything running, the spinner tracks the prediction. Then the stats move behind the
-  context meter, then the test monitor takes the top right.
+- **`status-surface.md`** — step 1 is BUILT: the dot tracks anything running, the spinner
+  tracks the prediction. Next the stats move behind the context meter, then the test
+  monitor takes the top right.
 - **`personal-context.md`** — not started. A director who remembers the person, not only
   the work.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff

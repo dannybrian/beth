@@ -1,0 +1,474 @@
+<!doctype html>
+<!--
+  Throwaway. See docs/voice-plane.md step 1 and the README beside this file.
+  Everything is inline because nothing here is meant to survive.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>voice-plane spike</title>
+    <style>
+      :root {
+        --bg: #14161a; --panel: #1b1e24; --line: #2b3038; --text: #e6e8ec;
+        --muted: #8b93a1; --accent: #6ea8fe; --ok: #5ad19a; --warn: #e2c04b; --err: #e2685b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+        font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+      }
+      h1 { font-size: 15px; margin: 0 0 2px; }
+      .sub { color: var(--muted); margin-bottom: 16px; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+      button, select, input {
+        background: var(--panel); color: var(--text); border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 11px; font: inherit;
+      }
+      button { cursor: pointer; }
+      button.on { background: var(--ok); color: #0b1a12; border-color: var(--ok); }
+      button.stop { background: var(--err); color: #1a0b0b; border-color: var(--err); }
+      label { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+      .card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .card .v { font: 600 20px/1.3 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+      .card .n { color: var(--muted); font-size: 11px; }
+      .meter { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 6px; position: relative; }
+      .meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.06s linear; }
+      .meter > b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--warn); }
+      #interim { min-height: 22px; color: var(--accent); font-style: italic; margin-bottom: 10px; }
+      #log {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+        padding: 8px 10px; height: 320px; overflow-y: auto;
+        font: 12px/1.6 ui-monospace, monospace;
+      }
+      #log div { border-bottom: 1px solid #23262d; padding: 2px 0; }
+      .t { color: var(--muted); }
+      .heard { color: var(--ok); }
+      .self { color: var(--err); font-weight: 600; }
+      .spoke { color: var(--accent); }
+      .warn { color: var(--warn); }
+      .note { color: var(--muted); max-width: 70ch; margin-top: 14px; }
+      code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>voice-plane spike</h1>
+    <div class="sub" id="banner">loading…</div>
+
+    <div class="row">
+      <button id="mic">Mic on</button>
+      <label>duplex
+        <select id="duplex">
+          <option value="open">open — never pause (measures raw echo)</option>
+          <option value="half" selected>half — park the ear while she speaks</option>
+          <option value="barge">half + barge-in — RMS interrupts her</option>
+        </select>
+      </label>
+      <label>reply
+        <select id="reply">
+          <option value="short">canned · short</option>
+          <option value="medium" selected>canned · medium</option>
+          <option value="long">canned · long</option>
+          <option value="live">live · the real director</option>
+        </select>
+      </label>
+      <label>settle <input id="settle" type="number" value="2500" step="250" style="width: 84px" />ms</label>
+      <label title='Say "period", "comma", "question mark", "new paragraph". Stopgap — it will eat a real "the settle period".'>
+        <input id="dictate" type="checkbox" checked /> spoken punctuation
+      </label>
+      <button id="say">Speak without listening</button>
+    </div>
+
+    <div id="interim">&nbsp;</div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="k">time to first sound</div>
+        <div class="v" id="m-tts">—</div>
+        <div class="n" id="m-tts-n">request → audible</div>
+      </div>
+      <div class="card">
+        <div class="k">turn round trip</div>
+        <div class="v" id="m-turn">—</div>
+        <div class="n">settle → her words</div>
+      </div>
+      <div class="card">
+        <div class="k">heard herself</div>
+        <div class="v" id="m-self">0</div>
+        <div class="n" id="m-self-n">transcripts while speaking</div>
+      </div>
+      <div class="card">
+        <div class="k">mic level</div>
+        <div class="v" id="m-rms">—</div>
+        <div class="meter"><i id="rms-bar"></i><b id="rms-thresh"></b></div>
+        <div class="n" id="m-rms-n">echo floor — · your voice —</div>
+      </div>
+    </div>
+
+    <div id="log"></div>
+
+    <p class="note">
+      The question is the third card. In <b>open</b> duplex, every red line is her voice
+      coming back through the mic — that is the television problem, and the count is the
+      verdict. The fourth card is the other half: the echo floor is the peak level the
+      browser's AEC lets through <em>while she is speaking and you are silent</em>. If it
+      stays well under your own voice, an RMS gate is a barge-in detector and
+      <code>half + barge-in</code> is the shape to ship.
+    </p>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const log = (cls, msg) => {
+        const d = document.createElement('div');
+        const t = new Date().toLocaleTimeString('en-GB');
+        d.innerHTML = `<span class="t">${t}</span> <span class="${cls}">${msg.replace(/</g, '&lt;')}</span>`;
+        $('log').prepend(d);
+      };
+
+      // --- canned replies ------------------------------------------------------
+      // Her register, three lengths. Canned is the DEFAULT because an echo test
+      // needs the same audio every time — a real reply varies, and then you are
+      // comparing two things at once.
+      const CANNED = {
+        short: 'Right — running the suite now.',
+        medium:
+          'I have got the settle window down to two and a half seconds, and the turn no longer fires mid-sentence. Tests are green. Do you want me to commit that, or hold it while we look at the barge-in behaviour?',
+        long:
+          'So the shape of it is this. The page recognises speech and posts a turn, exactly the way the typed path already does, which means pointing and references come along for free. Coming back the other way, the harness holds a queue of spoken lines and the page plays each one as an audio element, so the browser does the buffering and there is no new transport to build. What that buys us is the thing Speech Engine could never do: she can speak first, without a transcript to answer and without anyone touching the mic. The cost is that echo becomes ours to handle, which is what this page is for. If the mic hears her through the speakers, everything else is academic.',
+      };
+
+      // --- dictated punctuation --------------------------------------------------
+      // The Web Speech API punctuates barely at all and offers no dictation mode,
+      // so "period" arrives as the word. This is the stopgap, not the answer: the
+      // answer is Scribe, which punctuates properly and — because we would then own
+      // the capture — also lets echo cancellation reach the recogniser.
+      //
+      // ⚠ It WILL eat a real "the settle period". That is the cost of the trick and
+      // the reason it is a checkbox: watch the log line, which shows the rewrite.
+      const DICTATION = [
+        [/\b(?:full stop|period)\b/gi, '.'],
+        [/\bcomma\b/gi, ','],
+        [/\bquestion mark\b/gi, '?'],
+        [/\bexclamation (?:mark|point)\b/gi, '!'],
+        [/\bsemicolon\b/gi, ';'],
+        [/\bcolon\b/gi, ':'],
+        [/\b(?:dash|em dash)\b/gi, '—'],
+        [/\bopen (?:paren|parenthesis|bracket)\b/gi, '('],
+        [/\bclose (?:paren|parenthesis|bracket)\b/gi, ')'],
+        [/\bnew paragraph\b/gi, '\n\n'],
+        [/\bnew line\b/gi, '\n'],
+      ];
+
+      function punctuate(text) {
+        let out = text;
+        for (const [re, ch] of DICTATION) out = out.replace(re, ch);
+        return out
+          .replace(/[ \t]+([.,;:!?)])/g, '$1') // no space before punctuation
+          .replace(/([(])[ \t]+/g, '$1')
+          .replace(/([.!?])[ \t]*(\S)/g, '$1 $2') // exactly one after a stop
+          .replace(/[ \t]*\n[ \t]*/g, '\n') // a break owns its own whitespace
+          .replace(/[ \t]{2,}/g, ' ')
+          .replace(/(^|[.!?] |\n)([a-z])/g, (_, pre, c) => pre + c.toUpperCase())
+          .trim();
+      }
+
+      // --- state ---------------------------------------------------------------
+      let rec = null;
+      let armed = false;
+      let parked = false; // deliberately stopped while she speaks
+      let consumedUpTo = 0;
+      let settleTimer = null;
+      let pendingText = '';
+      let speaking = false;
+      let selfHeard = 0;
+      let spokenWords = new Set();
+      let turnStart = 0;
+      let echoFloor = 0; // peak RMS heard while she speaks and you do not
+      let voicePeak = 0; // peak RMS heard while she is silent
+      const audio = new Audio();
+      audio.preload = 'auto';
+
+      fetch('/config')
+        .then((r) => r.json())
+        .then((c) => {
+          const v = c.voice
+            ? `voice ${c.voice.voiceId.slice(0, 8)}… · ${c.voice.modelId} · from ${c.voice.source}`
+            : `⚠ no voice — ${c.reason}`;
+          $('banner').textContent = `${v} · harness ${c.harnessUp ? `up on ${c.harnessPort}` : 'not running (canned replies only)'}`;
+          if (!c.harnessUp && $('reply').value === 'live') $('reply').value = 'medium';
+          if (c.harnessUp) openStream();
+        });
+
+      // --- speech recognition ---------------------------------------------------
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        $('banner').textContent = '⚠ no SpeechRecognition in this browser — use Chrome';
+        $('mic').disabled = true;
+      }
+
+      // EXACTLY ONE recogniser at a time. Chrome ends a session on its own schedule
+      // (and on every `no-speech`), so the restart loop is unavoidable — but a
+      // superseded instance keeps firing results at the old handlers, and two live
+      // recognisers each run their own settle timer. That is what turned one
+      // utterance into two turns: two `speaking` lines a beat apart, the second
+      // `audio.src` aborting the first with `AbortError`. Every handler checks it
+      // is still the current instance before doing anything.
+      function startRec() {
+        if (rec) return;
+        const r = new SR();
+        rec = r;
+        r.continuous = true;
+        r.interimResults = true;
+        r.lang = 'en-US';
+        consumedUpTo = 0;
+        r.onresult = (e) => rec === r && onResult(e);
+        // `no-speech` is ordinary — Chrome says it every time a session times out
+        // in silence. Only say so in the log when it is something else.
+        r.onerror = (e) => e.error !== 'no-speech' && log('warn', `recogniser error: ${e.error}`);
+        r.onend = () => {
+          if (rec !== r) return;
+          rec = null;
+          if (armed && !parked) startRec();
+        };
+        r.start();
+      }
+
+      /** Drop the current recogniser AND its handlers, so it cannot speak again. */
+      function stopRec() {
+        const r = rec;
+        if (!r) return;
+        rec = null;
+        r.onresult = r.onerror = r.onend = null;
+        try {
+          r.stop();
+        } catch {
+          /* already ending */
+        }
+      }
+
+      function onResult(e) {
+        let text = '';
+        for (let i = consumedUpTo; i < e.results.length; i++) text += e.results[i][0].transcript;
+        text = text.trim();
+        // Show the SENT form, not the heard one: watching "period" become a full
+        // stop as you say it is the only way to know the rewrite is right BEFORE the
+        // turn goes. `pendingText` stays raw, so the log can still show both.
+        $('interim').textContent = (text && $('dictate').checked ? punctuate(text) : text) || ' ';
+        if (!text) return;
+
+        // Anything heard while audio is playing is a candidate self-hearing. Score
+        // the overlap against what she is actually saying, so "he happened to talk
+        // over her" and "the mic ate her own voice" stay distinguishable.
+        if (speaking) {
+          const words = text.toLowerCase().split(/\W+/).filter(Boolean);
+          const hits = words.filter((w) => spokenWords.has(w)).length;
+          const pct = words.length ? Math.round((100 * hits) / words.length) : 0;
+          if (pct >= 50) {
+            selfHeard++;
+            $('m-self').textContent = selfHeard;
+            $('m-self-n').textContent = `last was ${pct}% her words`;
+            log('self', `HEARD HERSELF (${pct}% overlap): "${text}"`);
+          } else {
+            log('heard', `over her: "${text}"`);
+          }
+        }
+
+        clearTimeout(settleTimer);
+        pendingText = text;
+        settleTimer = setTimeout(() => {
+          consumedUpTo = e.results.length;
+          $('interim').textContent = ' ';
+          const raw = pendingText.trim();
+          pendingText = '';
+          // A self-hearing must not become a turn — that is the loop where she
+          // answers herself, which is the failure this whole page is looking for.
+          if (speaking) return void log('warn', `swallowed while speaking: "${raw}"`);
+          if (!raw) return;
+          const t = $('dictate').checked ? punctuate(raw) : raw;
+          if (t !== raw) log('t', `punctuated: "${raw}" → "${t}"`);
+          sendTurn(t);
+        }, Number($('settle').value) || 2500);
+      }
+
+      $('mic').onclick = async () => {
+        if (armed) {
+          armed = false;
+          parked = false;
+          stopRec();
+          $('mic').textContent = 'Mic on';
+          $('mic').className = '';
+          log('t', 'mic off');
+          return;
+        }
+        armed = true;
+        $('mic').textContent = 'Mic off';
+        $('mic').className = 'on';
+        startRec();
+        startMeter();
+        log('t', 'mic on');
+      };
+
+      // --- turns ----------------------------------------------------------------
+      async function sendTurn(text) {
+        log('heard', `→ turn: "${text}"`);
+        turnStart = performance.now();
+        const mode = $('reply').value;
+        if (mode !== 'live') return void speak(CANNED[mode]);
+        try {
+          const r = await fetch('/turn', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+          if (!r.ok) log('warn', `turn refused: ${JSON.stringify(await r.json())}`);
+        } catch (e) {
+          log('warn', `turn failed: ${e}`);
+        }
+      }
+
+      /** Live replies arrive on the harness's own bus, proxied on loopback. */
+      function openStream() {
+        const es = new EventSource('/stream');
+        es.onmessage = (ev) => {
+          const m = JSON.parse(ev.data);
+          if (m.type !== 'assistant' && m.type !== 'say') return;
+          if ($('reply').value !== 'live') return;
+          // voiceText is the excerpt spoken.ts already decided on — the new plane
+          // speaks exactly what the old one did.
+          const text = m.voiceText ?? m.text;
+          if (text) speak(text);
+        };
+      }
+
+      // --- speaking -------------------------------------------------------------
+      // One line at a time, and a backlog waits its turn. Assigning `audio.src`
+      // while a play() is still resolving aborts it — the browser says
+      // `AbortError: interrupted by a new load request`, and both lines are lost.
+      const speakQueue = [];
+
+      async function speak(text) {
+        if (speaking) {
+          speakQueue.push(text);
+          return void log('warn', `queued behind her (${speakQueue.length} waiting)`);
+        }
+        if (turnStart) {
+          $('m-turn').textContent = `${Math.round(performance.now() - turnStart)}ms`;
+          turnStart = 0;
+        }
+        spokenWords = new Set(text.toLowerCase().split(/\W+/).filter(Boolean));
+        const duplex = $('duplex').value;
+        if (duplex !== 'open') park();
+        speaking = true;
+        echoWindowPeak = 0;
+        log('spoke', `speaking ${text.length} chars…`);
+
+        const t0 = performance.now();
+        audio.src = `/tts?text=${encodeURIComponent(text)}&n=${Date.now()}`;
+        const onPlaying = () => {
+          const ms = Math.round(performance.now() - t0);
+          $('m-tts').textContent = `${ms}ms`;
+          $('m-tts-n').textContent = `${text.length} chars`;
+          log('spoke', `first sound at ${ms}ms`);
+          audio.removeEventListener('playing', onPlaying);
+        };
+        audio.addEventListener('playing', onPlaying);
+        try {
+          await audio.play();
+        } catch (e) {
+          log('warn', `playback blocked: ${e} — click the page once`);
+          endSpeaking();
+        }
+      }
+
+      audio.addEventListener('ended', endSpeaking);
+      audio.addEventListener('error', () => {
+        log('warn', 'audio error — check the server log; a 502 here is usually the API key');
+        endSpeaking();
+      });
+
+      function endSpeaking() {
+        if (!speaking) return;
+        speaking = false;
+        if (echoWindowPeak) {
+          echoFloor = Math.max(echoFloor, echoWindowPeak);
+          $('m-rms-n').textContent = `echo floor ${echoFloor.toFixed(3)} · your voice ${voicePeak.toFixed(3)}`;
+        }
+        const next = speakQueue.shift();
+        if (next) return void speak(next);
+        // A short guard before the ear reopens: the tail of the speaker output is
+        // still in the room, and reopening into it is the same bug as never
+        // having closed.
+        setTimeout(() => armed && !speaking && unpark(), 300);
+      }
+
+      function park() {
+        if (parked) return;
+        parked = true;
+        stopRec();
+        log('t', 'ear parked');
+      }
+      function unpark() {
+        if (!parked) return;
+        parked = false;
+        startRec();
+        log('t', 'ear open');
+      }
+
+      $('say').onclick = () => speak(CANNED[$('reply').value] ?? CANNED.medium);
+
+      // --- the meter -------------------------------------------------------------
+      // Our OWN capture, with echo cancellation asked for explicitly. The recogniser
+      // grabs its own mic and takes no constraints, so this stream is the only place
+      // we can see whether AEC actually suppresses her — and it is the signal a
+      // barge-in gate would run on.
+      let echoWindowPeak = 0;
+      let overThresholdSince = 0;
+      const THRESH = 0.045;
+
+      async function startMeter() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+          const ctx = new AudioContext();
+          const node = ctx.createAnalyser();
+          node.fftSize = 1024;
+          ctx.createMediaStreamSource(stream).connect(node);
+          const buf = new Float32Array(node.fftSize);
+          $('rms-thresh').style.left = `${Math.min(100, THRESH * 400)}%`;
+          setInterval(() => {
+            node.getFloatTimeDomainData(buf);
+            let sum = 0;
+            for (const s of buf) sum += s * s;
+            const rms = Math.sqrt(sum / buf.length);
+            $('m-rms').textContent = rms.toFixed(3);
+            $('rms-bar').style.width = `${Math.min(100, rms * 400)}%`;
+            $('rms-bar').style.background = rms > THRESH ? 'var(--warn)' : 'var(--accent)';
+
+            if (speaking) {
+              echoWindowPeak = Math.max(echoWindowPeak, rms);
+              if ($('duplex').value === 'barge') {
+                // Sustained, not instantaneous: a door closing is not an interruption.
+                if (rms > THRESH) {
+                  overThresholdSince ||= performance.now();
+                  if (performance.now() - overThresholdSince > 250) {
+                    log('warn', `barge-in at ${rms.toFixed(3)} — stopping her`);
+                    audio.pause();
+                    endSpeaking();
+                    overThresholdSince = 0;
+                  }
+                } else overThresholdSince = 0;
+              }
+            } else {
+              voicePeak = Math.max(voicePeak, rms);
+              overThresholdSince = 0;
+            }
+          }, 50);
+        } catch (e) {
+          log('warn', `no meter: ${e}`);
+        }
+      }
+    </script>
+  </body>
+</html>
