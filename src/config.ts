@@ -33,6 +33,12 @@ export type HarnessConfig = {
    * tags are stripped from the voice path too, so the voice never reads them aloud.
    */
   audioTagsSupported: boolean;
+  /**
+   * Reasoning effort applied for the life of a voice session, then restored.
+   * Spoken conversation trades depth for latency; typed work keeps full effort.
+   * Set HARNESS_VOICE_EFFORT=off to disable the switch entirely.
+   */
+  voiceEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
 };
 
 // The director session runs all day and every turn carries full repo context, so
@@ -81,5 +87,9 @@ export function loadConfig(): HarnessConfig {
     speechEngineId: process.env.SPEECH_ENGINE_ID ?? env.SPEECH_ENGINE_ID,
     publicWsUrl: process.env.HARNESS_PUBLIC_WS_URL ?? env.HARNESS_PUBLIC_WS_URL,
     audioTagsSupported: process.env.HARNESS_AUDIO_TAGS !== '0',
+    voiceEffort:
+      process.env.HARNESS_VOICE_EFFORT === 'off'
+        ? null
+        : ((process.env.HARNESS_VOICE_EFFORT ?? 'low') as HarnessConfig['voiceEffort']),
   };
 }

@@ -69,6 +69,7 @@ export class SessionManager {
   private sessionIdValue = '';
   private lastCost = 0;
   private modelValue = '';
+  private turnSeq = 0;
   role: RoleAssessment;
 
   private cfg: HarnessConfig;
@@ -156,11 +157,18 @@ export class SessionManager {
     return { resumed: Boolean(resume) };
   }
 
-  /** Push a turn. Note: turns pushed close together COALESCE into one turn. */
-  send(text: string, opts: { silent?: boolean } = {}) {
+  /**
+   * Push a turn. Returns a turn number that later `status` messages carry, so a
+   * consumer can tell ITS turn finishing from any other turn finishing — without
+   * that, a voice stream ends on whatever `idle` happens to arrive first.
+   * Note: turns pushed close together COALESCE into one turn.
+   */
+  send(text: string, opts: { silent?: boolean } = {}): number {
+    const turn = ++this.turnSeq;
     if (!opts.silent) this.bus.publish({ type: 'user', text });
-    this.bus.publish({ type: 'status', state: 'thinking' });
+    this.bus.publish({ type: 'status', state: 'thinking', turn });
     this.input.push(userMsg(text));
+    return turn;
   }
 
   async interrupt() {
@@ -288,6 +296,7 @@ export class SessionManager {
     this.bus.publish({
       type: 'status',
       state: m.is_error ? 'error' : 'idle',
+      turn: this.turnSeq,
       detail: m.is_error ? (m.errors ?? []).join('; ').slice(0, 200) : undefined,
     });
   }

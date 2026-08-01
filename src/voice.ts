@@ -145,14 +145,28 @@ export class VoiceService {
       onInit: (conversationId: string) => {
         this.connectedAt = Date.now();
         this.lastActivityAt = Date.now();
+        // Spoken conversation wants answers in seconds; the director turn, not TTS,
+        // is what makes voice feel slow. Drop effort for the life of the voice
+        // session and restore it when the session closes, so typed work keeps full
+        // reasoning. Runtime effort mutation was proven in the Phase 0 spike.
+        if (this.cfg.voiceEffort) {
+          void this.session.setEffort(this.cfg.voiceEffort).catch(() => {});
+          console.log(`  voice: effort → ${this.cfg.voiceEffort} for this session`);
+        }
         this.publishVoice('connected', `voice session ${String(conversationId).slice(0, 12)}…`);
       },
       onTranscript: (transcript: Transcript, signal: AbortSignal, session: any) => {
         this.lastActivityAt = Date.now();
-        // Barge-in: Speech Engine aborts the in-flight response when Danny speaks
-        // over it. That is exactly our interrupt semantics, so forward it.
+        // ⚠️ Do NOT call Query.interrupt() here. Speech Engine aborts the in-flight
+        // response for ordinary transcript REVISIONS (partial → final), not only for
+        // genuine barge-in. Interrupting the director on every revision killed its
+        // turn mid-flight, produced an error result, returned zero chunks, and made
+        // ElevenLabs re-deliver the transcript — an endless ping-pong.
+        // The abort means "stop streaming THIS response", nothing more; the stream
+        // below simply stops feeding chunks. Explicit stop intent ("stop", "hold on")
+        // is what should reach interrupt(), per the plan's turn-taking policy.
         signal.addEventListener('abort', () => {
-          void this.session.interrupt();
+          this.turnActive = false;
         });
         this.liveSession = session;
         const utterance = [...transcript].reverse().find((m) => m.role === 'user')?.content ?? '';
@@ -201,6 +215,13 @@ export class VoiceService {
     const queue: string[] = [];
     let wake: (() => void) | null = null;
     let done = false;
+    let myTurn = -1;
+
+    // Say something immediately. Two jobs: it covers the seconds the director
+    // spends thinking (which dominate round-trip latency, not TTS), and it
+    // guarantees the response is never empty — an empty response makes ElevenLabs
+    // re-deliver the transcript, which is how the ping-pong loop started.
+    queue.push(this.pickFiller());
 
     const push = (s: string) => {
       const text = forVoice(s, this.cfg.audioTagsSupported && this.tagsSupported).trim();
@@ -219,12 +240,16 @@ export class VoiceService {
           push(`Options: ${q.options.map((o) => o.label).join(', ')}.`);
         }
       } else if (m.type === 'status' && (m.state === 'idle' || m.state === 'error')) {
-        done = true;
-        wake?.();
+        // Only MY turn finishing ends this stream. Without the correlation, a
+        // previous turn's `idle` terminated a freshly-started voice turn instantly.
+        if (m.turn === undefined || m.turn >= myTurn) {
+          done = true;
+          wake?.();
+        }
       }
     });
 
-    this.session.send(utterance);
+    myTurn = this.session.send(utterance);
 
     return {
       async *[Symbol.asyncIterator]() {
@@ -244,6 +269,17 @@ export class VoiceService {
     };
   }
 
+  /**
+   * A short acknowledgement spoken while the director thinks. Varied so it does
+   * not become a tic, and deliberately plain — it is a turn-taking signal, not a
+   * personality. Index-based rather than random so a run is reproducible.
+   */
+  private fillerIndex = 0;
+  private pickFiller(): string {
+    const fillers = ['Let me check.', 'One moment.', 'Looking now.', 'Give me a second.', 'Checking.'];
+    return fillers[this.fillerIndex++ % fillers.length];
+  }
+
   /** Mint the short-lived browser token so the API key never reaches the page. */
   async mintToken(): Promise<{ token?: string; error?: string }> {
     if (!this.configured) return { error: this.unavailableReason ?? 'voice unavailable' };
@@ -259,6 +295,8 @@ export class VoiceService {
 
   private endSession() {
     if (this.connectedAt === null) return;
+    // Restore full reasoning for typed work.
+    if (this.cfg.voiceEffort) void this.session.setEffort(null).catch(() => {});
     this.accruedUsd += this.sessionCost();
     this.connectedAt = null;
     this.publishVoice('disconnected');

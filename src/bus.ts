@@ -56,7 +56,7 @@ export type UIMessage =
   | { type: 'approval'; id: string; tool: string; title: string; detail: string }
   | { type: 'approval_resolved'; id: string; allowed: boolean }
   | { type: 'usage'; usage: UsageSnapshot }
-  | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string }
+  | { type: 'status'; state: 'idle' | 'thinking' | 'error'; detail?: string; turn?: number }
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
   | { type: 'voice'; state: string; detail?: string; status: Record<string, unknown> }
   | { type: 'event'; event: HarnessEvent };
