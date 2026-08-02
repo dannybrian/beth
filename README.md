@@ -57,7 +57,8 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
 Per-repo state lives in `~/.director-harness/<repo-slug>/` — the session id used for
-`resume`, whether the test monitor is enabled here, and what she remembers about you.
+`resume`, whether the test monitor is enabled here, what she remembers about you, and the
+last few things she opened with.
 Nothing is machine-global except the credentials, so instances don't collide.
 
 ## What's here
@@ -77,6 +78,7 @@ Nothing is machine-global except the credentials, so instances don't collide.
 | `ui/listen.js` | The ear: browser recognition, settle window, spoken punctuation, barge-in |
 | `testRunner.ts` | Detects the project's test command, runs it when the tree settles, parses failures |
 | `personal.ts` | What she remembers about Danny, and the once-a-day rule for when she may ask |
+| `greeting.ts` | The boot line: the last few openings to avoid, and the facts to be specific about |
 
 ## Voice
 
@@ -144,6 +146,20 @@ silence, which is correct.
 `HARNESS_PERSONAL=off` disables it completely: the tools are not registered, nothing is
 recorded, nothing rides the prompt. Someone turning this off is saying don't keep a file on
 me, not "ask me less often".
+
+## The boot greeting
+
+One sentence, written by her, spoken as she comes up. It was always model-written and it
+was always the same sentence, because every boot handed her identical inputs and a fresh
+session cannot know what it said yesterday. So `greeting.ts` gives it the two things it
+was missing: the last six openings, with "not these", kept in
+`~/.director-harness/<repo>/greetings.json`; and something to be specific about — branch,
+uncommitted count, last commit and its age, what is in flight, the local clock, and how
+long since she was last up. A restart ninety seconds later gets a different greeting than
+an arrival the next morning, because it *is* a different morning.
+
+The facts are also a saving: she used to spend a git tool call learning the branch before
+the first word. `HARNESS_NO_KICKOFF=1` boots her silently and records nothing.
 
 ## Director-role handoff
 

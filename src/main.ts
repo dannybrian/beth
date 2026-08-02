@@ -1,4 +1,5 @@
 // Wiring. One process per instance, bound to one repo.
+import path from 'node:path';
 import { loadConfig } from './config.ts';
 import { ConversationBus } from './bus.ts';
 import { EventLog } from './eventlog.ts';
@@ -10,6 +11,7 @@ import { TestMonitor } from './testRunner.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
+import { Greetings, kickoffPrompt, repoSnapshot } from './greeting.ts';
 import { isLive } from './workItems.ts';
 
 const cfg = loadConfig();
@@ -50,26 +52,42 @@ events.onEvent((e) => {
 });
 events.startTail();
 
-/**
- * ONE line, and one carrier for it.
- *
- * This used to ask for a greeting AND a `say` item, because a `say` is spoken in
- * full while an ordinary reply is excerpted — the second call was how you made
- * sure the first was heard. Speak-out removed that reason and exposed the cost:
- * both lines now reach the speakers, so booting said the same thing three times
- * ("I'm on Tulito, branch main" · "Beth is online and ready" · "Ready when you
- * are"). The fix is not a filter, it is asking for one line.
- */
-const KICKOFF =
-  'You just came online. Greet Danny in ONE short sentence naming the repo and branch — that sentence is the whole of it. Do not call the say tool, do not add a status report, and do not add a closing line: everything you write here is read aloud, so a second line that repeats the first is simply heard twice.';
-
+// What she opened with the last few times, so this time can be different. See
+// greeting.ts: the boot line was always hers to write, but a fresh session cannot
+// know it has a habit, and identical inputs produce an identical sentence.
+const greetings = new Greetings(cfg);
 // The boot greeting is one of exactly two moments a personal beat may ride —
 // it is already hers, and it is one sentence he is going to hear anyway. Most
-// days this returns nothing, which is correct.
+// days this returns nothing, which is correct. Called either way, so suppressing
+// the greeting does not silently bank a follow-up for a turn that never happens.
 const beat = session.personal.beat();
-const { resumed } = session.start(
-  process.env.HARNESS_NO_KICKOFF ? undefined : beat ? `${KICKOFF}\n\n${beat}` : KICKOFF
-);
+const kickoff = process.env.HARNESS_NO_KICKOFF
+  ? undefined
+  : [
+      kickoffPrompt({
+        repoName: path.basename(cfg.repo),
+        snapshot: repoSnapshot(cfg.repo),
+        // The index is already loaded — the same live set the panel renders.
+        live: work.live(),
+        priors: greetings.recent(),
+        lastAt: greetings.lastAt(),
+      }),
+      beat,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+const { resumed } = session.start(kickoff);
+
+// Remember what she actually said, which is the only input that makes the NEXT
+// boot different. First assistant message only, and only when we asked for one:
+// without a kickoff the first message answers a real turn and is not an opening.
+if (kickoff) {
+  const unsub = bus.subscribe((m) => {
+    if (m.type !== 'assistant') return;
+    greetings.record(m.text);
+    unsub();
+  });
+}
 
 const tests = new TestMonitor(cfg, bus);
 const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work });

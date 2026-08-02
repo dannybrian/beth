@@ -98,7 +98,17 @@ These cost hours. Don't rediscover them.
   re-delivers anything now.
   ⚠ The corollary bites in the other direction: EVERYTHING she writes is heard, so a
   prompt that asks for the same thing twice is heard twice. That is what made booting
-  say "I am here" three times — see the KICKOFF note in `main.ts`.
+  say "I am here" three times — see the kickoff note in `greeting.ts`, which is where
+  the boot line is assembled now.
+- **A greeting with nothing to be specific about is the same greeting every day.** Hers
+  was model-written from the start and still came out word-for-word identical for weeks,
+  because every boot handed her the same inputs and told her what to put in it, and no
+  session can remember what the last one said. `greeting.ts` fixes the two halves: the
+  last six openings ride the prompt as "not these", and the facts that actually differ
+  (branch, dirt, last commit, in-flight, the clock, the gap since she was last up) ride
+  it as material. ⚠ Do not add a second thing to the boot prompt to make it richer —
+  richness comes from the material, and asking for two things is what made it speak
+  three times. It stays ONE sentence.
   The level is HERS to change as well as Danny's (`speech` tool in `tools.ts`, the same
   dial `/api/speech` turns), because "stop talking" is said out loud to the person
   talking, not clicked. ⚠ The change lands the moment the call does, and the level is
