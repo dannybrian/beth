@@ -62,6 +62,9 @@ export type UIMessage =
       speechLevel: string;
       // The settle window, served to the page because that is where it now runs.
       settleMs: number;
+      // Which connection this is, so a page can claim the mouth when it is the
+      // one you are looking at. See the speaker election in server.ts.
+      streamId: number;
     }
   // `refs` are what Danny POINTED at for this turn — rendered as chips in the
   // transcript so a turn stays readable next to what he actually typed.

@@ -56,6 +56,23 @@ export function createServer(deps: {
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
+  /**
+   * ONE MOUTH, however many pages are open.
+   *
+   * Voice used to be a machine singleton — one Speech Engine, one tunnel — so two
+   * browser tabs could not both speak no matter what. Now every page can play
+   * audio, and two tabs on one harness means hearing her twice, slightly out of
+   * phase, on top of herself. Two tabs is a legitimate thing to have (two
+   * monitors), so the answer is to elect a speaker rather than to refuse.
+   *
+   * Newest connection wins by default — it is almost always the one you just
+   * opened — and a page claims the mouth when it takes focus, which is the tab
+   * you are actually looking at.
+   */
+  let nextStreamId = 1;
+  const streams = new Set<number>();
+  let speakerId = 0;
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${cfg.port}`);
     const json = (code: number, body: unknown) => {
@@ -75,6 +92,9 @@ export function createServer(deps: {
       // otherwise fail silently on every publish, forever. If a write throws,
       // this connection is over: tear it down so the subscriber stops being
       // called and the browser is free to reconnect.
+      const streamId = nextStreamId++;
+      streams.add(streamId);
+      speakerId = streamId;
       let dead = false;
       let cleanup = () => {};
       const send = (m: UIMessage) => {
@@ -96,6 +116,7 @@ export function createServer(deps: {
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.speakOut.speechLevel(),
         settleMs: cfg.voiceSettleMs,
+        streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
       for (const m of bus.replay()) send(m);
@@ -106,7 +127,11 @@ export function createServer(deps: {
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       send({ type: 'work', items: work.live(), total: work.all().length });
-      const unsub = bus.subscribe(send);
+      // Everything broadcasts except the instruction to make a noise.
+      const unsub = bus.subscribe((m) => {
+        if (m.type === 'speak' && streamId !== speakerId) return;
+        send(m);
+      });
       // The keepalive is also how a half-open socket gets noticed at all: without
       // traffic, a connection the browser has already abandoned looks alive here.
       const keepalive = setInterval(() => {
@@ -119,6 +144,10 @@ export function createServer(deps: {
       }, 20_000);
       cleanup = () => {
         clearInterval(keepalive);
+        streams.delete(streamId);
+        // Hand the mouth on rather than leaving her mute in a page that is still
+        // open — closing the speaking tab must not take the voice with it.
+        if (speakerId === streamId) speakerId = streams.size ? Math.max(...streams) : 0;
         unsub();
         res.end();
       };
@@ -228,6 +257,13 @@ export function createServer(deps: {
             // refuses to overlap itself.
             void deps.tests.run();
             return json(200, { ok: true });
+          }
+          case '/api/voice/claim': {
+            // The focused tab takes the mouth. Ignored for a stream that has
+            // since closed, so a stale claim cannot mute every live page.
+            const id = Number(body.streamId);
+            if (streams.has(id)) speakerId = id;
+            return json(200, { ok: true, speaker: speakerId });
           }
           case '/api/listening': {
             // Reasoning effort follows the MIC now.

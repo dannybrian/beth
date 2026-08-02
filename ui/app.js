@@ -586,6 +586,9 @@ const handlers = {
     if (m.model) $('model-select').value = m.model;
     if (m.permissionMode) setPermissionMode(m.permissionMode);
     if (m.speechLevel) setSpeechLevel(m.speechLevel);
+    myStreamId = m.streamId;
+    // A page that reconnects while focused should get the mouth back.
+    if (document.hasFocus()) claimVoice();
     buildVoice(m);
   },
   model: (m) => {
@@ -694,6 +697,19 @@ const handlers = {
 const speaker = new Audio();
 const speakBacklog = [];
 let speakingId = null;
+
+/**
+ * ONE MOUTH, however many tabs are open.
+ *
+ * Voice used to be a machine singleton, so two pages could not both speak. Now
+ * every page can play audio, and two tabs meant hearing her twice, slightly out
+ * of phase, on top of herself. The server elects one speaker; this claims it for
+ * whichever tab you are actually looking at.
+ */
+let myStreamId = 0;
+const claimVoice = () => myStreamId && post('/api/voice/claim', { streamId: myStreamId });
+window.addEventListener('focus', claimVoice);
+document.addEventListener('visibilitychange', () => !document.hidden && claimVoice());
 
 function enqueueSpeak(id) {
   speakBacklog.push(id);
