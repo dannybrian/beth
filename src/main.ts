@@ -12,6 +12,7 @@ import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
 import { Greetings, kickoffPrompt, repoSnapshot } from './greeting.ts';
+import { mineRepo, keyterms } from './keyterms.ts';
 import { isLive } from './workItems.ts';
 
 const cfg = loadConfig();
@@ -90,7 +91,11 @@ if (kickoff) {
 }
 
 const tests = new TestMonitor(cfg, bus);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work });
+// The repo's own nouns, walked ONCE — the page gets this plus whatever is live on
+// the board. Mined even when biasing is off, because the count is worth printing:
+// it is how you find out the list is empty before wondering why nothing improved.
+const mined = mineRepo(cfg.repo);
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -124,6 +129,17 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
   tests.start();
   console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);
+  // No silent caps: say how many terms are in play and how many fell off the end,
+  // because a list that is quietly empty looks exactly like biasing that does not
+  // work. Off is stated too — it is off by default and that surprises people.
+  if (cfg.speechBiasing) {
+    const { terms, dropped } = keyterms({ configured: cfg.keyterms, live: work.live().map((i) => i.spoken), mined });
+    console.log(
+      `  terms: ${terms.length} biased at ×${cfg.keytermBoost} (${cfg.keyterms.length} yours, ${mined.length} from the repo)${dropped ? ` — ${dropped} over the cap, dropped` : ''}`
+    );
+  } else {
+    console.log(`  terms: biasing off — ${mined.length} nouns available, HARNESS_SPEECH_BIASING=on to use them`);
+  }
 });
 
 const shutdown = () => {

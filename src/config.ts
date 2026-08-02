@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { directorName } from './directorName.ts';
 import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
+import { parseKeyterms } from './keyterms.ts';
 
 export type HarnessConfig = {
   /** The bound project repo — the director session's cwd. */
@@ -104,6 +105,28 @@ export type HarnessConfig = {
    */
   speechLevel: SpeechLevel;
   /**
+   * Bias the recogniser toward this project's own nouns (`keyterms.ts`).
+   *
+   * OFF by default, and deliberately: contextual biasing arrived in the Web
+   * Speech API after this harness was written, it may require Chrome's on-device
+   * model, and a recogniser that refuses to start is a mic that does nothing. The
+   * page falls back to unbiased recognition rather than failing, but the default
+   * stays off until it has been used in anger.
+   */
+  speechBiasing: boolean;
+  /**
+   * Nouns no file mentions — jargon, customers, people. Never dropped by the cap,
+   * and the ONE setting that accumulates across the config layers rather than
+   * overriding: machine-wide tools plus this repo's own words. See confAll.
+   */
+  keyterms: string[];
+  /**
+   * How hard to push. Chrome takes 0–10 with 1 as neutral; the cost of pushing
+   * harder is hearing the term where it was not said, so this is a knob rather
+   * than a setting to get right once.
+   */
+  keytermBoost: number;
+  /**
    * Reasoning effort applied while the MIC IS OPEN, then restored.
    *
    * Spoken conversation trades depth for latency; typed work keeps full effort.
@@ -194,6 +217,16 @@ export function loadConfig(): HarnessConfig {
   const env = readEnvFile(path.join(repo, '.env'));
   const machine = readEnvFile(MACHINE_ENV_FILE);
   const conf = (key: string) => process.env[key] ?? env[key] ?? machine[key];
+  /**
+   * The one key that ACCUMULATES instead of overriding.
+   *
+   * Vocabulary splits the same way the credentials do, only the other way up: the
+   * tools he says on every repo (`pnpm`, `Claude Code`) belong to the machine, and
+   * the project's own nouns belong to the repo. Under first-wins, a repo list
+   * silently deletes the machine list — and the symptom would be "pnpm still comes
+   * out wrong", with nothing pointing at why.
+   */
+  const confAll = (key: string) => [machine[key], env[key], process.env[key]].filter(Boolean).join(',');
 
   const port = Number(process.env.HARNESS_PORT ?? 4620);
 
@@ -223,6 +256,9 @@ export function loadConfig(): HarnessConfig {
     voiceId: conf('HARNESS_VOICE_ID') ?? conf('ELEVENLABS_VOICE_ID'),
     ttsModel: conf('HARNESS_TTS_MODEL') ?? 'eleven_flash_v2_5',
     ttsUsdPer1kCredits: Number(conf('HARNESS_TTS_USD_PER_1K_CREDITS')) || 0.22,
+    speechBiasing: (conf('HARNESS_SPEECH_BIASING') ?? 'off') === 'on',
+    keyterms: parseKeyterms(confAll('HARNESS_KEYTERMS')),
+    keytermBoost: Number(conf('HARNESS_KEYTERM_BOOST')) || 2,
     speechLevel: (SPEECH_LEVELS as string[]).includes(conf('HARNESS_SPEECH_LEVEL') ?? '')
       ? (conf('HARNESS_SPEECH_LEVEL') as SpeechLevel)
       : 'brief',

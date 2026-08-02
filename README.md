@@ -54,6 +54,9 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud — see `spoken.ts` |
 | `HARNESS_TTS_USD_PER_1K_CREDITS` | `0.22` | Your plan's credit price, for the speech estimate in the stats panel |
 | `HARNESS_VOICE_SETTLE_MS` | `2500` | How long the words must stop changing before a spoken turn sends |
+| `HARNESS_SPEECH_BIASING` | `off` | Bias the recogniser toward this project's nouns |
+| `HARNESS_KEYTERMS` | — | Nouns no file mentions. ⚠ Accumulates across layers rather than overriding |
+| `HARNESS_KEYTERM_BOOST` | `2` | How hard to push, 0–10 |
 | `HARNESS_TEST_CMD` | detected | Test command. ⚠ Running is off until enabled per repo |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
@@ -89,6 +92,22 @@ Two halves, both local.
 ordinary turn to `/api/turn` — so a spoken turn carries the plans you pointed at and
 honours `/clear` and `/stop` exactly like a typed one. The composer shows the words
 arriving, punctuated as they will be sent. Chrome only.
+
+**The words it gets wrong are the project's own.** A conversation about a project is
+mostly project nouns, and a general recogniser has never heard them — it substitutes the
+nearest real word, so "colyseus" comes back "colossus" and the sentence still parses.
+`HARNESS_SPEECH_BIASING=on` hands the recogniser a vocabulary first (`keyterms.ts`): what
+you list in `HARNESS_KEYTERMS`, the spoken names of the work in flight, the repo's
+sub-project directory names, and its package dependencies — capped, with what fell off the
+end reported at boot. It is opt-in because contextual biasing is newer than this harness
+and Chrome may tie it to an on-device model; if the recogniser refuses, the page says so
+and listens without it rather than leaving you with a dead mic.
+
+Recognition is wrong often enough that **not sending** is a control of its own. **Stop**
+(or **Escape**, when no panel is open) throws away the utterance in flight and empties the
+composer — ⌘Z brings back anything typed. Turning the mic **off never sends** what it was
+holding: the words stay in the box to fix or discard by hand. There is no Send or Clear
+button; Enter sends and `/clear` and `/stop` still work typed.
 
 **She speaks** by holding each line server-side and streaming it as mp3 from
 `/api/voice/say/<id>` into an `<audio>` element (`src/speakOut.ts`). That means she can

@@ -665,7 +665,21 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   font: inherit;
   font-weight: 600;
 }
-.composer button.ghost { background: none; border: 1px solid var(--line); color: var(--muted); }
+/* Stop is the last button in the row, and it is an ESCAPE HATCH rather than an
+   action: Send and Clear went because Enter and `/clear` already did their jobs
+   and two accent-coloured buttons made the row read as a form. So this one is
+   sized like the test light — small, quiet, centred rather than stretched to the
+   height of the textarea — and only goes loud on hover. */
+.composer button.ghost {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  align-self: center;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+}
 .composer button.ghost:hover { color: var(--err); border-color: var(--err); }
 
 /* Must out-specify `.composer button` above, which would otherwise paint the mic

@@ -135,6 +135,27 @@ These cost hours. Don't rediscover them.
   across (`carry`), and consumption is tracked against the recogniser it belongs to,
   because by the time the settle window fires Chrome may have handed us a different one.
   `src/listen.test.ts` drives a stubbed recogniser and fails without the carry.
+- **The Web Speech API grew keyterms, and `docs/voice-plane.md` predates it.** That
+  record says a mangled project noun is "the keyterms case, and it is the signal to
+  revisit [Scribe]" — no longer true on its own: Chrome now has contextual biasing
+  (`recognition.phrases`, `new SpeechRecognitionPhrase(term, boost)`, verified present in
+  Chromium 148), which is the same mechanism. `src/keyterms.ts` assembles the vocabulary
+  and `ui/listen.js` applies it. ⚠ Per RECOGNISER, not once — Chrome builds a new one on
+  its own schedule, so biasing set only on the first would stop applying twenty seconds
+  into a long sentence, as invisibly as the `carry` bug. ⚠ And it must never cost the
+  ear: a refusal drops the vocabulary, restarts plainly, and says so. Nothing calls
+  `SpeechRecognition.install()` — that downloads a model onto the machine, which is not a
+  page's decision. Biasing does NOT fix punctuation; that half of the Scribe case stands.
+- **Not sending is a feature, and it has an ORDER.** Recognition mangles sentences often
+  enough that "don't send that" is a control: `Listener.abandon()` drops the utterance in
+  flight without closing the ear, and Stop/Escape calls it before emptying the composer.
+  ⚠ That order is load-bearing — the recogniser still HOLDS the abandoned words, so
+  clearing the box first just lets its next result render them straight back into it.
+  Cancelling the settle timer alone was never enough; `consumedUpTo` has to be spent too,
+  against the recogniser the words belong to (Chrome may have swapped it, same test as
+  the settle callback). ⚠ And `off()` must never emit `onSettled`: reaching for the mic
+  is what Danny does when the transcription is going wrong, so switching it off is a way
+  OUT of the sentence, never a commit of it. Both are tested.
 - **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
   browser pages could not both speak no matter what. Every page can play audio now, and two
   tabs on one harness means hearing her twice, slightly out of phase, on top of herself.

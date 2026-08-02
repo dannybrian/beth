@@ -106,6 +106,68 @@ export class Listener {
     this.overSince = 0;
     this.settleMs = opts.settleMs || SETTLE_MS;
     this.dictation = true;
+    /**
+     * Project nouns to bias toward, and how hard. See src/keyterms.ts — a
+     * conversation about a project is made mostly of words a general recogniser
+     * has never heard, and it does not fail loudly: it substitutes the nearest
+     * real word, so "colyseus" comes back "colossus" and the sentence still
+     * parses.
+     */
+    this.phrases = opts.phrases ?? [];
+    this.boost = opts.boost ?? 2;
+    /** Latched when Chrome refuses a biased recogniser. See applyBiasing. */
+    this.biasingRefused = false;
+    /**
+     * Chrome ties phrase biasing to its ON-DEVICE model, which may not be
+     * installed. Probed once, never awaited: `available()` is allowed to take as
+     * long as it likes, and arming the mic must not wait for it — a slow probe
+     * would show up as a mic that takes a second to turn on.
+     *
+     * ⚠️ Nothing here calls `install()`. That downloads a model onto his machine,
+     * which is not a thing a page should decide to do while he is talking.
+     */
+    this.onDevice = false;
+    this.probeOnDevice();
+  }
+
+  probeOnDevice() {
+    if (!this.phrases.length || typeof SR?.available !== 'function') return;
+    try {
+      Promise.resolve(SR.available({ langs: ['en-US'], processLocally: true }))
+        .then((status) => {
+          this.onDevice = status === 'available';
+          if (!this.onDevice) this.opts.onState?.(this.mode, `on-device model ${status} — biasing may be ignored`);
+        })
+        .catch(() => {});
+    } catch {
+      /* an API that is not there is the ordinary case, not an error */
+    }
+  }
+
+  /**
+   * Hand the recogniser the vocabulary, if this browser has the hook.
+   *
+   * ⚠️ Per RECOGNISER, not once. Chrome ends a session on its own schedule and
+   * `startRec` builds a fresh instance every time — biasing set only on the first
+   * one would quietly stop applying about twenty seconds into the first long
+   * sentence, which is the same seam the `carry` fix exists for and would be just
+   * as invisible.
+   */
+  applyBiasing(r) {
+    if (this.biasingRefused || !this.phrases.length) return false;
+    if (!('phrases' in r) || typeof window.SpeechRecognitionPhrase !== 'function') return false;
+    try {
+      r.phrases = this.phrases.map((p) => new window.SpeechRecognitionPhrase(p, this.boost));
+      // Only when the model is actually there: forcing local processing without
+      // it is how you get a recogniser that refuses to start at all.
+      if (this.onDevice) r.processLocally = true;
+      return true;
+    } catch {
+      // A browser that has the property but rejects the value is one we bias
+      // nothing on. The ear matters more than the vocabulary.
+      this.biasingRefused = true;
+      return false;
+    }
   }
 
   get state() {
@@ -135,14 +197,43 @@ export class Listener {
     this.startMeter();
   }
 
+  /**
+   * Throw away the utterance in flight, WITHOUT closing the ear.
+   *
+   * Recognition is wrong often enough that "don't send that" has to be a control
+   * of its own. The settle window is 1.2–2.5s wide, which is time to see bad
+   * words appear and hit Stop, but only if hitting Stop actually reaches the
+   * words — cancelling the timer alone is not enough, because the recogniser
+   * still holds them and its next result would render them straight back into
+   * the composer.
+   */
+  abandon() {
+    clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.timerWait = 0;
+    this.lastHeard = '';
+    this.pending = '';
+    this.carry = '';
+    // Spend what the CURRENT recogniser has delivered. Same test as the settle
+    // callback: if Chrome swapped it while the window was open, its results are
+    // new speech and abandoning the old utterance must not swallow them.
+    if (this.consumeFrom?.rec === this.rec) this.consumedUpTo = this.consumeFrom.count;
+    this.consumeFrom = null;
+  }
+
+  /**
+   * ⚠️ Turning the ear off NEVER sends what it was holding.
+   *
+   * Reaching for the mic is what Danny does when the transcription is going
+   * wrong, so switching it off has to be a way OUT of the sentence, not a commit
+   * of it. The words stay in the composer to be fixed or thrown away by hand;
+   * nothing about closing the ear puts them on the wire.
+   */
   async off() {
     this.mode = 'off';
     this.parked = false;
     this.stopRec();
-    clearTimeout(this.settleTimer);
-    this.settleTimer = null;
-    this.carry = '';
-    this.consumeFrom = null;
+    this.abandon();
     if (this.meterTimer) clearInterval(this.meterTimer);
     this.meterTimer = null;
     for (const t of this.micStream?.getTracks() ?? []) t.stop();
@@ -167,10 +258,13 @@ export class Listener {
     r.interimResults = true;
     r.lang = 'en-US';
     this.consumedUpTo = 0;
+    const biased = this.applyBiasing(r);
     r.onresult = (e) => this.rec === r && this.onResult(e);
     r.onerror = (e) => {
       // `no-speech` is ordinary — it is what a session timing out in silence says.
       if (e.error === 'no-speech' || e.error === 'aborted') return;
+      // A refusal that names the vocabulary costs us the vocabulary, not the ear.
+      if (biased && /phrase|language|local/i.test(e.error ?? '')) return this.dropBiasing(r, e.error);
       this.opts.onState?.(this.mode === 'off' ? 'off' : 'error', e.error);
     };
     r.onend = () => {
@@ -186,8 +280,28 @@ export class Listener {
       r.start();
     } catch (e) {
       this.rec = null;
+      // Same trade as the error handler: if the biased recogniser will not start,
+      // start an unbiased one. Mangled project nouns are a nuisance; a mic that
+      // does nothing is the feature gone.
+      if (biased) return this.dropBiasing(r, String(e));
       this.opts.onState?.('error', String(e));
     }
+  }
+
+  /**
+   * Give up the vocabulary and try again, once, plainly.
+   *
+   * Biasing is an enhancement on a path that already worked. Anything that makes
+   * it the reason the ear is dead has the priority backwards — so the refusal is
+   * latched (no loop), reported once so it is not a silent downgrade, and the
+   * recogniser is rebuilt without it.
+   */
+  dropBiasing(r, why) {
+    if (this.biasingRefused) return;
+    this.biasingRefused = true;
+    if (this.rec === r) this.rec = null;
+    this.opts.onState?.(this.mode === 'off' ? 'off' : 'listening', `keyterm biasing refused (${why}) — listening without it`);
+    if (this.mode === 'listening' && !this.parked) this.startRec();
   }
 
   stopRec() {

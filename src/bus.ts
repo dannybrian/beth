@@ -62,6 +62,10 @@ export type UIMessage =
       speechLevel: string;
       // The settle window, served to the page because that is where it now runs.
       settleMs: number;
+      // Project nouns to bias the recogniser toward, and how hard. Empty when
+      // biasing is off — see keyterms.ts.
+      keyterms: string[];
+      keytermBoost: number;
       // Which connection this is, so a page can claim the mouth when it is the
       // one you are looking at. See the speaker election in server.ts.
       streamId: number;

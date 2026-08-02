@@ -110,9 +110,11 @@
         <!-- The context meter is a GAUGE, not an activity light, so it does not
              come and go with the work. Clicking it is where the numbers live. -->
         <button id="ctx-meter" class="ctx" title="Context used — click for the numbers"><i></i></button>
-        <button id="send">Send</button>
-        <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
-        <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>
+        <!-- The only button left in the row. Enter sends, `/clear` clears, and
+             what this is FOR is the thing neither of those covers: throwing away
+             a bad transcription before it becomes a turn. Small on purpose — it
+             is an escape hatch, not the primary action. -->
+        <button id="interrupt" class="ghost" title="Escape — drop what is in the box and stop the in-flight turn. The conversation continues.">Stop</button>
       </div>
     </footer>
 

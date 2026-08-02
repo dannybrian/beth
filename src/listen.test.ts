@@ -137,3 +137,166 @@ test('the window waits for the WORDS to stop changing, not the events', async ()
   await sleep(60);
   assert.deepEqual(settled, ['Steady'], 'fired on schedule despite the churn');
 });
+
+// --- not sending is a feature ------------------------------------------------
+//
+// Recognition is wrong often enough that "don't send that" has to be a control.
+// Both of these are guarantees about the seconds between bad words appearing and
+// the window closing.
+
+test('turning the ear off NEVER sends what it was holding', async () => {
+  // Reaching for the mic is what he does when the transcription is going wrong,
+  // so switching it off has to be a way out of the sentence, not a commit of it.
+  const { l, settled } = listening();
+  made[0].hear('this came out as nonsense', true);
+  await l.off();
+  await sleep(200);
+  assert.deepEqual(settled, [], 'the window was open and closed empty');
+});
+
+test('abandon drops the utterance without closing the ear', async () => {
+  const { l, settled, interim } = listening();
+  made[0].hear('utter nonsense', true);
+  (l as any).abandon();
+  await sleep(200);
+  assert.deepEqual(settled, []);
+
+  // ⚠️ The recogniser still holds the abandoned words. Cancelling the timer
+  // alone would let its next result render them straight back into the composer.
+  made[0].hear(' and now the real sentence', true);
+  await sleep(120);
+  assert.deepEqual(settled, ['And now the real sentence']);
+  assert.ok(
+    !interim.at(-1)!.toLowerCase().includes('utter nonsense'),
+    `the thrown-away words came back: "${interim.at(-1)}"`
+  );
+});
+
+test('abandoning does not swallow a recogniser Chrome swapped in underneath', async () => {
+  // Same test the settle callback makes, for the same reason: by the time you hit
+  // Stop, Chrome may have handed us a DIFFERENT instance. Spending its count
+  // against the old one's would eat the first words of the next sentence.
+  const { l, settled } = listening();
+  made[0].hear('the words being thrown away', false);
+  made[0].endSession();
+  (l as any).abandon();
+  await sleep(200);
+  assert.deepEqual(settled, [], 'the abandon itself still cancels');
+
+  made[1].hear('a whole new sentence', true);
+  await sleep(120);
+  assert.deepEqual(settled, ['A whole new sentence'], 'nothing was consumed by mistake');
+});
+
+// --- keyterm biasing ---------------------------------------------------------
+//
+// Contextual biasing arrived in the Web Speech API after the voice plane was
+// written. It is an ENHANCEMENT on a path that already worked, so every test here
+// is really about the same thing: it must not be able to cost us the ear.
+
+class FakePhrase {
+  phrase: string;
+  boost: number;
+  constructor(phrase: string, boost: number) {
+    this.phrase = phrase;
+    this.boost = boost;
+  }
+}
+
+/** Chrome exposes `phrases` on the prototype; the stub has to as well. */
+function withPhraseSupport(fn: () => void | Promise<void>) {
+  (FakeRecognition.prototype as any).phrases = undefined;
+  (globalThis as any).window.SpeechRecognitionPhrase = FakePhrase;
+  return (async () => {
+    try {
+      await fn();
+    } finally {
+      delete (FakeRecognition.prototype as any).phrases;
+      delete (globalThis as any).window.SpeechRecognitionPhrase;
+    }
+  })();
+}
+
+const biasing = (over: Record<string, unknown> = {}) => {
+  made.length = 0;
+  const state: string[] = [];
+  const l = new Listener({
+    settleMs: 60,
+    phrases: ['colyseus', 'Music Core'],
+    boost: 3,
+    onState: (_s: string, detail: string) => detail && state.push(detail),
+    onInterim: () => {},
+    onSettled: () => {},
+    isSpeaking: () => false,
+    ...over,
+  });
+  (l as any).mode = 'listening';
+  l.startRec();
+  return { l, state };
+};
+
+test('the vocabulary reaches the recogniser, boosted', () =>
+  withPhraseSupport(() => {
+    biasing();
+    assert.deepEqual(
+      made[0].phrases.map((p: FakePhrase) => [p.phrase, p.boost]),
+      [['colyseus', 3], ['Music Core', 3]]
+    );
+  }));
+
+// ⚠️ The seam. Chrome ends a session on its own schedule, and biasing set only on
+// the first instance would quietly stop applying twenty seconds into a sentence —
+// exactly as invisible as the bug the `carry` fix exists for.
+test('EVERY recogniser is biased, not just the first', () =>
+  withPhraseSupport(() => {
+    biasing();
+    made[0].endSession();
+    assert.equal(made.length, 2, 'a fresh recogniser took over');
+    assert.deepEqual(made[1].phrases.map((p: FakePhrase) => p.phrase), ['colyseus', 'Music Core']);
+  }));
+
+test('a browser without the hook still listens', () => {
+  // No `phrases` on the prototype and no constructor: the ordinary case for any
+  // Chrome older than the feature, and it must be a non-event.
+  const { l } = biasing();
+  assert.equal(made.length, 1);
+  assert.equal(made[0].phrases, undefined);
+  assert.equal((l as any).biasingRefused, false, 'nothing was refused — there was nothing to refuse');
+});
+
+test('a recogniser that REFUSES the vocabulary is restarted without it', () =>
+  withPhraseSupport(() => {
+    // The failure that would otherwise be a dead mic: Chrome ties biasing to a
+    // model that is not installed, and start() throws.
+    let thrown = false;
+    const original = FakeRecognition.prototype.start;
+    FakeRecognition.prototype.start = function (this: any) {
+      if (this.phrases?.length && !thrown) {
+        thrown = true;
+        throw new Error('phrases require on-device recognition');
+      }
+    };
+    try {
+      const { l, state } = biasing();
+      assert.equal(made.length, 2, 'it tried again');
+      assert.equal(made[1].phrases, undefined, 'and plainly the second time');
+      assert.equal((l as any).biasingRefused, true, 'latched — no retry loop');
+      assert.match(state.join(' '), /biasing refused/i, 'and it said so rather than downgrading silently');
+    } finally {
+      FakeRecognition.prototype.start = original;
+    }
+  }));
+
+test('nothing here calls install() — a model download is not the page\'s decision', () => {
+  const SR = (globalThis as any).window.SpeechRecognition;
+  let installs = 0;
+  SR.install = () => (installs++, Promise.resolve(true));
+  SR.available = () => Promise.resolve('downloadable');
+  try {
+    biasing();
+    assert.equal(installs, 0);
+  } finally {
+    delete SR.install;
+    delete SR.available;
+  }
+});

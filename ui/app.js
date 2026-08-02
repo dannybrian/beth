@@ -1225,6 +1225,10 @@ function buildVoice(hello) {
   }
   voice = new Listener({
     settleMs: hello.settleMs,
+    // The project's own nouns, assembled server-side — the harness knows what
+    // this repo is called and what is on the board; the page only speaks them.
+    phrases: hello.keyterms ?? [],
+    boost: hello.keytermBoost,
     onState: (state, detail) => {
       paintVoiceButton(state, detail);
       // Reasoning effort follows the MIC. It used to follow a paid session opening
@@ -1405,8 +1409,15 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (statsOpen) toggleStats();
-  if (testPanelOpen) toggleTestPanel();
+  // A glance closes first. Only when there is nothing to dismiss does Escape mean
+  // what it means in Claude Code — and the button is small now, so the keyboard
+  // has to reach the same thing your hand does.
+  if (statsOpen || testPanelOpen) {
+    if (statsOpen) toggleStats();
+    if (testPanelOpen) toggleTestPanel();
+    return;
+  }
+  stopAll();
 });
 paintMeter();
 
@@ -1428,9 +1439,42 @@ const send = () => {
   refs = [];
   renderRefs();
 };
-$('send').onclick = send;
-$('interrupt').onclick = () => post('/api/interrupt');
-$('clear').onclick = () => post('/api/clear');
+/**
+ * Empty the composer without destroying the undo stack.
+ *
+ * Setting `.value` directly wipes Chrome's undo history, and Stop now clears a
+ * box that may hold something typed — so it goes through the editing surface
+ * instead, and ⌘Z brings it back. `execCommand` is deprecated and this is a
+ * Chrome-only page (the ear needs Chrome); the assignment is the fallback.
+ */
+function clearComposer() {
+  if (input.value) {
+    input.focus();
+    input.select();
+    if (!document.execCommand?.('delete')) input.value = '';
+  }
+  speechOwnsInput = false;
+  input.classList.remove('interim');
+  input.style.height = 'auto';
+}
+
+/**
+ * The one button, and what it is really for.
+ *
+ * Recognition gets a sentence wrong often enough that the composer needs a way
+ * to say "not that" — and the window between bad words appearing and the turn
+ * being sent is a couple of seconds, so it has to be one action, not three.
+ *
+ * ⚠️ ORDER. The ear is abandoned BEFORE the box is emptied: the recogniser is
+ * still holding those words, and clearing first would let its next result render
+ * them straight back into the field we just cleared.
+ */
+const stopAll = () => {
+  voice?.abandon();
+  clearComposer();
+  post('/api/interrupt');
+};
+$('interrupt').onclick = stopAll;
 $('model-select').onchange = (e) => post('/api/model', { model: e.target.value });
 
 /**

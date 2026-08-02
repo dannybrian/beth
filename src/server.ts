@@ -22,6 +22,7 @@ import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
 import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
+import { keyterms } from './keyterms.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -53,8 +54,26 @@ export function createServer(deps: {
   speakOut: SpeakOut;
   tests: TestMonitor;
   work: WorkIndex;
+  /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
+  mined: string[];
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
+
+  /**
+   * What to bias the recogniser toward, for THIS page.
+   *
+   * Assembled per connection rather than at boot because the live plan names are
+   * half of it: what he is talking about today is what has moved on the board,
+   * and a term list fixed at startup would name last week's work.
+   */
+  const biasing = () =>
+    cfg.speechBiasing
+      ? keyterms({
+          configured: cfg.keyterms,
+          live: work.live().map((i) => i.spoken),
+          mined: deps.mined,
+        }).terms
+      : [];
 
   /**
    * ONE MOUTH, however many pages are open.
@@ -116,6 +135,8 @@ export function createServer(deps: {
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.speakOut.speechLevel(),
         settleMs: cfg.voiceSettleMs,
+        keyterms: biasing(),
+        keytermBoost: cfg.keytermBoost,
         streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
