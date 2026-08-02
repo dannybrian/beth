@@ -20,6 +20,15 @@ Linear) supplies its own reader. The harness only READS: the project's `/plans` 
 `/tidyrepo` own where plans live and whether they are accurate, and nothing here may
 write a plan file or repair frontmatter.
 
+⚠️ ONE exception, and it is narrow on purpose: `src/planName.ts` writes a plan's `name:`
+key when Danny renames it from the panel — the affordance `workItems.ts` always
+anticipated ("a future rename affordance has somewhere to write to"). It touches that one
+key, leaves every other byte alone, and REFUSES a plan with no frontmatter rather than
+creating one, because creating a block is exactly the repair the rule forbids and it
+belongs to `/tidyrepo`. Do not add a second writer without an argument this specific.
+Pins (`src/pins.ts`) are NOT an exception — a pin is one person's attention on one
+machine, so it lives in the state dir and no plan file learns about it.
+
 ## Conventions
 
 - **No build step.** Node ≥ 23 runs `.ts` directly via native type stripping. This is
@@ -234,7 +243,10 @@ the conversation that produced it. Where things stand:
   ask about something she ACTUALLY RECORDED, at most once a day, only at a moment already
   hers. Most days are silence and that is correct.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff
-  all ship. Read it for why a reference is a pair rather than a string.
+  all ship, plus a PINNED shelf and rename (2026-08-02). Read it for why a reference is a
+  pair rather than a string. The shelf is Danny's ordering laid over the index's: pinned
+  rows still appear in their status group, because a plan that vanished from `active`
+  because it was pinned would make the board lie about what is active.
 
 Already done from the same list, so do not re-plan them: the spoken settle window is
 2500 ms, the speech levels and last-paragraph excerpt exist (`spoken.ts`), and the

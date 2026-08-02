@@ -446,6 +446,35 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   name.onclick = () => attachRef({ kind: 'item', path: item.path, spoken: item.spoken });
   head.append(name);
 
+  // The shelf. A pin is an ADDITIONAL place to find a plan, never a move, so this
+  // row keeps its place in the status tree either way.
+  const isPinned = pinnedPaths.has(item.path);
+  const pin = el('button', `pin${isPinned ? ' on' : ''}`, isPinned ? '★' : '☆');
+  pin.title = isPinned ? 'Unpin' : 'Pin to the top of the panel';
+  pin.onclick = (e) => {
+    e.stopPropagation();
+    post('/api/pin', { path: item.path, pinned: !isPinned });
+  };
+  head.append(pin);
+
+  // Rename. The spoken name is what Beth calls this plan out loud, and a derived
+  // one is sometimes wrong in a way only Danny can hear — so it is correctable
+  // from the surface where he notices it. ⚠ This WRITES to the plan file (the one
+  // place the harness does); see planName.ts.
+  const rename = el('button', 'rename', '✎');
+  rename.title = `Rename "${item.spoken}" — writes name: into the plan's frontmatter`;
+  rename.onclick = async (e) => {
+    e.stopPropagation();
+    const next = prompt(`Spoken name for this plan\n${item.path}`, item.name ?? item.spoken);
+    if (next === null || !next.trim() || next.trim() === item.spoken) return;
+    const res = await post('/api/rename', { path: item.path, name: next.trim() });
+    const bodyJson = await res.json().catch(() => ({}));
+    // The panel repaints from the file watcher, not from here — so a silent
+    // failure would look exactly like a rename that did not take.
+    if (!res.ok) alert(`Could not rename\n\n${bodyJson.reason ?? res.status}`);
+  };
+  head.append(rename);
+
   // Hand off to a fresh interactive Claude Code session. Disabled outright on a
   // live claim — one implementer at a time, and the server refuses too.
   const hand = el('button', 'handoff', '⌘');
@@ -525,6 +554,9 @@ const ALL_ORDER = [...LIVE_ORDER, 'idea', 'review', 'unknown', 'parked', 'shippe
 /** 'in-flight' (the default) or 'all'. The panel is a work surface, not an archive. */
 let workScope = 'in-flight';
 let workTotal = 0;
+/** Danny's shelf, resolved server-side and persisted across restarts. See pins.ts. */
+let pinnedItems = [];
+let pinnedPaths = new Set();
 /** path → item, for resolving a parent that lives in a different group. */
 let byPathAll = new Map();
 
@@ -545,6 +577,24 @@ function renderWork() {
       : `${workItems.length} plans are in flight (active, blocked or planning). ${workTotal} exist in total — the rest are shipped, parked or ideas.`;
   $('work-scope').textContent = workScope === 'all' ? 'in flight only' : 'show all';
   panel.replaceChildren();
+
+  // The shelf, above everything. Flat and in pin order: it is HIS ordering laid
+  // over the index's, so grouping or nesting it by status would be the panel
+  // taking the ordering back. Every row here also appears in its status group
+  // below — the pin is a second place to find a plan, not a move.
+  if (pinnedItems.length) {
+    const open = !collapsedGroups.has('pinned');
+    const hdr = el('button', 'group-head');
+    hdr.append(el('span', 'caret', open ? '▾' : '▸'));
+    hdr.append(el('span', 'group-name', 'pinned'));
+    hdr.append(el('span', 'group-count', String(pinnedItems.length)));
+    hdr.onclick = () => {
+      open ? collapsedGroups.add('pinned') : collapsedGroups.delete('pinned');
+      renderWork();
+    };
+    panel.append(hdr);
+    if (open) for (const item of pinnedItems) panel.append(renderWorkItem(item, 0, null, 0));
+  }
 
   for (const status of workScope === 'all' ? ALL_ORDER : LIVE_ORDER) {
     const group = workItems.filter((i) => i.status === status);
@@ -690,6 +740,10 @@ const handlers = {
   },
   work: (m) => {
     workTotal = m.total ?? m.items.length;
+    // The shelf is resolved server-side and arrives whatever the scope — a pinned
+    // plan is frequently parked or shipped, so it is not in `items` at all.
+    pinnedItems = m.pinned ?? [];
+    pinnedPaths = new Set(pinnedItems.map((i) => i.path));
     // The stream only carries the in-flight slice; in 'all' mode re-pull so the
     // panel still reflects a file that just changed.
     if (workScope === 'all') return void loadAllWork();

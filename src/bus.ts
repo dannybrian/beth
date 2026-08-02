@@ -104,7 +104,9 @@ export type UIMessage =
   | { type: 'pending'; decisions: PendingDecision[]; workers: WorkerRecord[] }
   // `items` is the in-flight slice only; `total` is the whole corpus, so the
   // panel can say "69 of 571" rather than implying 69 is all there is.
-  | { type: 'work'; items: WorkItem[]; total: number }
+  // `pinned` is Danny's own shelf, resolved server-side because a pinned plan is
+  // often NOT in `items` — parked, shipped, an idea. See pins.ts.
+  | { type: 'work'; items: WorkItem[]; total: number; pinned: WorkItem[] }
   // Server-owned pointing state. Published when a turn CONSUMES it, so the page
   // drops chips that a spoken turn just used.
   | { type: 'pointing'; refs: WorkRef[] }

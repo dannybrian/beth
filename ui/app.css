@@ -594,6 +594,30 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 }
 .work-item:hover .handoff { opacity: 1; }
 .work-item .handoff:hover { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+/* Pin and rename ride the same hover-reveal as the handoff: three controls on
+   every row, permanently visible, would bury the name they act on. ⚠ The PIN is
+   the exception to the exception — once set it stays lit, because the shelf being
+   invisible until you hover is how you forget what is on it. */
+.work-item .pin,
+.work-item .rename {
+  flex: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.work-item:hover .pin,
+.work-item:hover .rename { opacity: 1; }
+.work-item .pin.on { opacity: 1; color: var(--warn); }
+.work-item .pin:hover { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.work-item .rename:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+
 /* A live claim is a hard no, and it should look like one. */
 .work-item .handoff.blocked { opacity: 1; color: var(--err); cursor: not-allowed; }
 .work-item .handoff.blocked:hover { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }

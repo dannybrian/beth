@@ -13,7 +13,7 @@ import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
 import { Greetings, kickoffPrompt, repoSnapshot } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
-import { isLive } from './workItems.ts';
+import { Pins, workMessage } from './pins.ts';
 
 const cfg = loadConfig();
 const bus = new ConversationBus();
@@ -27,9 +27,10 @@ const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planR
   // stops occupying a permanent slot in ACTIVE and inflating the count.
   roleLockPath: cfg.directorPlan,
 });
-work.subscribe((items) =>
-  bus.publish({ type: 'work', items: items.filter((i) => isLive(i.status) && !i.roleLock), total: items.length })
-);
+const pins = new Pins(cfg);
+// One builder for all three publishers (here, `hello`, and the pin endpoint), so
+// the shelf cannot be present on one and missing on another.
+work.subscribe(() => bus.publish(workMessage(work, pins)));
 // A spoken turn consumes pointing server-side; tell the page so its chips clear.
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
@@ -95,7 +96,7 @@ const tests = new TestMonitor(cfg, bus);
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.

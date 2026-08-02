@@ -153,6 +153,21 @@ Clicking a failure drops a **chip** in the composer rather than pasting a stack 
 the same gesture as clicking a plan, so she gets a name she can say out loud with the file,
 line and assertion underneath.
 
+## The plans panel
+
+Clicking a plan points Beth at it. Two more controls per row, revealed on hover:
+
+- **★ pin** — puts it on a **pinned** shelf above the status groups, in pin order. Pins
+  live in `~/.director-harness/<repo>/pins.json`, so they survive a restart, and a pinned
+  plan **still appears in its normal group** — the pin is a second place to find
+  something, not a move. A pinned plan that is parked or shipped shows on the shelf even
+  though the panel is otherwise in-flight only.
+- **✎ rename** — sets the plan's spoken name, the one Beth says out loud. ⚠ This is the
+  only thing in the harness that **writes to a plan file**: it sets the `name:`
+  frontmatter key and touches nothing else. A plan with no frontmatter is refused rather
+  than repaired — that is `/tidyrepo`'s job. Names containing `"` or `#` are refused too,
+  because the frontmatter parser cannot read them back.
+
 ## Personal context
 
 She remembers the person, not only the work — `remember` and `recall`, in

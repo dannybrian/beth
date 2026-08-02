@@ -23,6 +23,8 @@ import { canPromote } from './directorRole.ts';
 import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
+import { Pins, workMessage } from './pins.ts';
+import { setPlanName } from './planName.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -56,6 +58,7 @@ export function createServer(deps: {
   work: WorkIndex;
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
+  pins: Pins;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
@@ -147,7 +150,8 @@ export function createServer(deps: {
       send({ type: 'tests', state: deps.tests.state() });
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
-      send({ type: 'work', items: work.live(), total: work.all().length });
+      // Plus the shelf, which is not in-flight by definition.
+      send(workMessage(work, deps.pins));
       // Everything broadcasts except the instruction to make a noise.
       const unsub = bus.subscribe((m) => {
         if (m.type === 'speak' && streamId !== speakerId) return;
@@ -321,6 +325,31 @@ export function createServer(deps: {
             session.send(`Decision resolved — "${d.title}": ${d.resolved?.answer}`);
             session.publishPending();
             return json(200, { ok: true });
+          }
+          case '/api/pin': {
+            // His own shelf, not a fact about the work — nothing is written to a
+            // plan file here. See pins.ts.
+            const target = String(body.path ?? '');
+            if (!work.byPath(target)) return json(404, { ok: false, reason: 'no such plan' });
+            const pinned = deps.pins.set(target, Boolean(body.pinned));
+            bus.publish(workMessage(work, deps.pins));
+            return json(200, { ok: true, pinned });
+          }
+          case '/api/rename': {
+            // ⚠️ THE ONE WRITE. See planName.ts for why this is the exception to
+            // "the harness only reads", and how narrow it is kept.
+            const result = setPlanName(cfg.repo, String(body.path ?? ''), String(body.name ?? ''));
+            if (!result.ok) return json(400, result);
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'plan_renamed',
+              text: `renamed to "${result.name}"`,
+              ref: result.path,
+            });
+            // No republish: the work index watches the file and will see the write
+            // itself. Publishing here too would race its own watcher.
+            return json(200, result);
           }
           case '/api/close-worker': {
             // His hand on the same lever. A stuck worker is visible to HIM first
