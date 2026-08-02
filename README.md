@@ -66,7 +66,7 @@ Nothing is machine-global except the credentials, so instances don't collide.
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turn pushes; result/usage reading; session-id persistence and `resume` across restarts |
 | `askgate.ts` | `canUseTool` — AskUserQuestion rendered and **pended** until answered; every other gated tool becomes an approve/deny card |
-| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `pending`, `plans`, `remember`, `recall` (all `alwaysLoad`) |
+| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `pending`, `plans`, `speech`, `remember`, `recall` (all `alwaysLoad`) |
 | `eventlog.ts` | Append + tail `<repo>/.claude/events.jsonl` (gitignored) |
 | `state.ts` | Live Ask-Danny queue and worker roster |
 | `bus.ts` | Ordered event flow to the UI, with replay for late-connecting browsers |
@@ -99,6 +99,12 @@ gate on our own echo-cancelled stream: talk over her and she stops.
 Voice needs `ELEVENLABS_API_KEY` with the **Text to Speech** permission, and a voice —
 `HARNESS_VOICE_ID`, or a `SPEECH_ENGINE_ID` to read one off. Without them the harness runs
 text-only and the mic button explains what is missing.
+
+How much of what she writes is read aloud is a level — `full`, `brief`, `headlines`, `off`
+— set by `HARNESS_SPEECH_LEVEL`, by the dropdown in the strip, or **by asking her**: "stop
+talking", "just the headlines", "you can talk again" all reach the `speech` tool and move
+the same dial the dropdown does. Every level leaves the transcript untouched; only the
+pronunciation is reduced.
 
 She may use inline audio tags — `[laughs]`, `[sighs]`, `[dryly]` — which are stripped from
 the text you read. ⚠ They are stripped from the *speech* too unless `HARNESS_TTS_MODEL`

@@ -99,6 +99,13 @@ These cost hours. Don't rediscover them.
   ⚠ The corollary bites in the other direction: EVERYTHING she writes is heard, so a
   prompt that asks for the same thing twice is heard twice. That is what made booting
   say "I am here" three times — see the KICKOFF note in `main.ts`.
+  The level is HERS to change as well as Danny's (`speech` tool in `tools.ts`, the same
+  dial `/api/speech` turns), because "stop talking" is said out loud to the person
+  talking, not clicked. ⚠ The change lands the moment the call does, and the level is
+  read when a message is PUBLISHED — so an ack written in the same message as the call
+  is spoken at the OLD level, and one written after the tool result at the NEW one. That
+  is the right way round in both directions, and it is why the tool description says
+  which way to write it rather than leaving it to luck.
 - **A permission card cannot be answered by voice.** `canUseTool` pends forever by
   design, so a prompt reaching the gate stops a spoken conversation dead, and the only
   tell is silence, which reads as a hang.

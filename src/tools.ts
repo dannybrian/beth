@@ -11,6 +11,7 @@ import type { PendingStore } from './state.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { PersonalStore, PersonalKind } from './personal.ts';
 import { taskSummary } from './workItems.ts';
+import { SPEECH_LEVELS, type SpeechControl, type SpeechLevel } from './spoken.ts';
 import { stripAudioTags } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
@@ -33,6 +34,11 @@ export function createHarnessTools(deps: {
    * will still reach for.
    */
   personal: PersonalStore | null;
+  /**
+   * The speech level, as a dial she can turn herself. Narrow on purpose: the
+   * tools have no business knowing about voice ids, held lines or ElevenLabs.
+   */
+  speech: SpeechControl;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -165,6 +171,45 @@ export function createHarnessTools(deps: {
     { alwaysLoad: true }
   );
 
+  /**
+   * "Stop talking" is a thing said OUT LOUD, mid-conversation, to the person
+   * talking — not something Danny should have to reach for a dropdown to do. The
+   * same dial the strip renders, with her hand on it too; the bus message
+   * `setSpeechLevel` publishes is what keeps the two in step, so the select
+   * follows her the same way it follows a click.
+   *
+   * ⚠ The change lands the moment the call does, and the level is read when a
+   * message is PUBLISHED. So an acknowledgement written in the same message as
+   * the call is spoken at the OLD level and one written after the tool result is
+   * spoken at the NEW one — which is the right way round in both directions, but
+   * only if she knows it. Hence the note in the description.
+   */
+  const speech = tool(
+    'speech',
+    'Set how much of what you write is READ ALOUD. This is Danny\'s dial and he asks for it out loud — "stop talking", "just the headlines", "you can talk again" — so turn it when he asks rather than promising to be briefer. The transcript is unaffected at every level: nothing is lost, it is only not pronounced. Omit `level` to read the current setting without changing it. The new level applies the moment this call lands, so put your one-line acknowledgement in the SAME reply as the call when you are going quieter, and in the reply AFTER it when you are turning speech back up.',
+    {
+      level: z
+        .enum(SPEECH_LEVELS as [SpeechLevel, ...SpeechLevel[]])
+        .optional()
+        .describe(
+          'full = every word you write, verbatim. brief = `say` items in full plus the last paragraph of anything longer (the usual setting). headlines = findings and announcements only, plus short one-line progress notes. off = silence; nothing is spoken at all.'
+        ),
+    },
+    async ({ level }) => {
+      const previous = deps.speech.level();
+      if (!level || level === previous) return ok({ level: previous, changed: false });
+      deps.speech.set(level);
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'speech_level',
+        text: `speech → ${level}`,
+      });
+      return ok({ level, previous, changed: true });
+    },
+    { alwaysLoad: true }
+  );
+
   const remember = tool(
     'remember',
     'Note ONE thing about Danny himself that came up in passing — not about the work. A demo he is nervous about, how he likes to work, who someone is, a bad night. One item per call. Never interrogate him to fill this in, and never read it back to him.',
@@ -196,6 +241,6 @@ export function createHarnessTools(deps: {
   return createSdkMcpServer({
     name: 'harness',
     version: '1.0.0',
-    tools: [say, queueDecision, pending, plans, ...(deps.personal ? [remember, recall] : [])],
+    tools: [say, queueDecision, pending, plans, speech, ...(deps.personal ? [remember, recall] : [])],
   });
 }

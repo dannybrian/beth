@@ -31,9 +31,18 @@ work.subscribe((items) =>
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
 
+// The speech plane, entire. No Speech Engine, no tunnel, no public port, no
+// session and no mic required to speak — she says a line because she wrote one.
+// Built BEFORE the session because the session hands her the dial: "stop talking"
+// is said out loud, to her, and she needs a way to actually do it.
+const speakOut = new SpeakOut(cfg, bus);
+
 let session: SessionManager;
 const gate = new AskGate(bus, events, () => session.sessionId(), cfg.directorName);
-session = new SessionManager(cfg, bus, events, pending, gate, work);
+session = new SessionManager(cfg, bus, events, pending, gate, work, {
+  level: speakOut.speechLevel,
+  set: (level) => speakOut.setSpeechLevel(level),
+});
 
 // Terminal-session and hook writes to the event log flow into the UI too.
 events.onEvent((e) => {
@@ -62,9 +71,6 @@ const { resumed } = session.start(
   process.env.HARNESS_NO_KICKOFF ? undefined : beat ? `${KICKOFF}\n\n${beat}` : KICKOFF
 );
 
-// The speech plane, entire. No Speech Engine, no tunnel, no public port, no
-// session and no mic required to speak — she says a line because she wrote one.
-const speakOut = new SpeakOut(cfg, bus);
 const tests = new TestMonitor(cfg, bus);
 const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work });
 server.on('error', (err: NodeJS.ErrnoException) => {

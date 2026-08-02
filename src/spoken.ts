@@ -15,14 +15,11 @@ export type SpeechLevel = 'full' | 'brief' | 'headlines' | 'off';
 export const SPEECH_LEVELS: SpeechLevel[] = ['full', 'brief', 'headlines', 'off'];
 
 /**
- * What she says when a level would otherwise leave a SPOKEN turn with nothing.
- *
- * It cannot be silence: a response with zero chunks makes ElevenLabs re-deliver
- * the transcript, which is the re-delivery loop. So 'off' still costs one short
- * line per thing you say out loud — and that line's job is to tell you where the
- * answer went.
+ * The dial, as everything that can turn it sees it — the strip through
+ * `/api/speech`, and Beth herself through the `speech` tool. Narrow on purpose:
+ * who holds it (SpeakOut) is nobody else's business.
  */
-export const SILENT_ACK = 'On the page.';
+export type SpeechControl = { level: () => SpeechLevel; set: (level: SpeechLevel) => void };
 
 /**
  * `say` kinds that are ANNOUNCEMENTS rather than narration — a result, not

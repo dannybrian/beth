@@ -15,6 +15,7 @@ import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
+import type { SpeechControl } from './spoken.ts';
 import { detectLinks } from './links.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
@@ -110,6 +111,7 @@ export class SessionManager {
   private pending: PendingStore;
   private gate: AskGate;
   private work: WorkIndex;
+  private speech: SpeechControl;
 
   constructor(
     cfg: HarnessConfig,
@@ -117,7 +119,8 @@ export class SessionManager {
     events: EventLog,
     pending: PendingStore,
     gate: AskGate,
-    work: WorkIndex
+    work: WorkIndex,
+    speech: SpeechControl
   ) {
     this.cfg = cfg;
     this.bus = bus;
@@ -125,6 +128,7 @@ export class SessionManager {
     this.pending = pending;
     this.gate = gate;
     this.work = work;
+    this.speech = speech;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
     this.personal = new PersonalStore(cfg);
   }
@@ -218,6 +222,7 @@ export class SessionManager {
             work: this.work,
             repo: this.cfg.repo,
             personal: this.personal.enabled ? this.personal : null,
+            speech: this.speech,
           }),
         },
         canUseTool: this.gate.canUseTool,

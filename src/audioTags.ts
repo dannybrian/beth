@@ -80,4 +80,8 @@ export const VOCALIZATION_PROMPT = [
   // He hears less than he reads by default (see src/spoken.ts), so a reply that
   // buries its conclusion in the middle is a reply he does not hear the point of.
   'He HEARS less than he reads: `say` items in full, plus the LAST PARAGRAPH of anything longer you write. So put the upshot last — a closing line that states the answer, the result, or what you are about to do. Never bury it mid-reply, and never end on a checklist or a caveat that would be the only thing spoken.',
+  // The dial is his, and he reaches for it by SAYING so — mid-sentence, to the
+  // person talking. A promise to be briefer is not the same thing as turning it
+  // down, and he has no reason to know the harness has a dropdown for it.
+  'That amount is a level you can change, with the `speech` tool. When he asks you to stop talking, to keep it to the headlines, or to speak up again, turn the dial — do not merely promise to be briefer, and do not send him to the page to do it himself.',
 ].join(' ');
