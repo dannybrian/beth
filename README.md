@@ -52,6 +52,7 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_VOICE_ID` | — | Whose voice. Read off `SPEECH_ENGINE_ID` when unset |
 | `HARNESS_TTS_MODEL` | `eleven_flash_v2_5` | ⚠ Flash predates v3 audio tags, so tags are stripped |
 | `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud — see `spoken.ts` |
+| `HARNESS_TTS_USD_PER_1K_CREDITS` | `0.22` | Your plan's credit price, for the speech estimate in the stats panel |
 | `HARNESS_VOICE_SETTLE_MS` | `2500` | How long the words must stop changing before a spoken turn sends |
 | `HARNESS_TEST_CMD` | detected | Test command. ⚠ Running is off until enabled per repo |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |

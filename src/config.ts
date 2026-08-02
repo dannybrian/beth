@@ -83,6 +83,15 @@ export type HarnessConfig = {
    */
   ttsModel: string;
   /**
+   * What a thousand ElevenLabs credits cost YOU, for the estimate in the stats
+   * panel. There is no API that hands us this: credits-per-character comes from
+   * the model, but dollars-per-credit comes from the plan, and the two together
+   * are the bill. The default is the Creator plan ($22 / 100k credits); Pro and
+   * Scale are cheaper per credit, so set this and the panel stops lying to you.
+   * It is only ever multiplied into a displayed estimate — nothing is enforced.
+   */
+  ttsUsdPer1kCredits: number;
+  /**
    * How much of what she writes is read ALOUD. The transcript always has all of
    * it; this only decides what is pronounced.
    *   'full'      — every line, as it was before this existed
@@ -213,6 +222,7 @@ export function loadConfig(): HarnessConfig {
     speechEngineId: conf('SPEECH_ENGINE_ID'),
     voiceId: conf('HARNESS_VOICE_ID') ?? conf('ELEVENLABS_VOICE_ID'),
     ttsModel: conf('HARNESS_TTS_MODEL') ?? 'eleven_flash_v2_5',
+    ttsUsdPer1kCredits: Number(conf('HARNESS_TTS_USD_PER_1K_CREDITS')) || 0.22,
     speechLevel: (SPEECH_LEVELS as string[]).includes(conf('HARNESS_SPEECH_LEVEL') ?? '')
       ? (conf('HARNESS_SPEECH_LEVEL') as SpeechLevel)
       : 'brief',

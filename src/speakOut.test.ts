@@ -10,6 +10,7 @@ const cfg = (over: Partial<HarnessConfig> = {}): HarnessConfig =>
     voiceId: 'v_test',
     ttsModel: 'eleven_flash_v2_5',
     speechLevel: 'full',
+    ttsUsdPer1kCredits: 0.22,
     ...over,
   }) as HarnessConfig;
 
@@ -156,6 +157,88 @@ test('the level switches live, and says so on the bus', () => {
   assert.ok(seen.some((m) => m.type === 'speech' && m.level === 'full'));
   bus.publish({ type: 'assistant', text: 'Now audible.' });
   assert.equal(spoken(seen).length, 1);
+});
+
+// --- the bill ----------------------------------------------------------------
+//
+// ElevenLabs charges for the REQUEST. Everything here is about counting at that
+// moment rather than at the tempting one.
+
+/** Stub the client and skip resolution — no network, no engine lookup. */
+function billable(s: SpeakOut, opts: { fail?: boolean; modelId?: string } = {}) {
+  const sent: string[] = [];
+  (s as unknown as { resolved: unknown }).resolved = {
+    voiceId: 'v_test',
+    modelId: opts.modelId ?? 'eleven_flash_v2_5',
+  };
+  (s as unknown as { client: unknown }).client = {
+    textToSpeech: {
+      stream: async (_v: string, body: { text: string }) => {
+        if (opts.fail) throw new Error('missing_permissions');
+        sent.push(body.text);
+        return 'audio' as unknown;
+      },
+    },
+  };
+  return sent;
+}
+
+test('a line that is HELD but never fetched costs nothing', async () => {
+  // The tempting place to count is speak(). It would report money for every
+  // line queued into a closed tab, and for lines the level dropped out from
+  // under before the page ever asked.
+  const { bus } = recording();
+  const s = new SpeakOut(cfg(), bus);
+  billable(s);
+  s.speak('Tests are green.');
+  assert.deepEqual(s.spend().lines, 0);
+  assert.deepEqual(s.spend().chars, 0);
+});
+
+test('fetching the audio is what bills, and fetching it twice bills twice', async () => {
+  const { bus } = recording();
+  const s = new SpeakOut(cfg(), bus);
+  billable(s);
+  const id = s.speak('Tests are green.')!;
+  await s.stream(id);
+  assert.deepEqual({ lines: s.spend().lines, chars: s.spend().chars }, { lines: 1, chars: 16 });
+  // A reload re-requests a held line, and ElevenLabs charges again.
+  await s.stream(id);
+  assert.deepEqual({ lines: s.spend().lines, chars: s.spend().chars }, { lines: 2, chars: 32 });
+});
+
+test('a request that FAILED is not a request that was billed', async () => {
+  const { bus } = recording();
+  const s = new SpeakOut(cfg(), bus);
+  billable(s, { fail: true });
+  const id = s.speak('Tests are green.')!;
+  await assert.rejects(() => s.stream(id));
+  assert.equal(s.spend().chars, 0);
+  assert.ok(s.status().error, 'and it says why');
+});
+
+test('the realtime models bill at half rate — the estimate follows the MODEL', async () => {
+  const { bus } = recording();
+  const flash = new SpeakOut(cfg(), bus);
+  billable(flash);
+  await flash.stream(flash.speak('a'.repeat(1000))!);
+  assert.equal(flash.spend().credits, 500);
+  assert.equal(flash.spend().usd, (500 / 1000) * 0.22);
+
+  const v3 = new SpeakOut(cfg({ ttsModel: 'eleven_v3' }), new ConversationBus());
+  billable(v3, { modelId: 'eleven_v3' });
+  await v3.stream(v3.speak('a'.repeat(1000))!);
+  assert.equal(v3.spend().credits, 1000);
+});
+
+test('the rate behind the estimate travels with it, so the page can print it', () => {
+  // The dollars are the only guessed part — no API hands us the plan's price —
+  // so the assumption is shown rather than buried.
+  const s = new SpeakOut(cfg({ ttsUsdPer1kCredits: 0.165 }), new ConversationBus());
+  assert.deepEqual(
+    { r: s.spend().usdPer1kCredits, c: s.spend().creditsPerChar, m: s.spend().model },
+    { r: 0.165, c: 0.5, m: 'eleven_flash_v2_5' }
+  );
 });
 
 test('her own transcript does not echo — only assistant and say are spoken', () => {

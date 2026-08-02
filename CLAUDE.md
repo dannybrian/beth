@@ -181,6 +181,14 @@ the conversation that produced it. Where things stand:
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,
   which are recorded there rather than here because they are about `testRunner.ts`.
+  The same panel now carries the SPEECH bill — and note what that is not: the deleted
+  cost meter metered a Speech Engine CONNECTION, which is why it went with the dial-in
+  path. This one counts characters at the moment `speakOut.stream()` requests them,
+  because that is what ElevenLabs charges for. ⚠ Do not move the count to `speak()`: a
+  held line nobody fetched was never billed, and a reload that re-fetches one is billed
+  twice. Characters are exact; the DOLLARS are an estimate, since credits-per-character
+  comes from the model but dollars-per-credit comes from the plan and no API hands us
+  that — so the assumed rate is printed beside the number rather than hidden behind it.
 - **`personal-context.md`** — BUILT (`src/personal.ts`). She remembers the person and
   follows things up. Read it for the failure mode, which is the whole design: she may only
   ask about something she ACTUALLY RECORDED, at most once a day, only at a moment already

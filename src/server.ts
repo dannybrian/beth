@@ -347,6 +347,10 @@ export function createServer(deps: {
           available: Boolean(u?.rate_limits_available),
           subscription: u?.subscription_type ?? null,
           limits: (u?.rate_limits as unknown) ?? null,
+          // The other bill. It rides this response because the stats panel
+          // already re-reads it on every open, and speech spend is exactly the
+          // kind of number you go looking for rather than watch.
+          speech: deps.speakOut.spend(),
         });
       }
       if (url.pathname === '/api/context') {

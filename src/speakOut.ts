@@ -39,6 +39,20 @@ export class SpeakOut {
   /** How much of what she writes is read aloud. See spoken.ts. */
   private verbosity: SpeechLevel;
 
+  /**
+   * What she has been BILLED for this run.
+   *
+   * Counted where the request is made, not where a line is held or played,
+   * because that is the moment ElevenLabs charges: a line queued and never
+   * fetched (closed tab, level turned down before it played) costs nothing, and
+   * a page that re-requests one after a reload pays for it twice. Counting
+   * `speak()` calls instead would report money that was never spent.
+   *
+   * Not reset by /clear. Clearing the conversation drops context; it does not
+   * refund anything, and a cost meter that forgets is worse than no meter.
+   */
+  private billed = { lines: 0, chars: 0 };
+
   constructor(cfg: HarnessConfig, bus: ConversationBus) {
     this.cfg = cfg;
     this.bus = bus;
@@ -174,11 +188,46 @@ export class SpeakOut {
         optimizeStreamingLatency: 3,
       });
       this.lastError = null;
+      this.billed.lines += 1;
+      this.billed.chars += line.text.length;
       return stream;
     } catch (e: any) {
       this.lastError = String(e?.body?.detail?.message ?? e?.message ?? e).slice(0, 300);
       throw e;
     }
+  }
+
+  /**
+   * Credits per character, which is the half of the price ElevenLabs sets by
+   * MODEL: the realtime models (flash, turbo) bill at half rate, everything else
+   * at one credit per character. Derived from the model actually in use, like
+   * tag support — and for the same reason, since the engine's model is not ours.
+   */
+  private get creditsPerChar(): number {
+    return /flash|turbo/i.test(this.resolved?.modelId ?? this.cfg.ttsModel) ? 0.5 : 1;
+  }
+
+  /**
+   * The speech bill for this run.
+   *
+   * Characters are EXACT — we sent them. The money is an ESTIMATE, because the
+   * other half of the price is the plan, which the API does not hand us as a
+   * rate. So the assumed rate travels with the number and the page prints it:
+   * a figure you can check beats a figure you have to trust, and
+   * HARNESS_TTS_USD_PER_1K_CREDITS is how you correct it.
+   */
+  spend() {
+    const credits = this.billed.chars * this.creditsPerChar;
+    return {
+      available: this.configured,
+      lines: this.billed.lines,
+      chars: this.billed.chars,
+      credits,
+      usd: (credits / 1000) * this.cfg.ttsUsdPer1kCredits,
+      model: this.resolved?.modelId ?? this.cfg.ttsModel,
+      creditsPerChar: this.creditsPerChar,
+      usdPer1kCredits: this.cfg.ttsUsdPer1kCredits,
+    };
   }
 
   status() {

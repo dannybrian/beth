@@ -1018,6 +1018,30 @@ function renderStats() {
     box.append(statRow('model', u.model));
   }
 
+  // The other bill. Characters are exact — the harness sent them — but the
+  // dollars are an estimate, so the rate behind them is printed rather than
+  // hidden: a number you can check beats a number you have to trust.
+  const s = planLimits?.speech;
+  box.append(el('h3', null, 'Speech'));
+  if (!planLimits) box.append(el('div', 'snote', 'checking…'));
+  else if (!s) box.append(el('div', 'snote', 'not reported'));
+  else if (!s.available) box.append(el('div', 'snote', 'text-only — nothing spoken'));
+  else if (!s.lines) box.append(el('div', 'snote', 'nothing spoken yet'));
+  else {
+    box.append(statRow('lines', String(s.lines)));
+    box.append(statRow('chars', kfmt(s.chars)));
+    box.append(statRow('cost', `≈$${s.usd.toFixed(4)}`));
+    // The vendor prefix is on every model and costs a line of wrap in a narrow
+    // panel; what varies is the part after it.
+    box.append(
+      el(
+        'div',
+        'snote',
+        `${s.model.replace(/^eleven_/, '')} · ${s.creditsPerChar} cr/char · $${s.usdPer1kCredits}/1k cr`
+      )
+    );
+  }
+
   // Additive and server-driven: render the windows that are actually present
   // rather than the ones the shape says might be.
   box.append(el('h3', null, `Plan${planLimits?.subscription ? ` · ${planLimits.subscription}` : ''}`));
