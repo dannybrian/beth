@@ -156,8 +156,10 @@ the conversation that produced it. Where things stand:
   recognition posting an ordinary turn). Speech Engine, the voice port, the tunnel, the
   singleton, the announcement queue, `speakable`, `SILENT_ACK`, `runTurn` and the cost
   meter are all gone. Read it for the reasoning, not for work — what is left is the
-  question it ends on: whether to move recognition to Scribe, which would punctuate
-  properly and let echo cancellation reach the recogniser at last.
+  question it ends on — Scribe — which is DEFERRED as of 2026-08-02: the Web Speech API
+  stays for now. The research is recorded there (realtime Scribe has VAD endpointing and
+  keyterms, both of which would retire patches), along with the one symptom that should
+  reopen it: project nouns consistently mangled, which no local tuning can fix.
 - **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,

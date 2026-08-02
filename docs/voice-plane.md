@@ -226,21 +226,51 @@ Steps 2 and 3 each left the harness working. Step 4 was pure deletion, which was
 
 ## What is still open
 
-**Scribe.** Recognition is good but the Web Speech API punctuates barely at all and has no
-dictation mode, so the page rewrites spoken "period" and friends — a stopgap that will eat
-a real "the settle period". And because Chrome's recogniser opens its own microphone and
-takes no constraints, echo cancellation cannot reach it; half duplex is doing that work
-instead. Both limits are the same limit: **we do not own the capture**. Scribe reverses it
-— we would hold the `MediaStream`, so AEC applies to the audio the recogniser actually
-gets, and Scribe punctuates on its own. The cost is a `MediaRecorder` and chunk-posting
-loop, half a cent a minute, and the `speech_to_text` permission.
+**Scribe. Considered 2026-08-02, and DEFERRED — Danny is staying with the Web Speech API
+for now and watching the transcription.** Do not re-open this without a reason from use;
+what follows is the research, so that reason does not cost a second afternoon.
 
-It is not urgent. Half duplex measured fine with the speakers up, and the punctuation
-trick works. But it is the next thing this plane wants.
+The objection recorded earlier — that Scribe means `speechToText.convert`, losing interim
+results and needing a chunk-posting loop — is **wrong**. There is a realtime API
+(`scribe_v2_realtime`) over a websocket, and it is better than the thing it would replace
+in three ways the design did not anticipate:
 
-**One more reason, found in use.** Chrome ends a recognition session on its own schedule,
-so a sentence longer than one session gets split across recognisers and the page has to
-sew it back together — words said before the seam are only in the session that ended.
-That is fixed (`carry` in `ui/listen.js`), but it is a seam that exists *because* the
-recogniser owns its own lifecycle. Owning the capture removes the seam rather than
-patching it.
+- **Server-side VAD endpointing** (`commitStrategy: 'vad'`, with `vadSilenceThresholdSecs`,
+  `minSpeechDurationMs`, `minSilenceDurationMs`). This would REPLACE the settle window.
+  Today end-of-utterance is inferred from text churn — "the words stopped changing" — which
+  is a proxy for the thing VAD measures directly. Every settle-tuning problem is downstream
+  of that proxy.
+- **`keyterms`**, up to 50 biasing terms. The work index already holds a spoken name for
+  every plan, so "tulito", "beadgame" and "Notation-06" could be fed straight in. That is
+  the most likely misrecognition class in a conversation made mostly of project nouns, and
+  it is not fixable by tuning anything on the current path.
+- **`noVerbatim`**, which drops filler words and false starts.
+
+Plus punctuation, no Chrome-only restriction, and audio that stops going to Google.
+
+**The architecture falls out of one constraint.** `ScribeRealtime` is Node-only and
+authenticates with an `xi-api-key` header, which a browser cannot set — so the HARNESS
+holds the connection, which is where the key belongs anyway. The page captures PCM and
+posts chunks; the harness holds the socket, publishes partials over the existing SSE, and
+turns a committed transcript into an ordinary turn. The ear becomes symmetric with the
+mouth: both server-side, the browser a microphone and a speaker.
+
+**What it would cost:** `ws` comes back (deleted with the dial-in path; the SDK's realtime
+client needs it), an AudioWorklet to get PCM 16k mono out of the `MediaStream` because
+`MediaRecorder` gives webm/opus, the `speech_to_text` permission, and about half a cent a
+minute.
+
+**The argument against, which is real:** today's ear works when ElevenLabs does not. Scribe
+has throttle, quota and session-limit error payloads, and deleting the Web Speech path
+would mean an outage takes voice input with it.
+
+### What would flip this
+
+Tuning covers most complaints. One does not:
+
+| Symptom | Reach for |
+| --- | --- |
+| turns firing mid-sentence, or replies sluggish | `HARNESS_VOICE_SETTLE_MS` |
+| a real word eaten as punctuation ("the settle period") | the spoken-punctuation checkbox |
+| text resetting mid-utterance | a regression in the `carry` fix — see `src/listen.test.ts` |
+| **project nouns consistently mangled** | **nothing. This is the keyterms case, and it is the signal to revisit.** |
