@@ -165,7 +165,12 @@ export type WorkReader = {
  * a name alone does not resolve. Everything about clicking-to-point is this type.
  */
 export type WorkRef = {
-  kind: 'item' | 'task';
+  /**
+   * 'test' is a failing test rather than a plan, and it exists here on purpose:
+   * clicking a failure is the SAME gesture as clicking a plan, so it should be
+   * the same machinery. It carries its own detail because nothing indexes it.
+   */
+  kind: 'item' | 'task' | 'test';
   /** Repo-relative path of the item (tasks reference their plan's path). */
   path: string;
   /** What Beth should call it. Already unique — safe to say bare. */
@@ -174,6 +179,8 @@ export type WorkRef = {
   taskIndex?: number;
   /** Present on kind:'task' — 1-based line, for a handoff that jumps there. */
   line?: number;
+  /** Present on kind:'test' — the assertion, so she does not have to go read it. */
+  detail?: string;
 };
 
 /**

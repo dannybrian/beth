@@ -293,6 +293,14 @@ export class WorkIndex {
     if (!refs.length) return '';
     const lines: string[] = [];
     for (const ref of refs) {
+      // A failing test is not in the index and never will be — it carries its own
+      // detail precisely so it does not need to be. Same gesture, same chip,
+      // different source of truth.
+      if (ref.kind === 'test') {
+        const where = ref.path ? ` — ${ref.path}${ref.line ? `:${ref.line}` : ''}` : '';
+        lines.push(`- the failing test "${ref.spoken}"${where}${ref.detail ? `\n    ${ref.detail}` : ''}`);
+        continue;
+      }
       const hit = this.resolve(ref);
       if (!hit) {
         lines.push(`- "${ref.spoken}" (${ref.path}) — no longer in the index; it may have been moved or renamed.`);
@@ -315,7 +323,7 @@ export class WorkIndex {
       }
     }
     return [
-      'Danny is pointing at the following, from the plans panel:',
+      'Danny is pointing at the following:',
       ...lines,
       'Refer to these by the quoted name when you speak or write. Never read the path aloud.',
       '',

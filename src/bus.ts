@@ -5,6 +5,7 @@ import type { HarnessEvent } from './eventlog.ts';
 import type { WorkItem, WorkRef } from './workItems.ts';
 import type { TextLink } from './links.ts';
 import type { TextSpan } from './markdown.ts';
+import type { TestState } from './testRunner.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -109,6 +110,9 @@ export type UIMessage =
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
   | { type: 'speech'; level: string }
+  // The health light. Republished whenever the tree moves, not only after a run:
+  // "it passed, and that was before your last edit" is a different answer.
+  | { type: 'tests'; state: TestState }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {
@@ -130,7 +134,13 @@ export class ConversationBus {
       this.lastStatus = m;
       // `speak` is an instruction to make a noise NOW. Replaying it would make a
       // reconnecting page perform the whole conversation again, out loud.
-    } else if (m.type !== 'pending' && m.type !== 'work' && m.type !== 'pointing' && m.type !== 'speak') {
+    } else if (
+      m.type !== 'pending' &&
+      m.type !== 'work' &&
+      m.type !== 'pointing' &&
+      m.type !== 'speak' &&
+      m.type !== 'tests'
+    ) {
       this.history.push(m);
       if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();
     }

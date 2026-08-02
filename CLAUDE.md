@@ -46,8 +46,12 @@ pnpm test        # node --test src/*.test.ts
 ```
 
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
-`spokenName`, the `plansReader` parsers, the `workIndex` watcher, and `speakOut` — which
-is now the whole speech plane, so what it does and does not pronounce is worth pinning).
+`spokenName`, the `plansReader` parsers, the `workIndex` watcher, `speakOut` — which is now
+the whole speech plane — and the `testRunner` detectors and failure parsers.
+
+⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
+passed green while real output produced three entries for one failure, because real output
+names each failure twice and the invented one did not. Paste real output.
 
 Watcher tests poll for a condition rather than sleeping a fixed amount; filesystem event
 latency has no guarantee, and a fixed wait is how these go flaky.
@@ -138,10 +142,10 @@ the conversation that produced it. Where things stand:
   meter are all gone. Read it for the reasoning, not for work — what is left is the
   question it ends on: whether to move recognition to Scribe, which would punctuate
   properly and let echo cancellation reach the recogniser at last.
-- **`status-surface.md`** — steps 1 and 2 are BUILT: the dot tracks anything running, the
-  spinner tracks the prediction, and the numbers live behind the context meter (with the
-  SDK plan windows, read defensively). What is left is the test monitor, which now has
-  the top right to itself.
+- **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
+  prediction, the numbers live behind the context meter (with the SDK plan windows, read
+  defensively), and the test monitor has the top right. Read it for the parser lessons,
+  which are recorded there rather than here because they are about `testRunner.ts`.
 - **`personal-context.md`** — not started. A director who remembers the person, not only
   the work.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff

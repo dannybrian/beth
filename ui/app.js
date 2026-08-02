@@ -675,6 +675,7 @@ const handlers = {
     renderVoice(m.status, m.detail);
   },
   speak: (m) => enqueueSpeak(m.id),
+  tests: (m) => renderTests(m.state),
   event: (m) => {
     renderEvent(m);
     feedEvent(m.event);
@@ -815,6 +816,117 @@ function paintMeter() {
   ctx.className = `ctx${ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : ''}`;
   ctx.title = `Context ${ctxPct.toFixed(1)}% used — click for the numbers`;
   if (statsOpen) renderStats();
+}
+
+// --- is the tree green -------------------------------------------------------
+//
+// A light and a count in the top right, and the log behind a click. The gesture
+// that matters is the last one: clicking a FAILURE drops a chip in the composer
+// rather than pasting a wall of stack trace, which is the same unlock deixis was
+// for plans — she gets "the settle-window test in listen.test.ts" as something
+// she can say out loud, with the file, the line and the assertion underneath.
+
+let testState = null;
+let testPanelOpen = false;
+
+function renderTests(state) {
+  testState = state;
+  const btn = $('test-light');
+  btn.className = `tlight ${state.light}`;
+  const n = state.last?.failures.length ?? 0;
+  $('test-count').textContent = state.light === 'red' ? (n || '!') : '';
+  btn.title = !state.command
+    ? 'No test runner detected — set HARNESS_TEST_CMD'
+    : !state.enabled
+      ? `Tests not enabled here — click to see ${state.command.join(' ')}`
+      : state.running
+        ? 'Running…'
+        : !state.last
+          ? 'No run yet'
+          : state.last.timedOut
+            ? 'Timed out'
+            : (state.last.exitCode ?? 1) !== 0
+              ? `${n || 'some'} failing${state.stale ? ' — and the tree has changed since' : ''}`
+              : state.stale
+                ? 'Passed, but the tree has changed since'
+                : 'Green';
+  if (testPanelOpen) renderTestPanel();
+}
+
+function renderTestPanel() {
+  const box = $('test-panel');
+  box.replaceChildren();
+  const s = testState;
+  if (!s) return;
+
+  if (!s.command) {
+    box.append(el('h3', null, 'Tests'));
+    box.append(el('div', 'snote', 'No runner detected here. Set HARNESS_TEST_CMD in the repo’s .env to name one.'));
+    return;
+  }
+
+  box.append(el('h3', null, 'Tests'));
+  const cmd = el('div', 'tcmd', s.command.join(' '));
+  cmd.title = `detected from ${s.why}`;
+  box.append(cmd);
+
+  // ⚠️ The command is shown BEFORE the switch is offered. This runs project code
+  // on a schedule, and a suite that spins containers or costs money must not
+  // start because you happened to save a file.
+  const toggle = el('button', 'topt', s.enabled ? 'Stop watching' : 'Watch this repo');
+  toggle.onclick = () => post('/api/tests/enable', { on: !s.enabled });
+  box.append(toggle);
+  const now = el('button', 'topt ghost', 'Run now');
+  now.onclick = () => post('/api/tests/run');
+  box.append(now);
+
+  if (!s.enabled) {
+    box.append(el('div', 'snote', 'Off here. Enabling runs this command whenever the tree changes, settles, and she is idle.'));
+  }
+
+  const r = s.last;
+  if (!r) return void (s.enabled && box.append(el('div', 'snote', 'no run yet')));
+
+  box.append(el('h3', null, 'Last run'));
+  const when = new Date(r.at).toLocaleTimeString();
+  box.append(
+    el(
+      'div',
+      'snote',
+      `${when} · ${(r.ms / 1000).toFixed(1)}s · ${r.timedOut ? 'TIMED OUT' : `exit ${r.exitCode}`}${s.stale ? ' · tree changed since' : ''}`
+    )
+  );
+
+  if (r.failures.length) {
+    box.append(el('h3', null, `Failures (${r.failures.length})`));
+    for (const f of r.failures) {
+      const row = el('button', 'tfail');
+      row.append(el('div', 'tname', f.spoken));
+      if (f.path) row.append(el('div', 'tloc', `${f.path}${f.line ? `:${f.line}` : ''}`));
+      if (f.detail) row.append(el('div', 'tdetail', f.detail));
+      // Same machinery as a plan: a reference PAIR, so she gets a name she can
+      // say and the location underneath — not a paragraph of stack trace.
+      row.onclick = () => {
+        attachRef({ kind: 'test', path: f.path ?? '', spoken: f.spoken, line: f.line, detail: f.detail });
+        toggleTestPanel();
+      };
+      box.append(row);
+    }
+  }
+
+  if (r.output.trim()) {
+    box.append(el('h3', null, 'Output'));
+    // Whatever the parsers could not read is still here, which is always better
+    // than nothing — and the TAIL is what matters when a suite fails late.
+    box.append(el('pre', 'tlog', r.output.slice(-8000)));
+  }
+}
+
+function toggleTestPanel() {
+  testPanelOpen = !testPanelOpen;
+  $('test-panel').hidden = !testPanelOpen;
+  $('test-light').classList.toggle('open', testPanelOpen);
+  if (testPanelOpen) renderTestPanel();
 }
 
 // --- the numbers, behind the meter ------------------------------------------
@@ -1244,14 +1356,18 @@ function openStream() {
 openStream();
 
 $('ctx-meter').onclick = toggleStats;
-// Click-away closes it. The panel is a glance, not a mode — anything that makes
-// it feel like a dialog is wrong.
+$('test-light').onclick = toggleTestPanel;
+// Click-away closes them. These are glances, not modes — anything that makes one
+// feel like a dialog is wrong.
 document.addEventListener('click', (e) => {
-  if (!statsOpen) return;
-  if (e.target.closest('#stats') || e.target.closest('#ctx-meter')) return;
-  toggleStats();
+  if (statsOpen && !e.target.closest('#stats') && !e.target.closest('#ctx-meter')) toggleStats();
+  if (testPanelOpen && !e.target.closest('#test-panel') && !e.target.closest('#test-light')) toggleTestPanel();
 });
-document.addEventListener('keydown', (e) => e.key === 'Escape' && statsOpen && toggleStats());
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (statsOpen) toggleStats();
+  if (testPanelOpen) toggleTestPanel();
+});
 paintMeter();
 
 // --- composer --------------------------------------------------------------

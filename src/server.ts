@@ -15,6 +15,7 @@ import type { PendingStore } from './state.ts';
 import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
 import type { SpeakOut } from './speakOut.ts';
+import type { TestMonitor } from './testRunner.ts';
 import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
@@ -50,6 +51,7 @@ export function createServer(deps: {
   gate: AskGate;
   session: SessionManager;
   speakOut: SpeakOut;
+  tests: TestMonitor;
   work: WorkIndex;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
@@ -100,6 +102,7 @@ export function createServer(deps: {
       // Re-render anything still waiting on a human.
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
+      send({ type: 'tests', state: deps.tests.state() });
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       send({ type: 'work', items: work.live(), total: work.all().length });
@@ -211,6 +214,20 @@ export function createServer(deps: {
             if (!(SPEECH_LEVELS as string[]).includes(level)) return json(400, { error: 'unknown level' });
             deps.speakOut.setSpeechLevel(level as SpeechLevel);
             return json(200, { ok: true, level });
+          }
+          case '/api/tests/enable': {
+            // ⚠️ The one switch that lets this harness execute project code on a
+            // schedule. Off by default, per repo, and the page shows the detected
+            // command before offering it — a suite that spins containers or costs
+            // money must not start because someone saved a file.
+            deps.tests.setEnabled(Boolean(body.on));
+            return json(200, { ok: true, state: deps.tests.state() });
+          }
+          case '/api/tests/run': {
+            // Deliberate, so it ignores settle, interval and idleness. It still
+            // refuses to overlap itself.
+            void deps.tests.run();
+            return json(200, { ok: true });
           }
           case '/api/listening': {
             // Reasoning effort follows the MIC now.

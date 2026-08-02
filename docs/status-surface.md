@@ -143,6 +143,19 @@ the panel fails to open.
    present (five-hour, seven-day, and `model_scoped` per-model). Both honest absences —
    an API-key session, or a future SDK that drops the method — read as "no plan windows
    for this session", because neither is an error and neither is actionable differently.
-3. The test monitor — detector, then runner and light, then the log panel, then clickable
-   failures. Each of those four is useful on its own, and the last one is the one that
+3. ~~The test monitor~~ — **done**, all four parts. `src/testRunner.ts` detects, schedules,
+   runs and parses; the light and panel are in the strip; a failure is a `WorkRef` of kind
+   `'test'`, so clicking it uses the plan machinery unchanged.
+
+   Two things the build taught that the design did not know. **Every parser runs and the
+   richest result wins** — guessing the format from the command is confidently wrong when
+   a project's `test` script is a wrapper, which is common. And `node --test` names each
+   failure TWICE, once bare in the run and again in a "failing tests:" section carrying the
+   actual error, so results are deduped by name keeping the richest; the invented fixture
+   passed while real output produced three entries for one failure. Real output is now the
+   fixture. (Also: resolve paths through `realpath`, or a repo reached via a symlink —
+   /tmp, any worktree — reports one root while the output prints the other.)
+
+   Superseded from the plan below: the old
+   four-part ordering. Each part was useful on its own, and the last one is the one that
    turns a status light into a way of talking about the failure.

@@ -114,6 +114,28 @@ test('preamble reports a plan with no checkboxes as "no tasks"', async () => {
   });
 });
 
+test('a failing TEST points like a plan does, carrying its own detail', async () => {
+  // It is not in the index and never will be, so the "no longer in the index"
+  // path would be exactly wrong — it was never in one. The whole point of the
+  // gesture is that she gets a name she can say plus the assertion, instead of
+  // a wall of stack trace pasted into the composer.
+  await withIndex(async (idx) => {
+    const text = idx.preamble([
+      {
+        kind: 'test',
+        path: 'src/listen.test.ts',
+        line: 71,
+        spoken: 'the settle window holds a finished sentence',
+        detail: 'AssertionError: 2500 !== 1200',
+      },
+    ]);
+    assert.match(text, /failing test "the settle window holds a finished sentence"/);
+    assert.match(text, /src\/listen\.test\.ts:71/);
+    assert.match(text, /2500 !== 1200/);
+    assert.doesNotMatch(text, /no longer in the index/);
+  });
+});
+
 test('a reference to a plan that has gone is reported, not silently dropped', async () => {
   await withIndex(async (idx) => {
     const text = idx.preamble([{ kind: 'item', path: 'plans/vanished.md', spoken: 'the old one' }]);

@@ -113,6 +113,21 @@ export type HarnessConfig = {
    * turns still fire mid-sentence; lower it if replies feel sluggish.
    */
   voiceSettleMs: number;
+  /**
+   * What to run to answer "is the tree green". Empty means DETECT it — see
+   * testRunner.ts, which reads what the project already declares.
+   *
+   * ⚠️ Split on whitespace and spawned directly; nothing here reaches a shell. A
+   * command that genuinely needs shell syntax should be a script the project has.
+   */
+  testCmd?: string;
+  /** How still the tree must be first — a suite run against a half-finished edit
+   * is a red light that means nothing. */
+  testSettleMs: number;
+  /** Floor between runs, so a rapid series of saves does not queue one each. */
+  testMinIntervalMs: number;
+  /** After this the run is killed and REPORTED as timed out, not left hanging. */
+  testTimeoutMs: number;
 };
 
 // The director session runs all day and every turn carries full repo context, so
@@ -204,5 +219,9 @@ export function loadConfig(): HarnessConfig {
     // 1800 was still short for Danny in practice, so 2500: the cost of waiting is
     // a beat, and the cost of firing early is half a question.
     voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 2500),
+    testCmd: conf('HARNESS_TEST_CMD'),
+    testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),
+    testMinIntervalMs: Number(conf('HARNESS_TEST_MIN_INTERVAL_MS') ?? 120_000),
+    testTimeoutMs: Number(conf('HARNESS_TEST_TIMEOUT_MS') ?? 300_000),
   };
 }

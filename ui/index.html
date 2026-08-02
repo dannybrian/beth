@@ -36,8 +36,15 @@
           <option value="full">speak all</option>
           <option value="headlines">headlines</option>
         </select>
+        <!-- "Is the tree green" — the question asked twenty times a day, which
+             the page could not answer until the numbers moved out of here. -->
+        <button id="test-light" class="tlight grey" title="Tests">
+          <span class="tdot"></span><span id="test-count"></span>
+        </button>
       </div>
     </header>
+
+    <div id="test-panel" class="stats wide" hidden></div>
 
     <!-- The numbers, behind the meter. They answer a question nobody asks
          mid-conversation, so they do not get the top right. -->

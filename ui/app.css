@@ -679,3 +679,96 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
    styling would otherwise make it look like a third action next to Send. */
 .composer button.ctx { background: none; border: none; padding: 0; width: 26px; }
 .composer button.voice.error { color: var(--warn); }
+
+/* --- the test light ---
+   Top right, where the numbers used to shout. Green/yellow/red/grey, and yellow
+   deliberately covers two things that mean the same thing to you: it is running,
+   or it passed and the tree has moved since. Both mean "do not trust this yet". */
+button.tlight {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+button.tlight:hover, button.tlight.open { border-color: var(--muted); color: var(--text); }
+button.tlight .tdot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+button.tlight.green .tdot { background: var(--ok); }
+button.tlight.yellow .tdot { background: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+button.tlight.red .tdot { background: var(--err); }
+button.tlight.red { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+
+.stats.wide { width: 400px; top: 44px; bottom: auto; }
+.tcmd {
+  font-family: var(--mono);
+  color: var(--text);
+  background: #1b1f26;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 7px;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+button.topt {
+  background: var(--accent);
+  color: #0e1013;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  margin: 0 6px 6px 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.topt.ghost { background: none; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
+/* A failure is a thing you point at, so it looks like the plan rows do. */
+button.tfail {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #1b1f26;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--err);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+}
+button.tfail:hover { border-color: var(--muted); border-left-color: var(--err); }
+button.tfail .tname { color: var(--text); font-family: -apple-system, sans-serif; }
+button.tfail .tloc { color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+button.tfail .tdetail {
+  color: var(--warn);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tlog {
+  margin: 0;
+  padding: 8px;
+  max-height: 260px;
+  overflow: auto;
+  background: #0e1013;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* A test chip is a failure, not a plan — colour it like one. */
+.refs .chip.test { border-left: 2px solid var(--err); }

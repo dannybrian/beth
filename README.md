@@ -52,6 +52,7 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_TTS_MODEL` | `eleven_flash_v2_5` | ⚠ Flash predates v3 audio tags, so tags are stripped |
 | `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud — see `spoken.ts` |
 | `HARNESS_VOICE_SETTLE_MS` | `2500` | How long the words must stop changing before a spoken turn sends |
+| `HARNESS_TEST_CMD` | detected | Test command. ⚠ Running is off until enabled per repo |
 
 Per-repo state (the session id used for `resume`) lives in
 `~/.director-harness/<repo-slug>/`. Nothing is machine-global, so instances don't collide.
@@ -71,6 +72,7 @@ Per-repo state (the session id used for `resume`) lives in
 | `speakOut.ts` | The speech plane: what to say (`spoken.ts`), held as a line, streamed as audio |
 | `audioTags.ts` | Vocalization — tags spoken, stripped from displayed text |
 | `ui/listen.js` | The ear: browser recognition, settle window, spoken punctuation, barge-in |
+| `testRunner.ts` | Detects the project's test command, runs it when the tree settles, parses failures |
 
 ## Voice
 
@@ -97,6 +99,26 @@ text-only and the mic button explains what is missing.
 She may use inline audio tags — `[laughs]`, `[sighs]`, `[dryly]` — which are stripped from
 the text you read. ⚠ They are stripped from the *speech* too unless `HARNESS_TTS_MODEL`
 names a v3 model, because the default realtime model predates them.
+
+## Tests
+
+The top right answers "is the tree green". The command is **detected** from what the
+project already declares — `package.json` `scripts.test` (using the package manager it
+names), `*.csproj`, `Cargo.toml`, `go.mod`, `pyproject.toml`, a `Makefile` `test:` target
+— and `HARNESS_TEST_CMD` overrides all of it. The harness never invents one.
+
+⚠ **Off until you enable it, once per repo.** Clicking the light shows the detected command
+before offering the switch, because this executes project code on a schedule and a suite
+that spins containers or costs money must not start because you saved a file.
+
+It runs only when the tree has **changed**, has **settled**, and she is **idle** — she runs
+her own suite during a turn, and two on one tree produce failures belonging to neither.
+Green means passed and unchanged since; yellow means running, or passed-but-stale; red
+carries the count.
+
+Clicking a failure drops a **chip** in the composer rather than pasting a stack trace —
+the same gesture as clicking a plan, so she gets a name she can say out loud with the file,
+line and assertion underneath.
 
 ## Director-role handoff
 

@@ -6,6 +6,7 @@ import { PendingStore } from './state.ts';
 import { AskGate } from './askgate.ts';
 import { SessionManager } from './session.ts';
 import { SpeakOut } from './speakOut.ts';
+import { TestMonitor } from './testRunner.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
@@ -58,7 +59,8 @@ const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : K
 // The speech plane, entire. No Speech Engine, no tunnel, no public port, no
 // session and no mic required to speak — she says a line because she wrote one.
 const speakOut = new SpeakOut(cfg, bus);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, work });
+const tests = new TestMonitor(cfg, bus);
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -90,12 +92,14 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);
   console.log(`  who:   ${cfg.directorName} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
+  tests.start();
   console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);
 });
 
 const shutdown = () => {
   events.stop();
   work.stop();
+  tests.stop();
   session.stop();
   server.close();
   process.exit(0);
