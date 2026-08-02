@@ -237,3 +237,10 @@ loop, half a cent a minute, and the `speech_to_text` permission.
 
 It is not urgent. Half duplex measured fine with the speakers up, and the punctuation
 trick works. But it is the next thing this plane wants.
+
+**One more reason, found in use.** Chrome ends a recognition session on its own schedule,
+so a sentence longer than one session gets split across recognisers and the page has to
+sew it back together — words said before the seam are only in the session that ended.
+That is fixed (`carry` in `ui/listen.js`), but it is a seam that exists *because* the
+recogniser owns its own lifecycle. Owning the capture removes the seam rather than
+patching it.

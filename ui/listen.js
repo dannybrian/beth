@@ -88,6 +88,19 @@ export class Listener {
     this.timerWait = 0;
     this.lastHeard = '';
     this.pending = '';
+    /**
+     * Words from RECOGNISERS THAT HAVE ALREADY ENDED, still part of this
+     * utterance.
+     *
+     * Chrome ends a session on its own schedule — a long sentence outlives one —
+     * and each new recogniser starts with empty `results`. Without this, the next
+     * result rendered only the words said AFTER the restart, so talking for more
+     * than about twenty seconds made the composer reset and refill with the tail
+     * of your own sentence.
+     */
+    this.carry = '';
+    /** Which recogniser and how far into it the pending text reaches. */
+    this.consumeFrom = null;
     this.micStream = null;
     this.meterTimer = null;
     this.overSince = 0;
@@ -128,6 +141,8 @@ export class Listener {
     this.stopRec();
     clearTimeout(this.settleTimer);
     this.settleTimer = null;
+    this.carry = '';
+    this.consumeFrom = null;
     if (this.meterTimer) clearInterval(this.meterTimer);
     this.meterTimer = null;
     for (const t of this.micStream?.getTracks() ?? []) t.stop();
@@ -161,7 +176,11 @@ export class Listener {
     r.onend = () => {
       if (this.rec !== r) return;
       this.rec = null;
-      if (this.mode === 'listening' && !this.parked) this.startRec();
+      if (this.mode !== 'listening' || this.parked) return;
+      // Carry the utterance across the seam. The words are only in the ending
+      // session's `results`, which the next recogniser does not inherit.
+      this.carry = this.pending;
+      this.startRec();
     };
     try {
       r.start();
@@ -184,16 +203,22 @@ export class Listener {
   }
 
   onResult(e) {
+    const rec = this.rec;
     let text = '';
     let allFinal = true;
     for (let i = this.consumedUpTo; i < e.results.length; i++) {
       text += e.results[i][0].transcript;
       if (!e.results[i].isFinal) allFinal = false;
     }
-    text = text.trim();
-    const shown = text && this.dictation ? punctuate(text) : text;
+    // What THIS session heard, on top of whatever earlier ones did before Chrome
+    // ended them. One utterance, however many recognisers it took.
+    const full = `${this.carry} ${text.trim()}`.trim();
+    // Remember where to resume from, against the recogniser it belongs to: by the
+    // time the window settles, Chrome may have handed us a different one.
+    this.consumeFrom = { rec, count: e.results.length };
+    const shown = full && this.dictation ? punctuate(full) : full;
     this.opts.onInterim?.(shown);
-    if (!text) return;
+    if (!full) return;
 
     // Heard while she is talking. With the ear parked this should not happen at
     // all; if it does, it is her voice through the speakers, and answering it
@@ -206,9 +231,9 @@ export class Listener {
     // hold a finished sentence indefinitely — which reads as the page chewing on
     // your words before it sends them. Compare the strings.
     const wait = allFinal ? Math.min(FINAL_SETTLE_MS, this.settleMs) : this.settleMs;
-    const changed = text !== this.lastHeard;
-    this.lastHeard = text;
-    this.pending = text;
+    const changed = full !== this.lastHeard;
+    this.lastHeard = full;
+    this.pending = full;
     // Restart only when the words moved, or when going final SHORTENS the wait.
     if (!changed && wait >= this.timerWait && this.settleTimer) return;
     clearTimeout(this.settleTimer);
@@ -217,7 +242,12 @@ export class Listener {
       this.settleTimer = null;
       this.timerWait = 0;
       this.lastHeard = '';
-      this.consumedUpTo = e.results.length;
+      this.carry = '';
+      // Consume only what the CURRENT recogniser has delivered. If Chrome swapped
+      // it while the window was open, its results are new speech and none of it
+      // has been sent.
+      this.consumedUpTo = this.consumeFrom?.rec === this.rec ? this.consumeFrom.count : 0;
+      this.consumeFrom = null;
       const raw = this.pending.trim();
       this.pending = '';
       if (!raw) return;
@@ -249,6 +279,8 @@ export class Listener {
     this.consumedUpTo = 0;
     this.lastHeard = '';
     this.pending = '';
+    this.carry = '';
+    this.consumeFrom = null;
     setTimeout(() => this.mode === 'listening' && !this.parked && this.startRec(), REOPEN_DELAY_MS);
   }
 

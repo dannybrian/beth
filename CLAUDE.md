@@ -47,7 +47,9 @@ pnpm test        # node --test src/*.test.ts
 
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `speakOut` — which is now
-the whole speech plane — and the `testRunner` detectors and failure parsers.
+the whole speech plane — the `testRunner` detectors and failure parsers, and `listen`,
+which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be tested at
+all. Browser code is testable when the hard part is bookkeeping rather than the browser.
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -108,6 +110,14 @@ These cost hours. Don't rediscover them.
   click, durably and invisibly. `'bypassPermissions'` is never offered — it needs
   `allowDangerouslySkipPermissions` and it would delete the seam a repo's
   "production needs a per-action yes" rule depends on.
+- **An utterance outlives its recogniser.** Chrome ends a `SpeechRecognition` session on
+  its own schedule — a long sentence outlives one — and the next instance starts with
+  EMPTY `results`. So the words said before the seam live only in the session that just
+  ended, and rendering the new session's results alone made the composer reset and refill
+  with the tail of his own sentence, about twenty seconds in. `ui/listen.js` carries them
+  across (`carry`), and consumption is tracked against the recogniser it belongs to,
+  because by the time the settle window fires Chrome may have handed us a different one.
+  `src/listen.test.ts` drives a stubbed recogniser and fails without the carry.
 - **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
   browser pages could not both speak no matter what. Every page can play audio now, and two
   tabs on one harness means hearing her twice, slightly out of phase, on top of herself.
