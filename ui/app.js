@@ -259,6 +259,51 @@ function renderApproval(m) {
 const openDecisions = new Set();
 
 /**
+ * Cards, kept by decision id across re-renders.
+ *
+ * ⚠️ This exists because a `pending` message arrives for reasons that have nothing
+ * to do with the decisions: a worker starting, a worker finishing, another
+ * decision being queued or closed. Rebuilding the list on each one DESTROYED the
+ * card being typed into — the field he was halfway through answering was replaced
+ * by a fresh empty one, so the focus went and the words with it, seemingly at
+ * random and always mid-sentence.
+ *
+ * Reuse is safe because a queued decision is IMMUTABLE: title, context, options
+ * and urgency are set when it is queued and never touched again. The only thing
+ * that changes is whether it is still open, and a decision that closes leaves the
+ * list entirely.
+ */
+const decisionNodes = new Map();
+/** What was last rendered, so an identical payload touches no DOM at all. */
+let decisionSig = '';
+let workerSig = '';
+
+/**
+ * Put the caret back where it was.
+ *
+ * Even reusing the same node, `replaceChildren` takes it out of the document and
+ * puts it back — and an element that leaves the document loses focus on the way.
+ * So the cheap path above (change nothing) is the one that really protects
+ * typing; this is what makes the unavoidable rebuilds survivable.
+ */
+function keepingFocus(within, rebuild) {
+  const active = document.activeElement;
+  const inside = active && within.contains(active);
+  const start = inside ? active.selectionStart : null;
+  const end = inside ? active.selectionEnd : null;
+  rebuild();
+  if (!inside || !active.isConnected) return;
+  active.focus();
+  if (start !== null && active.setSelectionRange) {
+    try {
+      active.setSelectionRange(start, end);
+    } catch {
+      /* not a text field — focus alone is the whole job */
+    }
+  }
+}
+
+/**
  * A queued decision, answerable in one click.
  *
  * It used to be a `window.prompt` pre-filled with the first option, which got
@@ -306,26 +351,51 @@ function renderDecision(d) {
 function renderPending(m) {
   setSectionCounts(m.decisions.length, m.workers.length);
   decisionsWaiting = m.decisions.length;
+
+  // ⚠️ Only touch the DOM when the LIST changed. Most `pending` messages are about
+  // something else entirely — a worker started, a worker finished — and repainting
+  // a queue nobody asked to have repainted is how a half-typed answer disappears.
   const dec = $('pending-decisions');
-  dec.replaceChildren(
-    ...m.decisions.map(renderDecision)
-  );
+  const sig = m.decisions.map((d) => d.id).join(',');
+  if (sig !== decisionSig) {
+    decisionSig = sig;
+    const live = new Set(m.decisions.map((d) => d.id));
+    for (const id of decisionNodes.keys()) if (!live.has(id)) decisionNodes.delete(id);
+    keepingFocus(dec, () =>
+      dec.replaceChildren(
+        ...m.decisions.map((d) => {
+          const existing = decisionNodes.get(d.id);
+          if (existing) return existing;
+          const made = renderDecision(d);
+          decisionNodes.set(d.id, made);
+          return made;
+        })
+      )
+    );
+  }
 
   const wk = $('pending-workers');
-  wk.replaceChildren(
-    ...m.workers.map((w) => {
-      const n = el('div', 'item running');
-      n.append(el('div', null, w.description));
-      const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
-      // A worker that never reported back sits here forever with the dot lit
-      // behind it. One click to say "that one is not running".
-      const x = el('button', 'dismiss', '×');
-      x.title = 'Not running any more — drop it from the roster';
-      x.onclick = () => post('/api/close-worker', { taskId: w.taskId });
-      meta.append(x);
-      n.append(meta);
-      return n;
-    })
+  // Same rule, cheaper: the roster has no field to type in, but it does have a
+  // dismiss button, and a rebuild under a click is a click that lands on nothing.
+  const wsig = m.workers.map((w) => `${w.taskId}:${w.startedAt}`).join(',');
+  if (wsig === workerSig) return;
+  workerSig = wsig;
+  keepingFocus(wk, () =>
+    wk.replaceChildren(
+      ...m.workers.map((w) => {
+        const n = el('div', 'item running');
+        n.append(el('div', null, w.description));
+        const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
+        // A worker that never reported back sits here forever with the dot lit
+        // behind it. One click to say "that one is not running".
+        const x = el('button', 'dismiss', '×');
+        x.title = 'Not running any more — drop it from the roster';
+        x.onclick = () => post('/api/close-worker', { taskId: w.taskId });
+        meta.append(x);
+        n.append(meta);
+        return n;
+      })
+    )
   );
 }
 
