@@ -96,7 +96,7 @@ anything unparsed falls back to the raw log, which is still better than nothing.
 This is the same gesture as clicking a plan, and it should reuse the same machinery:
 a failing test is a **reference pair** (`workItems.ts` shape — a spoken name and a path),
 so clicking it drops a chip into the composer rather than pasting a wall of stack trace.
-She then gets "the settle-window test in voice.test.ts" as something she can say out loud,
+She then gets "the settle-window test in listen.test.ts" as something she can say out loud,
 with the file and line underneath — and the failure text as context on the turn.
 
 Deixis was the unlock for plans. It is the same unlock here.

@@ -1,7 +1,8 @@
 # director-harness
 
-Conversational harness for the standing-director workflow. Phase 1 (text-only) of
-`beadgame/plans/future/2026-07-31-director-conversational-harness.md`.
+Conversational harness for the standing-director workflow, from
+`beadgame/plans/future/2026-07-31-director-conversational-harness.md`. Text and voice both
+work; the voice plane is local end to end (see `docs/voice-plane.md`).
 
 One instance binds to one repo. The director session runs with `cwd` = that repo, so
 CLAUDE.md, skills, hooks, and `/plans` work exactly as they do in a terminal — the
@@ -55,8 +56,9 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_TEST_CMD` | detected | Test command. ⚠ Running is off until enabled per repo |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
-Per-repo state (the session id used for `resume`) lives in
-`~/.director-harness/<repo-slug>/`. Nothing is machine-global, so instances don't collide.
+Per-repo state lives in `~/.director-harness/<repo-slug>/` — the session id used for
+`resume`, whether the test monitor is enabled here, and what she remembers about you.
+Nothing is machine-global except the credentials, so instances don't collide.
 
 ## What's here
 
@@ -64,7 +66,7 @@ Per-repo state (the session id used for `resume`) lives in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turn pushes; result/usage reading; session-id persistence and `resume` across restarts |
 | `askgate.ts` | `canUseTool` — AskUserQuestion rendered and **pended** until answered; every other gated tool becomes an approve/deny card |
-| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `pending` (all `alwaysLoad`) |
+| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `pending`, `plans`, `remember`, `recall` (all `alwaysLoad`) |
 | `eventlog.ts` | Append + tail `<repo>/.claude/events.jsonl` (gitignored) |
 | `state.ts` | Live Ask-Danny queue and worker roster |
 | `bus.ts` | Ordered event flow to the UI, with replay for late-connecting browsers |
