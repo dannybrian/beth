@@ -135,6 +135,25 @@ These cost hours. Don't rediscover them.
   across (`carry`), and consumption is tracked against the recogniser it belongs to,
   because by the time the settle window fires Chrome may have handed us a different one.
   `src/listen.test.ts` drives a stubbed recogniser and fails without the carry.
+- **A tool call can arrive written in two formats at once.** Seen 2026-08-02 in beadgame,
+  twice in one session: the model emitted `queue_decision` with the whole rest of the call
+  inside the FIRST parameter — `context` ended `…turned out to be.</context>\n<parameter
+  name="options">["Open a follow-up plan now", …]` and `options` was simply absent. Two
+  costs, and the second is the one that hid: markup in the text Danny reads, and the
+  candidate answers GONE, so a decision offered with four buttons arrived as free text.
+  `src/toolInput.ts` takes it back at the tool boundary and logs what it recovered.
+  ⚠ The recovery requires the tail to actually be a `<parameter name="…">` block — a
+  closing tag alone is an ordinary sentence, because she writes about markup. It is
+  applied to `say` too, where the failure would be READ ALOUD.
+- **A worker only ever left the roster on a `task_notification`.** Anything that stopped
+  one arriving — the task dying, an interrupt, `/clear` replacing the session it ran in —
+  left it running forever, so the panel showed work in flight that was not and the
+  activity dot stayed lit behind it. Nothing reconciled it because nothing could: that
+  notification is the only signal and it is not coming. Now `/clear` orphans the roster
+  (⚠ the DECISIONS still survive a clear — a question is durable, a task inside a
+  replaced session is not), and both Danny and Beth can drop one by hand (`× ` in the
+  panel, `close_worker` for her). Same reasoning gives her `close_decision`: a queue with
+  settled items in it is a queue you learn to ignore.
 - **The Web Speech API grew keyterms, and `docs/voice-plane.md` predates it.** That
   record says a mangled project noun is "the keyterms case, and it is the signal to
   revisit [Scribe]" — no longer true on its own: Chrome now has contextual biasing

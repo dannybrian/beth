@@ -13,10 +13,27 @@ import type { PersonalStore, PersonalKind } from './personal.ts';
 import { taskSummary } from './workItems.ts';
 import { SPEECH_LEVELS, type SpeechControl, type SpeechLevel } from './spoken.ts';
 import { stripAudioTags } from './audioTags.ts';
+import { repairArgs } from './toolInput.ts';
 import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
+
+/**
+ * Take back what a malformed tool call swallowed. See toolInput.ts — the model
+ * occasionally writes the first parameter and then the REST OF THE CALL into one
+ * string, which cost Danny a decision's options and put `</context><parameter…`
+ * in his queue.
+ *
+ * Logged, never silent: a repair that leaves no trace is a model bug nobody ever
+ * looks at again. It goes to the console rather than the transcript because it is
+ * a curiosity about the call, not something that happened in the conversation.
+ */
+const repaired = <T extends Record<string, any>>(tool: string, args: T): T => {
+  const { args: fixed, repaired: touched } = repairArgs(args);
+  if (touched.length) console.warn(`  ⚠ ${tool}: malformed tool call, recovered ${touched.join(', ')}`);
+  return fixed;
+};
 
 export function createHarnessTools(deps: {
   bus: ConversationBus;
@@ -50,7 +67,10 @@ export function createHarnessTools(deps: {
       kind: z.enum(['status', 'finding', 'event', 'answer']),
       ref: z.string().optional().describe('Plan path, commit sha, or event id this refers to.'),
     },
-    async ({ text, kind, ref }) => {
+    async (raw) => {
+      // A `say` whose text swallowed the next parameter would be READ ALOUD as
+      // markup — the one place this failure is not merely ugly.
+      const { text, kind, ref } = repaired('say', raw);
       const { text: read, spans } = renderInline(stripAudioTags(text));
       // `ref` is already a bare path — resolve it directly so the announcement's
       // own reference is the first thing that is clickable.
@@ -81,7 +101,11 @@ export function createHarnessTools(deps: {
       plan: z.string().optional().describe('Plan path this decision belongs to.'),
       urgency: z.enum(['when-free', 'today', 'blocking-later']),
     },
-    async ({ title, context, options, plan, urgency }) => {
+    async (raw) => {
+      // Where this was found: the options were arriving inside `context`, so a
+      // decision offered with four candidate answers reached the queue as free
+      // text with markup on the end of it.
+      const { title, context, options, plan, urgency } = repaired('queue_decision', raw);
       const rec = deps.pending.queueDecision({ title, context, options, plan, urgency });
       deps.events.append({
         source: 'harness',
@@ -92,6 +116,73 @@ export function createHarnessTools(deps: {
       });
       deps.publishPending();
       return ok({ queued: true, id: rec.id });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * The queue has to be CLEARABLE by her, or it only ever grows.
+   *
+   * Most queued decisions are not answered by clicking a button — they are
+   * answered in conversation ("just park it"), or they stop mattering because the
+   * work moved. Without a way to close one, the panel accumulates questions that
+   * are already settled, and a queue you have learned to ignore is worse than no
+   * queue: the one thing it is for is telling you what genuinely still waits.
+   *
+   * ⚠️ This does NOT send a turn back into the session the way `/api/resolve-
+   * decision` does. That endpoint tells her what DANNY decided; this one is her
+   * own hand, and echoing it back would be her talking to herself.
+   */
+  const closeDecision = tool(
+    'close_decision',
+    'Close a queued decision that is no longer waiting — he answered it in conversation, or it stopped mattering. Get the id from `pending`. Use this whenever a decision you queued has been settled some other way: an item he has already dealt with, still sitting in his queue, is how the queue stops being worth looking at. Do not use it to close something he has not actually decided.',
+    {
+      id: z.string().describe('The decision id, from `pending`.'),
+      outcome: z
+        .string()
+        .describe('What was decided, or why it no longer applies. One line — it is what the event log will show.'),
+    },
+    async (raw) => {
+      const { id, outcome } = repaired('close_decision', raw);
+      const d = deps.pending.resolveDecision(id, outcome);
+      if (!d) return ok({ closed: false, reason: 'no open decision with that id — call `pending` for the current ones' });
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'decision_resolved',
+        text: `${d.title} → ${outcome}`,
+        ref: d.plan ?? d.id,
+      });
+      deps.publishPending();
+      return ok({ closed: true, title: d.title });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * The other half of keeping the queue honest — see closeWorker in state.ts for
+   * why a worker gets stuck in the first place.
+   */
+  const closeWorker = tool(
+    'close_worker',
+    'Drop a worker from the running roster when it is not running any more — it finished without reporting, you stopped it, or it belongs to a conversation that has since been cleared. Get the taskId from `pending`. ⚠ If `pending` lists workers you did not dispatch in this conversation, they are stale: clear them. A roster that says two things are running when nothing is makes the panel and the activity light lie about the whole session.',
+    {
+      taskId: z.string().describe('The worker taskId, from `pending`.'),
+      note: z.string().describe('One line on what actually became of it.'),
+    },
+    async (raw) => {
+      const { taskId, note } = repaired('close_worker', raw);
+      const w = deps.pending.closeWorker(taskId, note);
+      if (!w) return ok({ closed: false, reason: 'no running worker with that taskId — call `pending` for the current ones' });
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'worker_done',
+        text: `${w.description} cleared — ${note}`,
+        ref: taskId,
+      });
+      deps.publishPending();
+      return ok({ closed: true, description: w.description });
     },
     { alwaysLoad: true }
   );
@@ -241,6 +332,15 @@ export function createHarnessTools(deps: {
   return createSdkMcpServer({
     name: 'harness',
     version: '1.0.0',
-    tools: [say, queueDecision, pending, plans, speech, ...(deps.personal ? [remember, recall] : [])],
+    tools: [
+      say,
+      queueDecision,
+      closeDecision,
+      closeWorker,
+      pending,
+      plans,
+      speech,
+      ...(deps.personal ? [remember, recall] : []),
+    ],
   });
 }

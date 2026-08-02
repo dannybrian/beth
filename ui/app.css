@@ -422,22 +422,74 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   background: #1b1f26;
 }
 .item .meta { color: var(--muted); font-family: var(--mono); font-size: 10.5px; margin-top: 3px; }
+.item .meta .dismiss {
+  float: right;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.item .meta .dismiss:hover { color: var(--err); }
 .item.urgency-today { border-left: 3px solid var(--warn); }
 .item.urgency-blocking-later { border-left: 3px solid var(--err); }
 .item.urgency-when-free { border-left: 3px solid var(--line); }
 .item.running .meta::before { content: "▶ "; color: var(--accent); }
-.item button.resolve {
-  margin-top: 6px;
+/* --- a queued decision, answerable in place ---
+   Collapsed it is a title and an urgency. Open, it is the whole question: the
+   context she wrote, one button per candidate answer, and a field for the answer
+   she did not think of. The title is the toggle — the panel is narrow and a
+   separate disclosure control would cost more width than it earns. */
+.item .dtitle {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: none;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: 4px;
-  padding: 3px 7px;
+  border: none;
+  padding: 0;
+  color: var(--text);
   font: inherit;
-  font-size: 11px;
   cursor: pointer;
 }
-.item button.resolve:hover { color: var(--text); border-color: var(--accent); }
+.item .dtitle::before { content: "▸ "; color: var(--muted); }
+.item.open .dtitle::before { content: "▾ "; }
+.item .dbody { display: none; margin-top: 7px; }
+.item.open .dbody { display: block; }
+.item .dcontext {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin-bottom: 7px;
+  white-space: pre-wrap;
+}
+.item button.opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.item button.opt:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.item .dother {
+  width: 100%;
+  background: #14171c;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 8px;
+  margin-top: 2px;
+}
+.item .dother:focus { outline: none; border-color: var(--accent); }
 
 /* --- plans panel --- */
 .side h2 { display: flex; align-items: baseline; gap: 6px; }

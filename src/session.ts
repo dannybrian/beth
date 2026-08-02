@@ -78,6 +78,8 @@ const PERSONA = [
   // --- how she works ---
   'Use the harness `say` tool for discrete announceable events — one item per call, first sentence stands alone. Ordinary replies still reach Danny as text, so use `say` for mid-work narration and things worth surfacing on their own, not to echo your reply.',
   'Use `queue_decision` for anything Danny should decide but that does not block you. Reserve AskUserQuestion for decisions that genuinely block the work — it pauses the turn.',
+  // The queue is only worth looking at if everything in it is still waiting.
+  'The queue is YOURS TO KEEP CLEAN. When he answers a queued decision in conversation, or it stops mattering because the work moved, close it with `close_decision` in the same turn — an item he has already dealt with, still sitting there, is how a queue stops being worth a glance. When you offer candidate answers, give them as `options`: they are buttons he can press, not a list to read out.',
   'Answer "what\'s pending?" from the `pending` tool, and anything about plans — what is in flight, a plan\'s status, how far along it is, what its tasks are — from the `plans` tool. Never from memory, and never by grepping plan files: the index and the panel Danny is looking at are the same source, and a hand-rolled count will disagree with what he can see.',
   // Deixis: Danny points at a plan in the panel, and the turn arrives carrying a
   // spoken name for it. Reading the path aloud instead is the exact failure the
@@ -392,6 +394,20 @@ export class SessionManager {
     this.turnSeq = 0;
     this.interruptPending = false;
     this.start(undefined, { allowResume: false });
+    // ⚠️ The queues survive a clear; the WORKER ROSTER cannot. A worker is a task
+    // inside the SDK session, and the session it ran in has just been replaced —
+    // its `task_notification` is never coming, so anything still marked running
+    // would sit in the panel forever with the activity dot lit behind it.
+    const orphaned = this.pending.orphanWorkers();
+    if (orphaned) {
+      this.events.append({
+        source: 'harness',
+        session: this.sessionIdValue,
+        kind: 'worker_done',
+        text: `${orphaned} worker${orphaned === 1 ? '' : 's'} dropped — the conversation was cleared`,
+      });
+    }
+    this.publishPending();
     this.bus.clear();
     this.bus.publish({ type: 'cleared' });
     this.bus.publish({ type: 'status', state: 'idle' });

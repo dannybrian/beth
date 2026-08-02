@@ -255,23 +255,60 @@ function renderApproval(m) {
   add(card);
 }
 
+/** Decisions opened for answering. Survives the re-render an answer causes. */
+const openDecisions = new Set();
+
+/**
+ * A queued decision, answerable in one click.
+ *
+ * It used to be a `window.prompt` pre-filled with the first option, which got
+ * the shape exactly backwards: the CONTEXT — the several sentences explaining
+ * what is being decided — was visible only inside the dialog, and the OPTIONS,
+ * which she went to the trouble of enumerating, were reduced to a default string
+ * you had to retype to change. She offers candidate answers because they are the
+ * answers; picking one should not require typing it.
+ *
+ * So: the context is readable in the panel, each option is a button, and the
+ * free-text field stays for the answer she did not think of — which is the one
+ * that matters most and is exactly what a fixed multiple choice would lose.
+ */
+function renderDecision(d) {
+  const n = el('div', `item urgency-${d.urgency}`);
+  const head = el('button', 'dtitle', d.title);
+  head.onclick = () => {
+    openDecisions.has(d.id) ? openDecisions.delete(d.id) : openDecisions.add(d.id);
+    n.classList.toggle('open', openDecisions.has(d.id));
+  };
+  n.append(head);
+  n.append(el('div', 'meta', `${d.urgency}${d.plan ? ` · ${d.plan.split('/').pop()}` : ''}`));
+
+  const body = el('div', 'dbody');
+  if (d.context) body.append(el('div', 'dcontext', d.context));
+  const answer = (text) => text && post('/api/resolve-decision', { id: d.id, answer: text });
+  for (const opt of d.options ?? []) {
+    const b = el('button', 'opt', opt);
+    b.onclick = () => answer(opt);
+    body.append(b);
+  }
+  const other = el('input', 'dother');
+  other.placeholder = d.options?.length ? 'Something else…' : 'Your answer…';
+  other.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    answer(other.value.trim());
+  };
+  body.append(other);
+  n.append(body);
+  if (openDecisions.has(d.id)) n.classList.add('open');
+  return n;
+}
+
 function renderPending(m) {
   setSectionCounts(m.decisions.length, m.workers.length);
   decisionsWaiting = m.decisions.length;
   const dec = $('pending-decisions');
   dec.replaceChildren(
-    ...m.decisions.map((d) => {
-      const n = el('div', `item urgency-${d.urgency}`);
-      n.append(el('div', null, d.title));
-      n.append(el('div', 'meta', `${d.urgency}${d.plan ? ` · ${d.plan.split('/').pop()}` : ''}`));
-      const b = el('button', 'resolve', 'Answer…');
-      b.onclick = () => {
-        const answer = prompt(`${d.title}\n\n${d.context}`, d.options?.[0] ?? '');
-        if (answer) post('/api/resolve-decision', { id: d.id, answer });
-      };
-      n.append(b);
-      return n;
-    })
+    ...m.decisions.map(renderDecision)
   );
 
   const wk = $('pending-workers');
@@ -279,7 +316,14 @@ function renderPending(m) {
     ...m.workers.map((w) => {
       const n = el('div', 'item running');
       n.append(el('div', null, w.description));
-      n.append(el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`));
+      const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
+      // A worker that never reported back sits here forever with the dot lit
+      // behind it. One click to say "that one is not running".
+      const x = el('button', 'dismiss', '×');
+      x.title = 'Not running any more — drop it from the roster';
+      x.onclick = () => post('/api/close-worker', { taskId: w.taskId });
+      meta.append(x);
+      n.append(meta);
       return n;
     })
   );

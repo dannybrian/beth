@@ -322,6 +322,22 @@ export function createServer(deps: {
             session.publishPending();
             return json(200, { ok: true });
           }
+          case '/api/close-worker': {
+            // His hand on the same lever. A stuck worker is visible to HIM first
+            // — it is his panel showing two things running and his activity dot
+            // lit — so waiting to ask her to clear it is the wrong way round.
+            const w = pending.closeWorker(String(body.taskId), 'cleared from the panel');
+            if (!w) return json(404, { ok: false });
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'worker_done',
+              text: `${w.description} cleared from the panel`,
+              ref: w.taskId,
+            });
+            session.publishPending();
+            return json(200, { ok: true });
+          }
           case '/api/promote': {
             const verdict = canPromote(cfg.repo, cfg.directorPlan);
             if (verdict.ok) {

@@ -71,9 +71,10 @@ Nothing is machine-global except the credentials, so instances don't collide.
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turn pushes; result/usage reading; session-id persistence and `resume` across restarts |
 | `askgate.ts` | `canUseTool` — AskUserQuestion rendered and **pended** until answered; every other gated tool becomes an approve/deny card |
-| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `pending`, `plans`, `speech`, `remember`, `recall` (all `alwaysLoad`) |
+| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `close_decision`, `pending`, `plans`, `speech`, `remember`, `recall` (all `alwaysLoad`) |
+| `toolInput.ts` | Repairs a tool call the model wrote in two formats at once — see the gotcha in CLAUDE.md |
 | `eventlog.ts` | Append + tail `<repo>/.claude/events.jsonl` (gitignored) |
-| `state.ts` | Live Ask-Danny queue and worker roster |
+| `state.ts` | Live Ask-Danny queue and worker roster — both clearable, by either of you |
 | `bus.ts` | Ordered event flow to the UI, with replay for late-connecting browsers |
 | `server.ts` | Static UI, SSE stream, POST endpoints |
 | `directorRole.ts` | Handoff policy — shadow vs director, never `claim --force` over a live peer |
