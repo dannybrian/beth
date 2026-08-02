@@ -108,6 +108,12 @@ These cost hours. Don't rediscover them.
   click, durably and invisibly. `'bypassPermissions'` is never offered — it needs
   `allowDangerouslySkipPermissions` and it would delete the seam a repo's
   "production needs a per-action yes" rule depends on.
+- **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
+  browser pages could not both speak no matter what. Every page can play audio now, and two
+  tabs on one harness means hearing her twice, slightly out of phase, on top of herself.
+  Two tabs is legitimate (two monitors), so `server.ts` ELECTS a speaker — newest
+  connection by default, and a page claims it on focus — and `speak` is the one message
+  that does not broadcast. Anything added that makes noise needs the same treatment.
 - **The director's NAME comes from the bound repo** (`directorName.ts` reads "You are
   **X**" out of `.claude/DIRECTOR.md`). It is not decoration: a card reading "Claude
   wants to use Bash" is a stranger interrupting a conversation with someone else.
@@ -146,8 +152,10 @@ the conversation that produced it. Where things stand:
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,
   which are recorded there rather than here because they are about `testRunner.ts`.
-- **`personal-context.md`** — not started. A director who remembers the person, not only
-  the work.
+- **`personal-context.md`** — BUILT (`src/personal.ts`). She remembers the person and
+  follows things up. Read it for the failure mode, which is the whole design: she may only
+  ask about something she ACTUALLY RECORDED, at most once a day, only at a moment already
+  hers. Most days are silence and that is correct.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff
   all ship. Read it for why a reference is a pair rather than a string.
 

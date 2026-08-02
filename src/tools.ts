@@ -9,6 +9,7 @@ import type { ConversationBus } from './bus.ts';
 import type { EventLog } from './eventlog.ts';
 import type { PendingStore } from './state.ts';
 import type { WorkIndex } from './workIndex.ts';
+import type { PersonalStore, PersonalKind } from './personal.ts';
 import { taskSummary } from './workItems.ts';
 import { stripAudioTags } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
@@ -25,6 +26,13 @@ export function createHarnessTools(deps: {
   voiceActive: () => boolean;
   work: WorkIndex;
   repo: string;
+  /**
+   * Null when personal context is off — and then the tools are not REGISTERED at
+   * all, rather than registered and refusing. Someone who turns this off is
+   * saying don't keep a file on me, and a tool she can still see is a tool she
+   * will still reach for.
+   */
+  personal: PersonalStore | null;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -157,9 +165,37 @@ export function createHarnessTools(deps: {
     { alwaysLoad: true }
   );
 
+  const remember = tool(
+    'remember',
+    'Note ONE thing about Danny himself that came up in passing — not about the work. A demo he is nervous about, how he likes to work, who someone is, a bad night. One item per call. Never interrogate him to fill this in, and never read it back to him.',
+    {
+      text: z.string().describe('One short fact, in your own words. "Demo for the tulito folks on Thursday — nervous about the geo pins."'),
+      kind: z
+        .enum(['thread', 'preference', 'state', 'fact'])
+        .describe('thread = has an outcome you could ask about later; preference = how he likes to work; state = passing, for tone only; fact = durable and dull.'),
+      due: z
+        .string()
+        .optional()
+        .describe('THREAD ONLY. ISO date after which asking how it went would be welcome. Omit unless a follow-up is genuinely wanted.'),
+    },
+    async ({ text, kind, due }) => {
+      const entry = deps.personal!.remember(kind as PersonalKind, text, due);
+      return ok(entry ? { stored: true } : { stored: false });
+    },
+    { alwaysLoad: true }
+  );
+
+  const recall = tool(
+    'recall',
+    'Read back what you know about Danny personally. For your own use — to follow something up naturally, or to avoid asking what you already know. Never recite it to him.',
+    {},
+    async () => ok({ entries: deps.personal!.entries().slice(-40) }),
+    { alwaysLoad: true }
+  );
+
   return createSdkMcpServer({
     name: 'harness',
     version: '1.0.0',
-    tools: [say, queueDecision, pending, plans],
+    tools: [say, queueDecision, pending, plans, ...(deps.personal ? [remember, recall] : [])],
   });
 }

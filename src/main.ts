@@ -54,7 +54,13 @@ events.startTail();
 const KICKOFF =
   'You just came online. Greet Danny in ONE short sentence naming the repo and branch — that sentence is the whole of it. Do not call the say tool, do not add a status report, and do not add a closing line: everything you write here is read aloud, so a second line that repeats the first is simply heard twice.';
 
-const { resumed } = session.start(process.env.HARNESS_NO_KICKOFF ? undefined : KICKOFF);
+// The boot greeting is one of exactly two moments a personal beat may ride —
+// it is already hers, and it is one sentence he is going to hear anyway. Most
+// days this returns nothing, which is correct.
+const beat = session.personal.beat();
+const { resumed } = session.start(
+  process.env.HARNESS_NO_KICKOFF ? undefined : beat ? `${KICKOFF}\n\n${beat}` : KICKOFF
+);
 
 // The speech plane, entire. No Speech Engine, no tunnel, no public port, no
 // session and no mic required to speak — she says a line because she wrote one.

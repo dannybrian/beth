@@ -18,6 +18,7 @@ import type { WorkRef } from './workItems.ts';
 import { detectLinks } from './links.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
+import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -93,6 +94,10 @@ export class SessionManager {
   private modelValue = '';
   private turnSeq = 0;
   private interruptPending = false;
+  /** What she remembers about the PERSON. Null-behaviour lives inside the store. */
+  readonly personal: PersonalStore;
+  /** When Danny last said something, so an arrival can be told from mid-work. */
+  private lastHumanTurnAt = 0;
   /** Survives /clear, so a model chosen in the UI sticks to the next conversation. */
   private modelChoice = '';
   /** Likewise for the permission mode — /clear drops context, not preferences. */
@@ -121,6 +126,7 @@ export class SessionManager {
     this.gate = gate;
     this.work = work;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
+    this.personal = new PersonalStore(cfg);
   }
 
   sessionId = () => this.sessionIdValue;
@@ -211,6 +217,7 @@ export class SessionManager {
             voiceActive: this.voiceActive,
             work: this.work,
             repo: this.cfg.repo,
+            personal: this.personal.enabled ? this.personal : null,
           }),
         },
         canUseTool: this.gate.canUseTool,
@@ -219,7 +226,11 @@ export class SessionManager {
           preset: 'claude_code',
           append:
             `${PERSONA} ${roleInstruction(this.role, this.cfg.directorPlan)} ${VOCALIZATION_PROMPT}` +
-            this.repoDirectorGuide(),
+            (this.personal.enabled ? ` ${PERSONAL_PROMPT}` : '') +
+            this.repoDirectorGuide() +
+            // Fixed for the life of the session, which is right: this is what she
+            // knows on arrival. Anything learned mid-session is in the tool.
+            this.personal.promptBlock(),
         },
       },
     });
@@ -257,6 +268,14 @@ export class SessionManager {
    * question.
    */
   sendPointed(text: string): number {
+    // The two moments a personal beat is allowed are the boot greeting and the
+    // first turn after a LONG GAP — he is arriving, not returning mid-task. Any
+    // other turn is work in progress, and interrupting that to ask how his week
+    // is going is the opposite of protecting his attention.
+    const arriving = this.lastHumanTurnAt > 0 && Date.now() - this.lastHumanTurnAt > GAP_MS;
+    this.lastHumanTurnAt = Date.now();
+    const beat = arriving ? this.personal.beat() : null;
+    if (beat) text = `${text}\n\n[harness: ${beat}]`;
     const refs = this.work.takePointed();
     const preamble = this.work.preamble(refs);
     return this.send(preamble ? `${preamble}\n${text}` : text, {

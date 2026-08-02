@@ -1,5 +1,18 @@
 # Personal context — a director who remembers you
 
+> **BUILT**, 2026-08-02 — `src/personal.ts`, `remember`/`recall` in `tools.ts`, the beat
+> at the two moments in `main.ts` and `session.ts`. Verified end to end: mentioned in
+> passing, recorded unprompted, followed up unprompted a session later, marked asked so it
+> cannot repeat.
+>
+> One deviation from what is written below. The design has `asked` as a field ON the entry,
+> but the file is append-only for the same reason the event log is — so the follow-up
+> arrives as its OWN record (`{kind:'asked', ref}`) and is folded out on read. Same
+> information, no rewrite, and the history of what was asked when survives.
+>
+> One addition: the "long gap" that makes a turn an arrival rather than mid-work is three
+> hours (`GAP_MS`). Any shorter and a lunch break reads as a new day.
+
 > Danny, 2026-08-01: *"I'd like it if Beth stored/retained personal context about me;
 > asked me how I am once a day or so, or asked me how such-and-such went."*
 

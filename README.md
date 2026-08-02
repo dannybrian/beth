@@ -53,6 +53,7 @@ browser transport is SSE + POST, plus one HTTP audio stream.
 | `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud — see `spoken.ts` |
 | `HARNESS_VOICE_SETTLE_MS` | `2500` | How long the words must stop changing before a spoken turn sends |
 | `HARNESS_TEST_CMD` | detected | Test command. ⚠ Running is off until enabled per repo |
+| `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
 Per-repo state (the session id used for `resume`) lives in
 `~/.director-harness/<repo-slug>/`. Nothing is machine-global, so instances don't collide.
@@ -73,6 +74,7 @@ Per-repo state (the session id used for `resume`) lives in
 | `audioTags.ts` | Vocalization — tags spoken, stripped from displayed text |
 | `ui/listen.js` | The ear: browser recognition, settle window, spoken punctuation, barge-in |
 | `testRunner.ts` | Detects the project's test command, runs it when the tree settles, parses failures |
+| `personal.ts` | What she remembers about Danny, and the once-a-day rule for when she may ask |
 
 ## Voice
 
@@ -119,6 +121,21 @@ carries the count.
 Clicking a failure drops a **chip** in the composer rather than pasting a stack trace —
 the same gesture as clicking a plan, so she gets a name she can say out loud with the file,
 line and assertion underneath.
+
+## Personal context
+
+She remembers the person, not only the work — `remember` and `recall`, in
+`~/.director-harness/<repo>/personal.jsonl` (append-only, never in the repo).
+
+The value is entirely in the **follow-up**, so the rule is that she may only ask about
+something she actually knows: a question comes from a recorded fact with a date on it, or
+it does not get asked. At most one personal beat a day, only at a moment already hers —
+the boot greeting, or the first turn after a long gap — never mid-work. Most days that is
+silence, which is correct.
+
+`HARNESS_PERSONAL=off` disables it completely: the tools are not registered, nothing is
+recorded, nothing rides the prompt. Someone turning this off is saying don't keep a file on
+me, not "ask me less often".
 
 ## Director-role handoff
 

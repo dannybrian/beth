@@ -120,6 +120,13 @@ export type HarnessConfig = {
    * ⚠️ Split on whitespace and spawned directly; nothing here reaches a shell. A
    * command that genuinely needs shell syntax should be a script the project has.
    */
+  /**
+   * Whether she remembers the PERSON between sessions. Off means genuinely off:
+   * no tools registered, nothing recorded, nothing in the prompt — because
+   * someone who disables this is saying don't keep a file on me, not "ask me less
+   * often". HARNESS_PERSONAL=off.
+   */
+  personal: boolean;
   testCmd?: string;
   /** How still the tree must be first — a suite run against a half-finished edit
    * is a red light that means nothing. */
@@ -219,6 +226,7 @@ export function loadConfig(): HarnessConfig {
     // 1800 was still short for Danny in practice, so 2500: the cost of waiting is
     // a beat, and the cost of firing early is half a question.
     voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 2500),
+    personal: conf('HARNESS_PERSONAL') !== 'off',
     testCmd: conf('HARNESS_TEST_CMD'),
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),
     testMinIntervalMs: Number(conf('HARNESS_TEST_MIN_INTERVAL_MS') ?? 120_000),
