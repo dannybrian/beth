@@ -135,7 +135,14 @@ the panel fails to open.
    workersRunning || decisionsWaiting` and carries the reason as its title; the
    composer spinner shows only while the prediction is in flight, and the timer
    beside it still counts the composite state.
-2. Stats behind the context meter — frees the top right before anything needs it.
+2. ~~Stats behind the context meter~~ — **done**. The meter left the busy-only
+   progress cluster and became a always-visible clickable gauge in the composer; the
+   strip's run-on sentence of numbers is gone entirely, so the top right is free. The
+   panel carries context, this turn, this session, the model, and the plan windows —
+   `GET /api/usage`, feature-detected and caught, rendering only the windows actually
+   present (five-hour, seven-day, and `model_scoped` per-model). Both honest absences —
+   an API-key session, or a future SDK that drops the method — read as "no plan windows
+   for this session", because neither is an error and neither is actionable differently.
 3. The test monitor — detector, then runner and light, then the log panel, then clickable
    failures. Each of those four is useful on its own, and the last one is the one that
    turns a status light into a way of talking about the failure.

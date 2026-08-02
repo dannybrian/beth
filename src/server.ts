@@ -286,6 +286,16 @@ export function createServer(deps: {
           return json(502, { error: msg });
         }
       }
+      if (url.pathname === '/api/usage') {
+        // Read defensively and hand the page whatever survived. `null` here is
+        // an ordinary answer — an API-key session simply has no plan windows.
+        const u = await session.planUsage();
+        return json(200, {
+          available: Boolean(u?.rate_limits_available),
+          subscription: u?.subscription_type ?? null,
+          limits: (u?.rate_limits as unknown) ?? null,
+        });
+      }
       if (url.pathname === '/api/context') {
         // Full category breakdown — what actually occupies the window, and the
         // prefix that gets re-read on every API round-trip.

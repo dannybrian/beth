@@ -285,6 +285,29 @@ export class SessionManager {
     return this.q ? this.q.getContextUsage() : null;
   }
 
+  /**
+   * Plan rate-limit windows — five-hour, seven-day, per-model — or null.
+   *
+   * ⚠️ The method name IS the warning, so everything here is defensive: feature-
+   * detect it, call it through a cast, and swallow whatever comes back out. The
+   * windows are the reason the stats panel is worth opening rather than merely
+   * rearranged, but they must never be the reason it fails to open — the local
+   * numbers are always there and always right.
+   *
+   * `rate_limits_available` is false for API-key, Bedrock and Vertex sessions,
+   * which is not an error: it means this session is not on a plan.
+   */
+  async planUsage(): Promise<Record<string, unknown> | null> {
+    const q = this.q as any;
+    const fn = q?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+    if (typeof fn !== 'function') return null;
+    try {
+      return await fn.call(q);
+    } catch {
+      return null;
+    }
+  }
+
   async setEffort(level: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null) {
     await this.q?.applyFlagSettings({ effortLevel: level });
   }

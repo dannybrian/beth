@@ -542,12 +542,19 @@ function renderWork() {
   }
 }
 
+/**
+ * The last usage snapshot, kept rather than printed.
+ *
+ * This used to be a run-on sentence of numbers across the top right — the most
+ * valuable strip on the page spent on a question nobody asks mid-conversation.
+ * It is all still here, one click away, and the strip is free for something you
+ * actually glance at.
+ */
+let lastUsage = null;
+
 function renderUsage(u) {
-  const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-  $('usage-label').textContent =
-    `ctx ${u.contextPct.toFixed(1)}% (${k(u.contextTokens)}/${k(u.contextMax)}) · ` +
-    `turn ${k(u.turnInput)}in +${k(u.turnCached)} cached / ${k(u.turnOutput)}out · ` +
-    `$${u.turnCost.toFixed(4)} turn · $${u.totalCost.toFixed(4)} total`;
+  lastUsage = u;
+  if (statsOpen) renderStats();
 }
 
 function feedEvent(e) {
@@ -651,7 +658,7 @@ const handlers = {
     transcript.replaceChildren();
     askCards.clear();
     approvalCards.clear();
-    $('usage-label').textContent = '';
+    lastUsage = null;
     entry('activity', (n) => (n.textContent = '— new conversation —'));
   },
   voice: (m) => {
@@ -784,19 +791,150 @@ function paintDot() {
 function paintProgress() {
   const busy = turnInFlight || workersRunning > 0;
   paintDot();
+  paintMeter();
   $('progress').hidden = !busy;
   // The spinner is the PREDICTION, not the work: a worker running on its own
   // leaves the timer and its count, and stops claiming she is mid-sentence.
   $('progress-spin').hidden = !turnInFlight;
   if (!busy) return;
   $('progress-time').textContent = mmss(Date.now() - busySince);
-  const ctx = $('progress-ctx');
-  ctx.firstElementChild.style.width = `${Math.min(100, ctxPct)}%`;
-  ctx.className = `ctx${ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : ''}`;
-  ctx.title = `context ${ctxPct.toFixed(1)}% used`;
   $('progress-note').textContent = workersRunning
     ? `${workersRunning} worker${workersRunning > 1 ? 's' : ''}`
     : '';
+}
+
+/**
+ * The context meter is always on, because it is a GAUGE. It answers "how much
+ * room is left", which is as true between turns as during one — hiding it while
+ * idle meant the only time you could see it was the time you were watching
+ * something else.
+ */
+function paintMeter() {
+  const ctx = $('ctx-meter');
+  ctx.firstElementChild.style.setProperty('--fill', `${Math.min(100, ctxPct)}%`);
+  ctx.className = `ctx${ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : ''}`;
+  ctx.title = `Context ${ctxPct.toFixed(1)}% used — click for the numbers`;
+  if (statsOpen) renderStats();
+}
+
+// --- the numbers, behind the meter ------------------------------------------
+//
+// Two sources, and they fail independently on purpose. The LOCAL numbers (context,
+// this turn, this session) come off the bus and are always right. The PLAN windows
+// come from an SDK method whose name is a warning — `usage_EXPERIMENTAL_MAY_CHANGE
+// _DO_NOT_RELY_ON_THIS_API_YET` — so they are fetched separately, and their absence
+// is rendered as a line rather than as a broken panel.
+
+let statsOpen = false;
+let planLimits = null;
+
+// A million-token window is now ordinary, and "1000.0k" reads as a bug.
+const kfmt = (n) =>
+  n >= 1_000_000
+    ? `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 2)}M`
+    : n >= 1000
+      ? `${(n / 1000).toFixed(1)}k`
+      : String(Math.round(n));
+
+/** "in 3h", "Fri 09:00" — a reset is only useful as a distance. */
+function untilWhen(iso) {
+  if (!iso) return '';
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'now';
+  const h = ms / 3_600_000;
+  if (h < 1) return `${Math.round(ms / 60_000)}m`;
+  if (h < 24) return `${Math.round(h)}h`;
+  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+function bar(pct) {
+  const wrap = el('span', `sbar${pct >= 85 ? ' hot' : pct >= 60 ? ' warm' : ''}`);
+  const fill = el('i');
+  fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  wrap.append(fill);
+  return wrap;
+}
+
+function statRow(label, value, pct) {
+  const row = el('div', 'srow');
+  row.append(el('span', 'sk', label));
+  if (pct !== undefined) row.append(bar(pct));
+  row.append(el('span', 'sv', value));
+  return row;
+}
+
+function renderStats() {
+  const box = $('stats');
+  box.replaceChildren();
+  const u = lastUsage;
+
+  box.append(el('h3', null, 'Context'));
+  box.append(
+    statRow(
+      `${ctxPct.toFixed(1)}%`,
+      u ? `${kfmt(u.contextTokens)} / ${kfmt(u.contextMax)}` : 'no turn yet',
+      ctxPct
+    )
+  );
+
+  if (u) {
+    box.append(el('h3', null, 'This turn'));
+    box.append(statRow('in', kfmt(u.turnInput)));
+    box.append(statRow('cached', kfmt(u.turnCached)));
+    box.append(statRow('out', kfmt(u.turnOutput)));
+    box.append(statRow('cost', `$${u.turnCost.toFixed(4)}`));
+
+    box.append(el('h3', null, 'Session'));
+    box.append(statRow('cost', `$${u.totalCost.toFixed(4)}`));
+    box.append(statRow('model', u.model));
+  }
+
+  // Additive and server-driven: render the windows that are actually present
+  // rather than the ones the shape says might be.
+  box.append(el('h3', null, `Plan${planLimits?.subscription ? ` · ${planLimits.subscription}` : ''}`));
+  const lim = planLimits?.limits;
+  const windows = lim
+    ? [
+        ['5-hour', lim.five_hour],
+        ['7-day', lim.seven_day],
+        ['7-day opus', lim.seven_day_opus],
+        ['7-day sonnet', lim.seven_day_sonnet],
+        ...(lim.model_scoped ?? []).map((m) => [m.display_name, m]),
+      ].filter(([, w]) => w && typeof w.utilization === 'number')
+    : [];
+
+  if (!planLimits) box.append(el('div', 'snote', 'checking…'));
+  // Covers both honest absences: an API-key/Bedrock/Vertex session has no plan,
+  // and a future SDK that drops the method reports the same nothing. Neither is
+  // actionable differently, and neither is an error.
+  else if (!planLimits.available) box.append(el('div', 'snote', 'no plan windows for this session'));
+  else if (!windows.length) box.append(el('div', 'snote', 'no windows reported'));
+  else for (const [name, w] of windows) {
+    box.append(statRow(name, `${Math.round(w.utilization)}%${w.resets_at ? ` · ${untilWhen(w.resets_at)}` : ''}`, w.utilization));
+  }
+}
+
+async function loadPlanUsage() {
+  try {
+    planLimits = await (await fetch('/api/usage')).json();
+  } catch {
+    // A failed fetch must not empty the panel — the local numbers are the point.
+    planLimits = { available: false };
+  }
+  if (statsOpen) renderStats();
+}
+
+function toggleStats() {
+  statsOpen = !statsOpen;
+  $('stats').hidden = !statsOpen;
+  $('ctx-meter').classList.toggle('open', statsOpen);
+  if (!statsOpen) return;
+  renderStats();
+  // Re-read on every open: a window that reset while the panel was shut is
+  // exactly the thing you opened it to find out about.
+  void loadPlanUsage();
+  void pollContext().then(paintMeter);
 }
 
 /** Context grows DURING a turn, so the meter is polled rather than left stale. */
@@ -1104,6 +1242,17 @@ function openStream() {
   };
 }
 openStream();
+
+$('ctx-meter').onclick = toggleStats;
+// Click-away closes it. The panel is a glance, not a mode — anything that makes
+// it feel like a dialog is wrong.
+document.addEventListener('click', (e) => {
+  if (!statsOpen) return;
+  if (e.target.closest('#stats') || e.target.closest('#ctx-meter')) return;
+  toggleStats();
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && statsOpen && toggleStats());
+paintMeter();
 
 // --- composer --------------------------------------------------------------
 

@@ -138,9 +138,10 @@ the conversation that produced it. Where things stand:
   meter are all gone. Read it for the reasoning, not for work — what is left is the
   question it ends on: whether to move recognition to Scribe, which would punctuate
   properly and let echo cancellation reach the recogniser at last.
-- **`status-surface.md`** — step 1 is BUILT: the dot tracks anything running, the spinner
-  tracks the prediction. Next the stats move behind the context meter, then the test
-  monitor takes the top right.
+- **`status-surface.md`** — steps 1 and 2 are BUILT: the dot tracks anything running, the
+  spinner tracks the prediction, and the numbers live behind the context meter (with the
+  SDK plan windows, read defensively). What is left is the test monitor, which now has
+  the top right to itself.
 - **`personal-context.md`** — not started. A director who remembers the person, not only
   the work.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff

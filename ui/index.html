@@ -36,9 +36,12 @@
           <option value="full">speak all</option>
           <option value="headlines">headlines</option>
         </select>
-        <span id="usage-label"></span>
       </div>
     </header>
+
+    <!-- The numbers, behind the meter. They answer a question nobody asks
+         mid-conversation, so they do not get the top right. -->
+    <div id="stats" class="stats" hidden></div>
 
     <main>
       <section class="transcript" id="transcript"></section>
@@ -95,9 +98,11 @@
         <div id="progress" class="progress" hidden>
           <span id="progress-spin" class="spin" aria-hidden="true"></span>
           <span id="progress-time" class="t">0:00</span>
-          <span id="progress-ctx" class="ctx" title="context used"><i></i></span>
           <span id="progress-note" class="note"></span>
         </div>
+        <!-- The context meter is a GAUGE, not an activity light, so it does not
+             come and go with the work. Clicking it is where the numbers live. -->
+        <button id="ctx-meter" class="ctx" title="Context used — click for the numbers"><i></i></button>
         <button id="send">Send</button>
         <button id="interrupt" class="ghost" title="Stop the in-flight turn (like Escape in Claude Code) — the conversation continues">Stop</button>
         <button id="clear" class="ghost" title="Start a fresh conversation. Pending decisions and running workers are kept.">Clear</button>

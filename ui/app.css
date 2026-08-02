@@ -72,7 +72,6 @@ body {
 .mode.shadow { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
 .mode.director { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .strip-right { display: flex; align-items: center; gap: 12px; }
-#usage-label { font-family: var(--mono); font-size: 11px; }
 #model-select,
 #perm-select,
 #speech-select {
@@ -129,20 +128,90 @@ body {
 .progress .spin[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .progress .t { color: var(--text); font-variant-numeric: tabular-nums; }
-/* The context meter reads left to right and only earns colour as it fills — an
-   amber bar at 20% would cry wolf for the whole session. */
-.progress .ctx {
-  width: 40px;
-  height: 4px;
+.progress .note { color: var(--say); }
+
+/* --- context meter ---
+   Always visible, because it is a gauge rather than an activity light, and
+   clickable, because it is the door to every number that used to shout from the
+   top right. It reads left to right and only earns colour as it fills — an amber
+   bar at 20% would cry wolf for the whole session. */
+button.ctx {
   flex: none;
+  align-self: flex-end;
+  height: 46px;
+  width: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+button.ctx > i {
+  display: block;
+  width: 4px;
+  height: 26px;
+  border-radius: 2px;
+  background: var(--line);
+  /* Grows upward: a tank filling, not a progress bar running out. */
+  box-shadow: none;
+  position: relative;
+  overflow: hidden;
+}
+button.ctx > i::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--fill, 0%);
+  background: var(--accent);
+  transition: height 0.4s;
+}
+button.ctx.warm > i::after { background: var(--warn); }
+button.ctx.hot > i::after { background: var(--err); }
+button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
+
+/* --- the numbers --- */
+.stats {
+  position: fixed;
+  bottom: 78px;
+  right: 14px;
+  z-index: 20;
+  width: 250px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.stats[hidden] { display: none; }
+.stats h3 {
+  margin: 12px 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stats h3:first-child { margin-top: 0; }
+.srow { display: flex; align-items: center; gap: 8px; padding: 1.5px 0; }
+.srow .sk { color: var(--muted); flex: none; min-width: 66px; }
+.srow .sv { color: var(--text); margin-left: auto; font-variant-numeric: tabular-nums; }
+.sbar {
+  flex: 1;
+  height: 4px;
+  min-width: 30px;
   border-radius: 2px;
   background: var(--line);
   overflow: hidden;
 }
-.progress .ctx > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s; }
-.progress .ctx.warm > i { background: var(--warn); }
-.progress .ctx.hot > i { background: var(--err); }
-.progress .note { color: var(--say); }
+.sbar > i { display: block; height: 100%; background: var(--accent); transition: width 0.4s; }
+.sbar.warm > i { background: var(--warn); }
+.sbar.hot > i { background: var(--err); }
+.snote { color: var(--muted); font-style: italic; }
 
 /* Mic lives with the composer — it is an input control, not a status readout. */
 button.voice {
@@ -606,4 +675,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
    pushing it off-centre. Invisible until the red recording background showed it. */
 .composer button.voice { background: none; color: var(--muted); font-weight: 400; padding: 0; }
 .composer button.voice.listening { color: var(--ok); }
+/* The meter is a gauge you can click, not a button — the composer's primary
+   styling would otherwise make it look like a third action next to Send. */
+.composer button.ctx { background: none; border: none; padding: 0; width: 26px; }
 .composer button.voice.error { color: var(--warn); }
