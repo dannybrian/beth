@@ -20,6 +20,17 @@
           <option value="claude-opus-5">Opus 5</option>
           <option value="claude-fable-5">Fable 5</option>
         </select>
+        <!-- How hard she thinks. The unset option is labelled with the field name
+             rather than "default", so the strip says what the control IS while
+             nothing is chosen and says the level once something is. -->
+        <select id="effort-select" title="Reasoning effort — switches live. Unset leaves it to the model; the mic ducks it while you are talking.">
+          <option value="">effort</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+          <option value="xhigh">xhigh</option>
+          <option value="max">max</option>
+        </select>
         <!-- Permissions. A card cannot be answered by voice, so this is really a
              control over how often a spoken conversation can be stopped dead. -->
         <select id="perm-select" title="How tool permissions are resolved — switches live">

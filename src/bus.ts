@@ -60,6 +60,10 @@ export type UIMessage =
       director: string;
       permissionMode: string;
       speechLevel: string;
+      /** Chosen reasoning effort; '' is the model's own default. */
+      effort: string;
+      /** This repo has a github.com origin, so a plan can be opened there. */
+      repoOnWeb: boolean;
       // The settle window, served to the page because that is where it now runs.
       settleMs: number;
       // Project nouns to bias the recogniser toward, and how hard. Empty when
@@ -119,6 +123,11 @@ export type UIMessage =
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
   | { type: 'speech'; level: string }
+  // Reasoning effort, as CHOSEN — empty string means whatever the model does by
+  // itself. Not what is in force: the mic ducks that while it is open, and a
+  // select that flickered every time he reached for the mic would be a worse
+  // readout than none.
+  | { type: 'effort'; level: string }
   // The health light. Republished whenever the tree moves, not only after a run:
   // "it passed, and that was before your last edit" is a different answer.
   | { type: 'tests'; state: TestState }

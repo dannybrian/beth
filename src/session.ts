@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { HarnessConfig } from './config.ts';
+import type { EffortLevel, HarnessConfig } from './config.ts';
 import type { ConversationBus, UsageSnapshot } from './bus.ts';
 import type { EventLog } from './eventlog.ts';
 import type { PendingStore } from './state.ts';
@@ -334,8 +334,43 @@ export class SessionManager {
     }
   }
 
-  async setEffort(level: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null) {
+  /**
+   * Reasoning effort has TWO owners, and they must not overwrite each other.
+   *
+   * Danny picks a level in the strip and it stands until he changes it; the mic
+   * ducks it to `voiceEffort` for as long as it is open, because spoken
+   * conversation trades depth for latency. The bug that shape invites is the mic
+   * closing and restoring "default" over a choice made while it was open — so
+   * the CHOICE is remembered separately from what is in force, and closing the
+   * mic restores the choice rather than nothing.
+   */
+  private effortChoice: EffortLevel = null;
+  /** What is actually applied, so a new session after /clear starts on it. */
+  private effortInForce: EffortLevel = null;
+  private effortDucked = false;
+
+  private async applyEffort(level: EffortLevel) {
+    this.effortInForce = level;
     await this.q?.applyFlagSettings({ effortLevel: level });
+  }
+
+  /** The level Danny chose; null is the model's own default. */
+  chosenEffort = () => this.effortChoice;
+
+  /** The durable choice. Takes hold now unless the mic is holding it down. */
+  async setEffort(level: EffortLevel) {
+    this.effortChoice = level;
+    if (!this.effortDucked) await this.applyEffort(level);
+    this.bus.publish({ type: 'effort', level: level ?? '' });
+  }
+
+  /**
+   * The mic's temporary override. `null` means the mic closed — restore the
+   * choice, which is the whole reason these are two calls and not one.
+   */
+  async duckEffort(level: EffortLevel) {
+    this.effortDucked = level !== null;
+    await this.applyEffort(level ?? this.effortChoice);
   }
 
   /**
@@ -394,6 +429,11 @@ export class SessionManager {
     this.turnSeq = 0;
     this.interruptPending = false;
     this.start(undefined, { allowResume: false });
+    // Effort is a flag on the QUERY, not an option it was constructed with, so a
+    // replaced session comes up at the model's default and the strip would go on
+    // claiming the old level. Re-applied to what was in force, which is the duck
+    // level if he cleared with the mic open.
+    if (this.effortInForce) void this.applyEffort(this.effortInForce).catch(() => {});
     // ⚠️ The queues survive a clear; the WORKER ROSTER cannot. A worker is a task
     // inside the SDK session, and the session it ran in has just been replaced —
     // its `task_notification` is never coming, so anything still marked running

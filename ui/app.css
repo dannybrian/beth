@@ -73,6 +73,7 @@ body {
 .mode.director { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .strip-right { display: flex; align-items: center; gap: 12px; }
 #model-select,
+#effort-select,
 #perm-select,
 #speech-select {
   background: #1b1f26;
@@ -86,8 +87,16 @@ body {
   cursor: pointer;
 }
 #model-select:focus,
+#effort-select:focus,
 #perm-select:focus,
 #speech-select:focus { outline: none; border-color: var(--accent); }
+/* Unset reads as the field's own name and stays quiet. Any explicit level is a
+   standing decision about what every turn costs, so it says so from across the
+   room — warm at the top end, where it is a deliberate expense. */
+#effort-select[data-level=""] { color: var(--muted); }
+#effort-select:not([data-level=""]) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+#effort-select[data-level="xhigh"],
+#effort-select[data-level="max"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 /* Speaking everything is the loud choice; headlines is the quiet one. Both are
    worth seeing without opening the menu. */
 #speech-select[data-level="full"] { color: var(--say); border-color: color-mix(in srgb, var(--say) 45%, transparent); }
@@ -253,7 +262,17 @@ button.voice.error { color: var(--warn); border-color: var(--warn); }
    stops turns from going out is the one that has to be visible. */
 button.autosend {
   flex: none;
-  width: 34px;
+  /* The box is EXACTLY the glyph (19px, below), and there is no margin — so the
+     row's own 8px gap is the whole of the space on both sides and the two gaps
+     cannot drift apart. A wider box centres the glyph and puts half the slack on
+     each side, which the mic does not have: its border is drawn where its box
+     ends, so the same width made the left gap look half the right one. */
+  width: 19px;
+  /* ⚠️ Not symmetric, and it should not be. The mic's own edge is its BORDER, so
+     8px there is 8px of visible space; on the right the neighbour is a text
+     field you read INTO, and the same 8px read as the plane leaning on it. The
+     pair stays tight and the field gets air. */
+  margin-right: 16px;
   height: 46px;
   align-self: flex-end;
   display: grid;
@@ -675,6 +694,7 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
    the exception to the exception — once set it stays lit, because the shelf being
    invisible until you hover is how you forget what is on it. */
 .work-item .pin,
+.work-item .gh,
 .work-item .rename {
   flex: none;
   background: none;
@@ -689,7 +709,12 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   transition: opacity 0.12s;
 }
 .work-item:hover .pin,
+.work-item:hover .gh,
 .work-item:hover .rename { opacity: 1; }
+/* An <a> so middle-click and ⌘-click do what they do everywhere else — the row's
+   other controls are buttons because they act, and this one navigates. */
+.work-item .gh { text-decoration: none; }
+.work-item .gh:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 .work-item .pin.on { opacity: 1; color: var(--warn); }
 .work-item .pin:hover { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .work-item .rename:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }

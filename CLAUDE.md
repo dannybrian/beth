@@ -205,6 +205,27 @@ These cost hours. Don't rediscover them.
   box holds, spoken or typed. ⚠ And `clearInterim()` returns early while holding: it is
   called when a turn is published, that is broadcast to every tab, and a draft is not a
   preview — the other tab sending something must not reach across and delete it.
+- **A link to GitHub is resolved at the CLICK, not served with the page.** The row's ↗
+  points at `/api/github?path=…`, which 302s (`src/repoWeb.ts`). Two reasons, and the
+  first is the one that bites: Danny switches branches mid-session, so a URL built when
+  the page loaded would quietly point at wherever he was standing that morning — the ref
+  is the current branch, or the SHA on a detached HEAD. The second is that the tab opens
+  on the gesture with no await in front of it, so nothing blocks it as a popup. ⚠ The
+  endpoint takes a path from a query string: only paths the INDEX knows are answered,
+  because loopback is not a reason to let a URL name any file on the machine. github.com
+  only — the remote gives us the host but not that host's URL SHAPE (GitLab wants
+  `/-/blob/`), and a button that opens a plausible 404 is worse than no button, so
+  anything else draws nothing at all.
+- **Reasoning effort has two owners.** The strip picks a level that stands until it is
+  changed; the mic DUCKS it to `voiceEffort` for as long as it is open, because spoken
+  conversation trades depth for latency. So the choice is kept separately from what is in
+  force (`session.ts`), and `/api/listening` calls `duckEffort`, never `setEffort` —
+  otherwise closing the mic restores "default" over a level chosen while it was open, and
+  the select goes on claiming the level it no longer has. ⚠ Effort is a flag on the
+  QUERY, not an option it was built with, so `/clear` comes up at the model's default:
+  `clear()` re-applies what was in force. The select shows the CHOICE, not the duck —
+  a readout that dropped to `low` every time he reached for the mic would look like the
+  harness overruling him.
 - **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
   browser pages could not both speak no matter what. Every page can play audio now, and two
   tabs on one harness means hearing her twice, slightly out of phase, on top of herself.

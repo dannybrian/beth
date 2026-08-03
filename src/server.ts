@@ -16,7 +16,7 @@ import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
 import type { SpeakOut } from './speakOut.ts';
 import type { TestMonitor } from './testRunner.ts';
-import type { HarnessConfig } from './config.ts';
+import { EFFORT_LEVELS, type EffortLevel, type HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
@@ -25,6 +25,7 @@ import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { setPlanName } from './planName.ts';
+import { blobUrl, hasWeb } from './repoWeb.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -61,6 +62,13 @@ export function createServer(deps: {
   pins: Pins;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
+
+  /**
+   * Whether this repo is on github.com at all — read ONCE. A remote does not
+   * change under a running harness, and the page only needs to know whether to
+   * draw the button; where it points is resolved per click. See repoWeb.ts.
+   */
+  const repoOnWeb = hasWeb(cfg.repo);
 
   /**
    * What to bias the recogniser toward, for THIS page.
@@ -137,6 +145,10 @@ export function createServer(deps: {
         director: cfg.directorName,
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.speakOut.speechLevel(),
+        effort: session.chosenEffort() ?? '',
+        // Draw the "open on GitHub" button, or do not. False is the ordinary
+        // case for a repo with no remote, not an error.
+        repoOnWeb,
         settleMs: cfg.voiceSettleMs,
         keyterms: biasing(),
         keytermBoost: cfg.keytermBoost,
@@ -261,6 +273,23 @@ export function createServer(deps: {
             await session.setModel(model);
             return json(200, { ok: true, model });
           }
+          case '/api/effort': {
+            // How hard she thinks, chosen from the strip. Empty means the model's
+            // own default, which is a real answer and not a missing one — so it
+            // is accepted rather than rejected as an unknown level.
+            const level = String(body.level ?? '');
+            if (level && !(EFFORT_LEVELS as readonly string[]).includes(level)) {
+              return json(400, { error: 'unknown level' });
+            }
+            await session.setEffort((level || null) as EffortLevel);
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'effort',
+              text: `effort → ${level || 'default'}`,
+            });
+            return json(200, { ok: true, level });
+          }
           case '/api/speech': {
             // How much of what she writes is read aloud. Voice-side only — the
             // transcript is unaffected, which is the point of having a level.
@@ -298,9 +327,12 @@ export function createServer(deps: {
             // trades depth for latency, typed work keeps full effort. With no
             // session to hang off, the page says so directly, which is both
             // simpler and more accurate: the mic being open is the actual fact.
+            // ⚠️ `duckEffort`, not `setEffort`: closing the mic restores the level
+            // he CHOSE in the strip, and calling the durable setter here would
+            // overwrite that choice with "default" every time he stopped talking.
             if (!cfg.voiceEffort) return json(200, { ok: true, effort: null });
             const on = Boolean(body.on);
-            await session.setEffort(on ? cfg.voiceEffort : null).catch(() => {});
+            await session.duckEffort(on ? cfg.voiceEffort : null).catch(() => {});
             return json(200, { ok: true, effort: on ? cfg.voiceEffort : null });
           }
           case '/api/clear': {
@@ -431,6 +463,23 @@ export function createServer(deps: {
         const scope = url.searchParams.get('scope');
         return json(200, { items: scope === 'all' ? work.all() : work.live() });
       }
+      if (url.pathname === '/api/github') {
+        // A REDIRECT rather than a URL served with the page: the ref is read at
+        // the moment of the click, and Danny switches branches mid-session — a
+        // link baked into a page opened this morning would point at wherever he
+        // was standing then. It also keeps the click a plain user gesture, so
+        // the new tab opens before any await and nothing blocks it as a popup.
+        //
+        // ⚠️ Only paths the INDEX knows. This is a redirect built from a query
+        // parameter, and the loopback bind is not a reason to let one name any
+        // file on the machine — the index is the allowlist.
+        const rel = url.searchParams.get('path') ?? '';
+        if (!work.byPath(rel)) return json(404, { error: 'not a known work item' });
+        const target = blobUrl(cfg.repo, rel);
+        if (!target) return json(404, { error: 'no github remote' });
+        res.writeHead(302, { location: target }).end();
+        return;
+      }
       if (url.pathname === '/api/state') {
         return json(200, {
           repo: cfg.repo,
@@ -440,6 +489,7 @@ export function createServer(deps: {
           director: cfg.directorName,
           permissionMode: session.chosenPermissionMode(),
           speechLevel: deps.speakOut.speechLevel(),
+          effort: session.chosenEffort() ?? '',
           sessionId: session.sessionId(),
           decisions: pending.allDecisions(),
           workers: pending.allWorkers(),

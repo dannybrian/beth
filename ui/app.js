@@ -50,6 +50,8 @@ const renderUser = (m) =>
 
 /** The bound repo's absolute path, from `hello` — needed to build editor URLs. */
 let repoPath = '';
+/** Whether this repo is on github.com at all. No remote, no button. */
+let repoOnWeb = false;
 
 function openInEditor(link) {
   // vscode://file/<abs>[:line] is a well-defined scheme and needs no local server.
@@ -545,6 +547,20 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   };
   head.append(rename);
 
+  // Read it where it is reviewable. Only drawn when the repo HAS a github origin
+  // — the hello says so — and the href is our own endpoint rather than a github
+  // URL, because the branch is resolved at the moment of the click. See
+  // repoWeb.ts for why that matters more than it sounds like it does.
+  if (repoOnWeb) {
+    const gh = el('a', 'gh', '↗');
+    gh.href = `/api/github?path=${encodeURIComponent(item.path)}`;
+    gh.target = '_blank';
+    gh.rel = 'noreferrer';
+    gh.title = `Open "${item.spoken}" on GitHub`;
+    gh.onclick = (e) => e.stopPropagation();
+    head.append(gh);
+  }
+
   // Hand off to a fresh interactive Claude Code session. Disabled outright on a
   // live claim — one implementer at a time, and the server refuses too.
   const hand = el('button', 'handoff', '⌘');
@@ -735,6 +751,7 @@ function feedEvent(e) {
 const handlers = {
   hello: (m) => {
     repoPath = m.repo;
+    repoOnWeb = Boolean(m.repoOnWeb);
     const project = m.repo.split('/').pop();
     $('repo-label').textContent = project;
     // Several instances run side by side, one per repo — the tab title is the
@@ -750,6 +767,7 @@ const handlers = {
     if (m.model) $('model-select').value = m.model;
     if (m.permissionMode) setPermissionMode(m.permissionMode);
     if (m.speechLevel) setSpeechLevel(m.speechLevel);
+    setEffortLevel(m.effort ?? '');
     myStreamId = m.streamId;
     // A page that reconnects while focused should get the mouth back.
     if (document.hasFocus()) claimVoice();
@@ -765,6 +783,10 @@ const handlers = {
   speech: (m) => {
     setSpeechLevel(m.level);
     entry('activity', (n) => (n.textContent = `🔈 speech → ${m.level}`));
+  },
+  effort: (m) => {
+    setEffortLevel(m.level);
+    entry('activity', (n) => (n.textContent = `🧠 effort → ${m.level || 'default'}`));
   },
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
@@ -1760,6 +1782,20 @@ function setPermissionMode(mode) {
   sel.dataset.mode = mode;
 }
 $('perm-select').onchange = (e) => post('/api/permission-mode', { mode: e.target.value });
+
+/**
+ * Same contract again: the level the SESSION is on, not the one that was picked.
+ *
+ * It shows the CHOICE rather than what is in force — the mic ducks effort while
+ * it is open, and a select that dropped to `low` every time he reached for the
+ * microphone would look like the harness overriding him rather than borrowing it.
+ */
+function setEffortLevel(level) {
+  const sel = $('effort-select');
+  sel.value = level ?? '';
+  sel.dataset.level = level ?? '';
+}
+$('effort-select').onchange = (e) => post('/api/effort', { level: e.target.value });
 
 /** Same contract as the permission mode: the SERVER's level, not the click's. */
 function setSpeechLevel(level) {

@@ -7,6 +7,14 @@ import { directorName } from './directorName.ts';
 import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { parseKeyterms } from './keyterms.ts';
 
+/**
+ * How hard the model thinks. `null` is the model's own default rather than a
+ * level of its own, which is why it is in the type: "leave it alone" has to be
+ * expressible both as the config and as a choice in the UI.
+ */
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type EffortLevel = (typeof EFFORT_LEVELS)[number] | null;
+
 export type HarnessConfig = {
   /** The bound project repo — the director session's cwd. */
   repo: string;
@@ -134,7 +142,7 @@ export type HarnessConfig = {
    * hang off, the mic being on is the signal — which is what it always meant.
    * Set HARNESS_VOICE_EFFORT=off to disable the switch entirely.
    */
-  voiceEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+  voiceEffort: EffortLevel;
   /**
    * How long the words must stop CHANGING before a spoken turn is sent. Served
    * to the page, which is where the window now lives.
