@@ -1306,6 +1306,63 @@ const VOICE_DEBUG =
 /** True while the composer is displaying speech rather than something typed. */
 let speechOwnsInput = false;
 
+// --- autosend ----------------------------------------------------------------
+//
+// A settled utterance sending itself is what makes voice a CONVERSATION, and it
+// is also what makes dictation impossible: there is no way to say a sentence,
+// look at it, and fix the word the recogniser got wrong, because it is already
+// gone. So the ear and the send are separated. Held speech lands in the composer
+// and stays there until Enter, exactly like something typed.
+//
+// One person's preference on one machine, so it lives beside the collapsed
+// sections rather than on the server.
+const AUTOSEND_KEY = 'harness.autosend';
+let autosend = localStorage.getItem(AUTOSEND_KEY) !== '0';
+
+/**
+ * Where the utterance in flight starts in the composer, while holding.
+ *
+ * ⚠️ This is what makes a SECOND sentence possible. Every settle resets the
+ * recogniser's own accumulation (`carry`, `consumedUpTo`), so the next utterance
+ * arrives as if the box were empty — and rendering it the way autosend does
+ * would overwrite the sentence still sitting there unsent. Null between
+ * utterances, which is the signal to append to whatever the box holds now,
+ * whether that was spoken or typed.
+ */
+let heldBase = null;
+
+/**
+ * Speech, held. Appends rather than replaces, so nothing in the box is ever
+ * destroyed by talking — which is also why there is no "composer is busy"
+ * refusal here: with nothing being sent there is nothing to protect against.
+ * The one case it declines is typing MID-utterance, where the words already
+ * rendered are ours and his edit is not, and rewriting from the base would take
+ * his edit with it.
+ */
+function showHeld(text) {
+  if (heldBase !== null && !speechOwnsInput) return false;
+  if (!text) return heldBase !== null;
+  if (heldBase === null) heldBase = input.value ? `${input.value.replace(/\s+$/, '')} ` : '';
+  speechOwnsInput = true;
+  input.value = heldBase + text;
+  input.classList.add('interim');
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  return true;
+}
+
+/**
+ * The utterance stopped changing. Nothing goes out — it just stops being
+ * provisional: the styling drops and the base is released, so the next sentence
+ * appends after this one instead of replacing it.
+ */
+function commitHeld(text) {
+  if (!showHeld(text)) return false;
+  heldBase = null;
+  input.classList.remove('interim');
+  return true;
+}
+
 /** True when speech owns the composer — false means something typed is in it. */
 function showInterim(text) {
   // Never clobber something typed. His words win; speech only fills a box it
@@ -1321,6 +1378,11 @@ function showInterim(text) {
 
 function clearInterim() {
   if (!speechOwnsInput) return;
+  // ⚠️ While holding, the box is a DRAFT and not a preview. A turn being
+  // published is what calls this, and that is broadcast — so the other tab
+  // publishing something would otherwise reach across and delete a sentence
+  // sitting here unsent. Sending from here already empties the box itself.
+  if (!autosend) return;
   speechOwnsInput = false;
   input.value = '';
   input.classList.remove('interim');
@@ -1351,8 +1413,17 @@ const PLACEHOLDER = {
   // Replaced on `hello` with the bound repo's director — see setDirectorName.
   off: 'Talk to the director…',
   listening: 'Listening — go ahead',
+  // Holding. "Go ahead" would be a lie by omission: the words land and then
+  // nothing happens, and the cue is the only place that says what sends them.
+  holding: 'Listening — Enter sends',
   error: 'Voice unavailable — type instead',
 };
+
+/** The readiness cue for the state we are in, which autosend is half of. */
+function paintPlaceholder(state = voice?.state ?? 'off') {
+  if (speechOwnsInput) return;
+  input.placeholder = (state === 'listening' && !autosend ? PLACEHOLDER.holding : PLACEHOLDER[state]) ?? PLACEHOLDER.off;
+}
 
 /**
  * Call her what her project calls her. The harness holds the role and the bound
@@ -1362,7 +1433,7 @@ const PLACEHOLDER = {
 function setDirectorName(name) {
   if (!name) return;
   PLACEHOLDER.off = `Talk to ${name}…`;
-  if (!speechOwnsInput && voice?.state !== 'listening') input.placeholder = PLACEHOLDER[voice?.state ?? 'off'] ?? PLACEHOLDER.off;
+  if (voice?.state !== 'listening') paintPlaceholder();
 }
 
 /**
@@ -1373,7 +1444,7 @@ let voice = null;
 
 function paintVoiceButton(state, detail) {
   voiceBtn.className = `voice ${state}`;
-  if (!speechOwnsInput) input.placeholder = PLACEHOLDER[state] ?? PLACEHOLDER.off;
+  paintPlaceholder(state);
   voiceBtn.title =
     (state === 'listening'
       ? 'Listening. Recognition is local, nothing is billed, and there is no channel to lose.'
@@ -1389,6 +1460,8 @@ function buildVoice(hello) {
     // Say so rather than presenting a mic button that cannot work.
     paintVoiceButton('error', 'This browser has no speech recognition — Chrome does.');
     voiceBtn.disabled = true;
+    // Nothing to hold back, so it is a control over nothing.
+    autosendBtn.disabled = true;
     return;
   }
   voice = new Listener({
@@ -1406,12 +1479,19 @@ function buildVoice(hello) {
     },
     // The composer IS the preview: he watches the words arrive, punctuated as
     // they will be sent, in the box they will be sent from.
-    onInterim: (text) => (text ? showInterim(text) : clearInterim()),
+    // ⚠️ While holding, an EMPTY interim must not clear the box — there may be a
+    // finished sentence in it waiting for Enter, and the recogniser reports empty
+    // the moment it starts the next one.
+    onInterim: (text) => (autosend ? (text ? showInterim(text) : clearInterim()) : showHeld(text)),
     // Straight through the ordinary send, so a spoken turn carries the chips he
     // pointed at and honours /clear and /stop exactly like a typed one. Only send
     // what speech actually OWNS: if he is mid-way through typing something the
     // composer is his, and sending would fire his half-written line instead.
     onSettled: (text) => {
+      if (!autosend) {
+        if (!commitHeld(text)) entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not added`));
+        return;
+      }
       if (showInterim(text)) send();
       else entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not sent`));
     },
@@ -1433,6 +1513,27 @@ const toggleVoice = async () => {
   }
 };
 voiceBtn.onclick = toggleVoice;
+
+const autosendBtn = $('autosend-toggle');
+
+function paintAutosend() {
+  autosendBtn.className = `autosend ${autosend ? 'on' : 'off'}`;
+  autosendBtn.title = autosend
+    ? 'Speech sends itself once you stop talking — click to hold it in the composer instead'
+    : 'Speech is held in the composer — edit it, then press Enter to send. Click to send automatically again.';
+}
+
+autosendBtn.onclick = () => {
+  autosend = !autosend;
+  localStorage.setItem(AUTOSEND_KEY, autosend ? '1' : '0');
+  paintPlaceholder();
+  // Whatever was accumulating belongs to the mode it was accumulating under: the
+  // words already in the box stay, but the next utterance starts a fresh base
+  // rather than continuing one taken under the other rule.
+  heldBase = null;
+  paintAutosend();
+};
+paintAutosend();
 
 // Keypad 0 toggles voice from anywhere, INCLUDING while the composer has focus —
 // the composer is autofocused, so a hotkey that deferred to it would never fire
@@ -1599,6 +1700,7 @@ const send = () => {
   input.value = '';
   input.style.height = 'auto';
   speechOwnsInput = false;
+  heldBase = null;
   input.classList.remove('interim');
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
@@ -1622,6 +1724,7 @@ function clearComposer() {
     if (!document.execCommand?.('delete')) input.value = '';
   }
   speechOwnsInput = false;
+  heldBase = null;
   input.classList.remove('interim');
   input.style.height = 'auto';
 }

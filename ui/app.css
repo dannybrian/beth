@@ -247,6 +247,36 @@ button.voice.listening {
 }
 button.voice.error { color: var(--warn); border-color: var(--warn); }
 
+/* Autosend, in the same box as the mic — it is the second half of one control:
+   whether the ear also presses Enter. Quiet in its DEFAULT state (sending, which
+   is what it has always done) and lit when holding, because a mode that silently
+   stops turns from going out is the one that has to be visible. */
+button.autosend {
+  flex: none;
+  width: 34px;
+  height: 46px;
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+button.autosend svg { width: 19px; height: 19px; display: block; }
+/* One glyph, struck through when nothing sends itself. */
+button.autosend .slash { display: none; }
+button.autosend.off .slash { display: block; }
+/* The strike crosses the plane's own strokes, and two thin lines meeting at an
+   angle read as scribble at 19px. `.cut` is the same line in the composer's own
+   colour, painted underneath and wider, so the strike gets a gap around it. */
+button.autosend .cut { stroke: var(--panel); stroke-width: 4.5; }
+button.autosend.off { color: var(--say); }
+button.autosend:hover { color: var(--text); }
+button.autosend:disabled { opacity: 0.3; cursor: default; }
+
 /* Connection lost. The composer keeps its shape — this is a status, not a
    modal — but it must be impossible to mistake for Beth simply being quiet. */
 body.stream-down .composer { border-top: 1px solid var(--err); }
@@ -811,6 +841,11 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
    pushing it off-centre. Invisible until the red recording background showed it. */
 .composer button.voice { background: none; color: var(--muted); font-weight: 400; padding: 0; }
 .composer button.voice.listening { color: var(--ok); }
+/* Same trap as the mic: `.composer button` matches at equal specificity and wins
+   on order, so the padding above has to be restated here or the glyph goes
+   off-centre in a 12px content box. */
+.composer button.autosend { background: none; color: var(--muted); font-weight: 400; padding: 0; }
+.composer button.autosend.off { color: var(--say); }
 /* The meter is a gauge you can click, not a button — the composer's primary
    styling would otherwise make it look like a third action next to Send. */
 .composer button.ctx { background: none; border: none; padding: 0; width: 26px; }

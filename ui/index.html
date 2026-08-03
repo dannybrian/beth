@@ -98,6 +98,21 @@
             <path d="M12 17.6v.01" />
           </svg>
         </button>
+        <!-- Whether a settled utterance SENDS itself or just lands in the box.
+             It sits between the mic and the field because that is the order of
+             the thing it governs: heard here, held there. -->
+        <button id="autosend-toggle" class="autosend on" title="Speech sends itself once you stop talking">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21.3 2.7 2.9 9.7l7.6 3.8 3.8 7.6z" />
+            <path d="M21.3 2.7 10.5 13.5" />
+            <!-- ACROSS the plane, not along it: the plane's own body runs
+                 bottom-left to top-right, so a slash the same way reads as part
+                 of the drawing rather than a line through it. -->
+            <path class="slash cut" d="M3.5 3.5 20.5 20.5" />
+            <path class="slash" d="M3.5 3.5 20.5 20.5" />
+          </svg>
+        </button>
         <textarea id="input" rows="1" placeholder="Talk to the director…" autofocus></textarea>
         <!-- Visible only while something is actually running for her. A turn with
              no outward sign is indistinguishable from a hang — which is the same

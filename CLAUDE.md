@@ -192,6 +192,19 @@ These cost hours. Don't rediscover them.
   the settle callback). ⚠ And `off()` must never emit `onSettled`: reaching for the mic
   is what Danny does when the transcription is going wrong, so switching it off is a way
   OUT of the sentence, never a commit of it. Both are tested.
+- **The ear and the send are separate controls.** A settled utterance sending itself is
+  what makes voice a conversation and what makes DICTATION impossible — there is no
+  moment to look at the sentence and fix the word Chrome got wrong, because it is
+  already gone. The toggle between the mic and the composer (`autosend` in `ui/app.js`,
+  remembered in `localStorage`) holds it in the box instead, to be edited and sent with
+  Enter like anything typed. ⚠ Holding means the composer ACCUMULATES, which nothing
+  else in the speech path does: every settle resets `carry`/`consumedUpTo`, so the next
+  utterance arrives as if the box were empty and rendering it the autosend way would
+  overwrite the sentence still sitting there unsent. `heldBase` is where the utterance in
+  flight starts — null between utterances, which is the signal to APPEND to whatever the
+  box holds, spoken or typed. ⚠ And `clearInterim()` returns early while holding: it is
+  called when a turn is published, that is broadcast to every tab, and a draft is not a
+  preview — the other tab sending something must not reach across and delete it.
 - **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
   browser pages could not both speak no matter what. Every page can play audio now, and two
   tabs on one harness means hearing her twice, slightly out of phase, on top of herself.
