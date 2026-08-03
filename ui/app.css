@@ -271,14 +271,60 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  /* Last resort, and it should never engage: the floors below are small enough
+     that four sections fit any sane window. `hidden` here meant a window short
+     enough to beat them made the bottom section unreachable rather than merely
+     cramped, which is the failure this whole change is about. */
+  overflow-y: auto;
 }
-.sect { flex: none; min-height: 0; display: flex; flex-direction: column; }
-.sect.grow { flex: 1 1 auto; }
+/* ⚠️ `0 1 auto`, not `none`: the queues must be able to SHRINK. `.side` does not
+   scroll — that is deliberate, so Plans can own the leftover height — which means
+   a section that refuses to shrink does not overflow, it pushes what is below it
+   out of a pane with no way to reach it.
+   ⚠️ But shrinking and CRUSHING are one property apart, and both failures are
+   real. `min-height: 0` let a section shrink past its own heading: three
+   collapsed headings bunched against each other under an expanded Plans, spaced
+   normally again the moment Plans was collapsed. `min-height: auto` fixed that
+   and broke the other end — a scrolling panel reports its whole stack as its
+   minimum, so no queue would yield and Plans was left with 51 pixels.
+   ⚠️ A stated floor (5em) fixed both and broke a THIRD thing: an expanded but
+   EMPTY section was held open to the floor, so three sections showing the word
+   "nothing" pushed the headings far apart. There is no floor here now, and none
+   is needed — a queue never shrinks (see flex-shrink below), so it is always
+   exactly as tall as it has, and the panel caps stop it going further. Plans is
+   the only section that flexes, and its floor is on its own rule. */
+.sect { flex: 0 1 auto; display: flex; flex-direction: column; }
+.sect.collapsed { flex: none; }
+/* Plans grows, but never to nothing — it is the board. */
+.sect.grow { flex: 1 1 auto; min-height: 8em; }
 .sect.grow > .panel { overflow-y: auto; min-height: 0; }
-/* The queues above are short but unbounded — cap them rather than let a busy
-   day's events squeeze Plans out. */
-.sect > .panel.capped { max-height: 22vh; overflow-y: auto; }
+
+/* EVERY queue scrolls inside itself, the way Plans does.
+   A queued decision carries several sentences of context, and with the section
+   sized to its content one open card was taller than the window: the card could
+   not be read, and the board below it could not be reached. Capped, the card
+   scrolls in place and everything below it stays where it was. */
+.sect > .panel { max-height: 34vh; overflow-y: auto; min-height: 0; }
+/* Plans is the one that grows — the cap above would undo that. */
+.sect.grow > .panel { max-height: none; }
+/* No floors on the panels either, for the same reason as the sections: nothing
+   shrinks them any more. They were an answer to flex handing Events ONE PIXEL,
+   which stopped being possible once the queues stopped shrinking — and left as
+   dead weight they only padded an empty section, which is the whole of what a
+   panel showing the word "nothing" should cost. */
+/* Events are ambient rather than actionable, so they yield height to the two
+   queues that are waiting on him. */
+.sect > .panel.capped { max-height: 22vh; }
+/* When the column is tight, something has to give — and it should not be the pile
+   with several sentences to read and a decision waiting on the other end. The
+   queues are already BOUNDED by the caps above, so they take what they need up to
+   that and no further; Plans is a list of short rows that scrolls well, so it
+   gives up the difference and keeps its own floor. Left to proportional
+   shrinking, Pending was the section that collapsed first — the exact opposite of
+   what it should be.
+   ⚠️ `:not(.collapsed)` — a collapsed section is handled above, and any flex
+   reinstated on it here puts its heading back against the next one. */
+.sect:not(.grow):not(.collapsed) { flex-shrink: 0; }
 .sect.collapsed > .panel { display: none; }
 
 .side h2 {
