@@ -309,7 +309,12 @@ body.stream-down .composer::before {
 }
 
 /* --- layout --- */
-main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+/* The side is a SHARE of the window, not a fixed strip: at 300px it was the same
+   column on a laptop and on a 34-inch display, so plan titles wrapped at the same
+   place either way and the extra screen went entirely to the conversation. 30%
+   once the window is wide enough to give it, and never below the 300px it used to
+   be — a percentage alone would squeeze it on a small window. */
+main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0; }
 .transcript { overflow-y: auto; padding: 20px 22px 28px; }
 .side {
   border-left: 1px solid var(--line);
@@ -403,7 +408,12 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .panel:empty::after { content: "nothing"; color: var(--muted); font-size: 12px; font-style: italic; }
 
 /* --- transcript entries --- */
-.entry { margin-bottom: 14px; max-width: 70ch; }
+/* ⚠️ No measure cap. 70ch is the readable line length and it was here on purpose,
+   but on a wide window it left the conversation in a 500px strip against the left
+   edge with half the screen empty beside it — and this is a working surface with
+   code, paths and task lists in it as much as prose. It fills the column; the
+   column is what you size by sizing the window. */
+.entry { margin-bottom: 14px; }
 .entry.user { margin-left: auto; text-align: right; }
 .entry.user .body {
   display: inline-block;
@@ -474,7 +484,6 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   border-radius: 4px;
   padding: 12px 14px;
   margin-bottom: 14px;
-  max-width: 70ch;
 }
 .card.approval { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
 .card .q { font-weight: 600; margin-bottom: 3px; }
@@ -798,6 +807,23 @@ main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
 .chip-x:hover { color: var(--err); }
 .refs.sent { justify-content: flex-end; margin-bottom: 5px; }
 .refs.sent .chip { padding-right: 8px; }
+/* A SENT reference is not the same object as one sitting in the composer, and it
+   should not look like one. In the composer a chip is provisional — a tinted
+   outline you can still take back with its ×. In the transcript it is part of
+   what was said, and it reads like something highlighted on paper: light ground,
+   dark ink, the way a marked passage does. Mixed from --warn rather than a new
+   hex so the palette stays the palette. */
+.refs.sent .chip {
+  background: color-mix(in srgb, var(--warn) 45%, white);
+  border-color: var(--warn);
+  color: #0e1013;
+}
+/* The plan/task distinction survives the change of ground — a task reference is
+   still a different kind of thing, it is just now a different highlighter. */
+.refs.sent .chip.task {
+  background: color-mix(in srgb, var(--say) 40%, white);
+  border-color: var(--say);
+}
 
 /* --- composer --- */
 .composer {
