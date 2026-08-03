@@ -273,4 +273,29 @@ Tuning covers most complaints. One does not:
 | turns firing mid-sentence, or replies sluggish | `HARNESS_VOICE_SETTLE_MS` |
 | a real word eaten as punctuation ("the settle period") | the spoken-punctuation checkbox |
 | text resetting mid-utterance | a regression in the `carry` fix — see `src/listen.test.ts` |
-| **project nouns consistently mangled** | **nothing. This is the keyterms case, and it is the signal to revisit.** |
+| **project nouns consistently mangled** | ~~nothing~~ — **`HARNESS_SPEECH_BIASING=on`. See the note below: this row is out of date.** |
+
+### ⚠️ Update, 2026-08-02: the row above is no longer true
+
+`pnpm` and `colyseus` coming back wrong was reported from use, which is exactly the
+symptom this record says only Scribe can fix. That was true when it was written and is
+not true now: the **Web Speech API grew contextual biasing** — `recognition.phrases`,
+`new SpeechRecognitionPhrase(term, boost)` — which is the same mechanism as Scribe's
+`keyterms`, on the path already in place. Verified present in Chromium 148.
+
+Built as `src/keyterms.ts` (assembles the vocabulary from `HARNESS_KEYTERMS`, the live
+plans, and the repo's sub-project and dependency names) and applied in `ui/listen.js`,
+per recogniser, behind `HARNESS_SPEECH_BIASING=on`.
+
+So the Scribe case is now **narrower, not closed**. What biasing does not touch:
+
+- **punctuation**, which Chrome still cannot do at all — the spoken-punctuation table
+  remains the only lever, with the cost this record already describes;
+- **VAD endpointing**, so the settle window stays a proxy for the thing VAD measures;
+- **`noVerbatim`**, and audio still going to Google on the cloud path.
+
+⚠️ And biasing itself is UNPROVEN against real speech: the terms are verified to reach the
+recogniser, not to change what it hears. Chrome may tie `phrases` to its on-device model,
+in which case the page reports a refusal and listens without it. Reopen Scribe if the
+nouns are still wrong with a boosted vocabulary in place — that, not the bare symptom, is
+now the signal.

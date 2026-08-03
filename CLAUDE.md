@@ -56,9 +56,17 @@ pnpm test        # node --test src/*.test.ts
 
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `speakOut` — which is now
-the whole speech plane — the `testRunner` detectors and failure parsers, and `listen`,
-which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be tested at
-all. Browser code is testable when the hard part is bookkeeping rather than the browser.
+the whole speech plane, billing included — the `testRunner` detectors and failure parsers,
+and `listen`, which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be
+tested at all. Browser code is testable when the hard part is bookkeeping rather than the
+browser.
+
+The rest earn their tests by being places a mistake is INVISIBLE: `toolInput` (a malformed
+call recovered from the real payload), `planName` (the one writer — that it round-trips
+through the real reader, and that nothing else in the file moves), `pins` (that a shelved
+plan survives a restart and still shows when it is not in flight), `state` (a worker
+leaving the roster when nothing will ever report it), `keyterms`, `greeting`, and
+`stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere.
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -224,8 +232,11 @@ the conversation that produced it. Where things stand:
   meter are all gone. Read it for the reasoning, not for work — what is left is the
   question it ends on — Scribe — which is DEFERRED as of 2026-08-02: the Web Speech API
   stays for now. The research is recorded there (realtime Scribe has VAD endpointing and
-  keyterms, both of which would retire patches), along with the one symptom that should
-  reopen it: project nouns consistently mangled, which no local tuning can fix.
+  keyterms, both of which would retire patches). ⚠ Its "what would flip this" table said
+  mangled project nouns could only be fixed by Scribe; that stopped being true when Chrome
+  grew contextual biasing, and the record carries a dated correction saying so. The
+  reopening signal is now narrower: nouns still wrong WITH a boosted vocabulary in place.
+  Punctuation and VAD are untouched by biasing and remain Scribe's case.
 - **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,

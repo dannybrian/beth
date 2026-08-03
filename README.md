@@ -71,7 +71,7 @@ Nothing is machine-global except the credentials, so instances don't collide.
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turn pushes; result/usage reading; session-id persistence and `resume` across restarts |
 | `askgate.ts` | `canUseTool` — AskUserQuestion rendered and **pended** until answered; every other gated tool becomes an approve/deny card |
-| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `close_decision`, `pending`, `plans`, `speech`, `remember`, `recall` (all `alwaysLoad`) |
+| `tools.ts` | In-process MCP server: `say`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` (all `alwaysLoad`) |
 | `toolInput.ts` | Repairs a tool call the model wrote in two formats at once — see the gotcha in CLAUDE.md |
 | `eventlog.ts` | Append + tail `<repo>/.claude/events.jsonl` (gitignored) |
 | `state.ts` | Live Ask-Danny queue and worker roster — both clearable, by either of you |
@@ -84,6 +84,9 @@ Nothing is machine-global except the credentials, so instances don't collide.
 | `testRunner.ts` | Detects the project's test command, runs it when the tree settles, parses failures |
 | `personal.ts` | What she remembers about Danny, and the once-a-day rule for when she may ask |
 | `greeting.ts` | The boot line: the last few openings to avoid, and the facts to be specific about |
+| `keyterms.ts` | The project's own nouns, assembled for the recogniser to be biased toward |
+| `pins.ts` | Danny's shelf of plans, and the work message the panel renders |
+| `planName.ts` | ⚠ The one thing that writes to a plan file — a rename, `name:` and nothing else |
 
 ## Voice
 
