@@ -52,13 +52,23 @@ export class PersonalStore {
   private stateFile: string;
   readonly enabled: boolean;
 
-  constructor(cfg: HarnessConfig) {
-    // Per-repo, beside the other state. Machine-wide is arguably righter — he is
-    // the same person on every repo — but per-repo is the safer default and the
-    // cheaper thing to change later. It must never land in a repo that gets
-    // pushed, which is why it is here rather than in .claude/.
-    this.file = path.join(cfg.stateDir, 'personal.jsonl');
-    this.stateFile = path.join(cfg.stateDir, 'personal-state.json');
+  /**
+   * `dir` is where this director's memory lives.
+   *
+   * It used to be the repo's state dir, always — and the note here said
+   * machine-wide was arguably righter, since he is the same person on every
+   * repo, but that per-repo was the safer default and the cheaper thing to
+   * change later. This is that change, and only half of it: with no persona
+   * chosen the file is exactly where it was, and a chosen persona takes her
+   * memory with her instead (see personas.ts). What decides it is whose memory
+   * this is, which is the question the old comment could not ask.
+   *
+   * ⚠️ Either way it must never land in a repo that gets pushed, which is why
+   * neither option is inside .claude/.
+   */
+  constructor(cfg: HarnessConfig, dir = cfg.stateDir) {
+    this.file = path.join(dir, 'personal.jsonl');
+    this.stateFile = path.join(dir, 'personal-state.json');
     this.enabled = cfg.personal;
   }
 

@@ -12,6 +12,15 @@ It is **project-agnostic on purpose**. The harness supplies the director's ROLE;
 bound repo supplies the PERSON via its own `.claude/DIRECTOR.md`. Resist anything that
 teaches the harness about a specific project.
 
+Since 2026-08-06 there is a THIRD place a person can come from, and it is neither of
+those: `~/.director-harness/personas/*.md` on the machine (`src/personas.ts`). A persona
+is Danny's, not a project's and not the harness's — checking one in here would mean
+editing the tool to hire a colleague, which is the same mistake one level over. The
+harness ships none, exactly as it ships no plans, and a machine with no personas behaves
+precisely as it did before. Persona and `DIRECTOR.md` COMPOSE: the persona says who she
+is, the repo says what this project needs from a director, and the repo's guide comes
+second because it is the more specific instruction.
+
 The same split holds for work: the harness defines the SHAPE of a work item
 (`src/workItems.ts`) and a *reader* produces it from whatever the project stores.
 `/plans` is a BUILT-IN reader because dated-markdown-with-frontmatter is Danny's
@@ -216,6 +225,24 @@ These cost hours. Don't rediscover them.
   only — the remote gives us the host but not that host's URL SHAPE (GitLab wants
   `/-/blob/`), and a button that opens a plausible 404 is worse than no button, so
   anything else draws nothing at all.
+- **Becoming someone else is a NEW SESSION, and that is structural.** Model, permission
+  mode and effort all have setters on a running query; the system prompt does not — it is
+  fixed when `query()` is constructed, and `reinitialize()` is for transport gaps, not for
+  changing who is in the room. So `setPersona` ends with `clear()`, and the page confirms
+  before it posts, because a dropdown that silently threw away an hour of conversation
+  would be the worst control on it. ⚠ Two things follow her rather than the repo: her
+  VOICE (`speakOut.setVoice` — and it must drop the resolve CACHE, or the new director
+  sounds exactly like the old one and nothing else tells you) and her MEMORY of Danny
+  (`personaStateDir`). Her greeting rut does not: a habit is formed against a project, so
+  that file is keyed by both. ⚠ And `seedMemory` copies an existing memory across ONCE,
+  only when the persona's name matches the repo's own director — otherwise picking "Beth"
+  in a repo that already made her Beth would make her forget him, which would look exactly
+  like the feature working.
+  The voice picker in the strip AUDITIONS and never writes: it lists the account's voices
+  so an id can be found by ear instead of by hunting, and a reload or a persona switch
+  puts her back to whatever her file says. The durable answer stays the `voice:` line in
+  that file, because a dropdown that quietly rewrote a hand-written file would be a second
+  writer nobody asked for.
 - **Reasoning effort has two owners.** The strip picks a level that stands until it is
   changed; the mic DUCKS it to `voiceEffort` for as long as it is open, because spoken
   conversation trades depth for latency. So the choice is kept separately from what is in

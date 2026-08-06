@@ -752,6 +752,8 @@ const handlers = {
   hello: (m) => {
     repoPath = m.repo;
     repoOnWeb = Boolean(m.repoOnWeb);
+    setPersonas(m.personas ?? [], m.persona ?? '');
+    void loadVoices();
     const project = m.repo.split('/').pop();
     $('repo-label').textContent = project;
     // Several instances run side by side, one per repo — the tab title is the
@@ -787,6 +789,15 @@ const handlers = {
   effort: (m) => {
     setEffortLevel(m.level);
     entry('activity', (n) => (n.textContent = `🧠 effort → ${m.level || 'default'}`));
+  },
+  persona: (m) => {
+    $('persona-select').value = m.slug;
+    current.persona = m.slug;
+    // The name is not decoration — it is what the composer invites you to talk
+    // to and what a permission card says. It arrives with the switch so the page
+    // never has to guess it from a slug.
+    setDirectorName(m.name);
+    entry('activity', (n) => (n.textContent = `🎭 director → ${m.name}`));
   },
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
@@ -1796,6 +1807,78 @@ function setEffortLevel(level) {
   sel.dataset.level = level ?? '';
 }
 $('effort-select').onchange = (e) => post('/api/effort', { level: e.target.value });
+
+/**
+ * The directors on this machine, and who is in force.
+ *
+ * ⚠️ Absent entirely when there are none. A dropdown offering only "the repo's
+ * director" is a control with one option that does nothing, and this harness has
+ * worked without personas from the beginning — that path stays exactly as it was.
+ */
+function setPersonas(personas, chosen) {
+  const sel = $('persona-select');
+  sel.hidden = personas.length === 0;
+  if (sel.hidden) return;
+  sel.replaceChildren();
+  // '' is a real choice and stays on the menu: it hands her back to whatever the
+  // bound repo says, which is the only way to undo a switch.
+  for (const { slug, name } of [{ slug: '', name: 'repo default' }, ...personas]) {
+    const opt = el('option', '', name);
+    opt.value = slug;
+    sel.append(opt);
+  }
+  sel.value = chosen;
+  current.persona = chosen;
+}
+
+$('persona-select').onchange = async (e) => {
+  const sel = e.target;
+  const name = sel.options[sel.selectedIndex]?.textContent ?? 'that director';
+  // ⚠️ ASK FIRST. The system prompt is fixed when the session is built, so
+  // becoming someone else is a new session — the same loss as /clear, and a
+  // dropdown that silently threw away an hour of conversation would be the
+  // worst thing on this page. The revert is why `current` is read back.
+  if (!confirm(`Talk to ${name}?\n\nThis starts a new conversation — the current one is cleared.`)) {
+    sel.value = current.persona;
+    return;
+  }
+  current.persona = sel.value;
+  await post('/api/persona', { slug: sel.value });
+};
+
+/** What the page believes is in force, so a cancelled switch can put it back. */
+const current = { persona: '' };
+
+/**
+ * The voices on the account, for auditioning.
+ *
+ * Fetched after `hello` rather than shipped with it: the list costs a call to
+ * ElevenLabs, and opening a conversation must not wait on one. An empty list —
+ * no key, no permission, no network — draws no control at all, the same rule the
+ * persona select follows.
+ */
+async function loadVoices() {
+  const sel = $('voice-select');
+  const r = await fetch('/api/voices').then((x) => x.json()).catch(() => null);
+  const voices = r?.voices ?? [];
+  sel.hidden = voices.length === 0;
+  if (sel.hidden) return;
+  sel.replaceChildren();
+  for (const v of voices) {
+    const opt = el('option', '', v.name);
+    opt.value = v.id;
+    sel.append(opt);
+  }
+  // Only if the voice in force is one of hers — a persona can name an id that is
+  // not on this account, and a select silently showing the wrong name would be
+  // worse than one showing none.
+  sel.value = voices.some((v) => v.id === r.current) ? r.current : '';
+}
+
+// ⚠️ No confirm and no persistence, unlike the persona switch. Trying a voice
+// costs nothing and undoes itself: a reload, or picking a persona, puts her back
+// to whatever her file says.
+$('voice-select').onchange = (e) => post('/api/voice', { voiceId: e.target.value });
 
 /** Same contract as the permission mode: the SERVER's level, not the click's. */
 function setSpeechLevel(level) {

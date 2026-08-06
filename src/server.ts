@@ -26,6 +26,7 @@ import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { setPlanName } from './planName.ts';
 import { blobUrl, hasWeb } from './repoWeb.ts';
+import { listPersonas } from './personas.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -142,13 +143,18 @@ export function createServer(deps: {
         mode: session.role.mode,
         modeReason: session.role.reason,
         model: session.chosenModel(),
-        director: cfg.directorName,
+        director: session.directorName(),
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.speakOut.speechLevel(),
         effort: session.chosenEffort() ?? '',
         // Draw the "open on GitHub" button, or do not. False is the ordinary
         // case for a repo with no remote, not an error.
         repoOnWeb,
+        // Read per connection, not at boot: he adds a persona by dropping a file
+        // in a directory, and a list fixed at startup would not have it until the
+        // harness was restarted — which is the opposite of how that should feel.
+        personas: listPersonas().map((p) => ({ slug: p.slug, name: p.name })),
+        persona: session.persona()?.slug ?? '',
         settleMs: cfg.voiceSettleMs,
         keyterms: biasing(),
         keytermBoost: cfg.keytermBoost,
@@ -272,6 +278,27 @@ export function createServer(deps: {
             if (!model) return json(400, { error: 'no model' });
             await session.setModel(model);
             return json(200, { ok: true, model });
+          }
+          case '/api/voice': {
+            // AUDITIONING, not choosing. Nothing is written down: the durable
+            // answer to "who does she sound like" is the `voice:` line in a
+            // persona file, and a picker that quietly rewrote it would edit a
+            // hand-written file from a dropdown. A restart, or a persona switch,
+            // puts her back to what that file says — which is the point. When he
+            // likes one, the id goes in the file by hand.
+            const id = String(body.voiceId ?? '');
+            deps.speakOut.setVoice(id || session.persona()?.voiceId || null);
+            bus.publish({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
+            return json(200, { ok: true, voiceId: deps.speakOut.currentVoice() });
+          }
+          case '/api/persona': {
+            // ⚠️ This CLEARS the conversation — the system prompt is fixed when
+            // the query is built, so becoming someone else means a new session.
+            // The page warns before it gets here; this is not a silent restart.
+            const slug = String(body.slug ?? '');
+            const chosen = await session.setPersona(slug);
+            if (slug && !chosen) return json(404, { error: 'no such persona' });
+            return json(200, { ok: true, slug: chosen?.slug ?? '', name: session.directorName() });
           }
           case '/api/effort': {
             // How hard she thinks, chosen from the strip. Empty means the model's
@@ -463,6 +490,12 @@ export function createServer(deps: {
         const scope = url.searchParams.get('scope');
         return json(200, { items: scope === 'all' ? work.all() : work.live() });
       }
+      if (url.pathname === '/api/voices') {
+        // Fetched by the page after `hello` rather than shipped with it: the
+        // list needs a network call to ElevenLabs, and nothing about opening a
+        // conversation should wait on one. Empty is a legitimate answer.
+        return json(200, { voices: await deps.speakOut.voices(), current: deps.speakOut.currentVoice() });
+      }
       if (url.pathname === '/api/github') {
         // A REDIRECT rather than a URL served with the page: the ref is read at
         // the moment of the click, and Danny switches branches mid-session — a
@@ -486,7 +519,7 @@ export function createServer(deps: {
           mode: session.role.mode,
           modeReason: session.role.reason,
           model: session.model(),
-          director: cfg.directorName,
+          director: session.directorName(),
           permissionMode: session.chosenPermissionMode(),
           speechLevel: deps.speakOut.speechLevel(),
           effort: session.chosenEffort() ?? '',

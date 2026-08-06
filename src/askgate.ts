@@ -46,10 +46,16 @@ export class AskGate {
   private bus: ConversationBus;
   private events: EventLog;
   private sessionId: () => string;
-  /** What to call her on the card — the bound repo's director, not "Claude". */
-  private director: string;
+  /** What to call her on the card — the director in force, not "Claude". */
+  private director: () => string;
 
-  constructor(bus: ConversationBus, events: EventLog, sessionId: () => string, director: string) {
+  /**
+   * ⚠️ `director` is a GETTER, not a string. The name can change under a running
+   * gate now that a persona can be chosen, and a card is the one place where a
+   * stale name is actively harmful: it puts a stranger's name on an interruption
+   * to a conversation with someone else.
+   */
+  constructor(bus: ConversationBus, events: EventLog, sessionId: () => string, director: () => string) {
     this.bus = bus;
     this.events = events;
     this.sessionId = sessionId;
@@ -119,7 +125,7 @@ export class AskGate {
       // The bridge writes "Claude wants to read foo.txt". In this harness the
       // person asking is the project's director — Danny is mid-conversation with
       // her, and a prompt from someone else reads as a different program.
-      title: (opts.title ?? `Claude wants to use ${toolName}`).replace(/^Claude\b/, this.director),
+      title: (opts.title ?? `Claude wants to use ${toolName}`).replace(/^Claude\b/, this.director()),
       detail,
       canAlways: suggestions.length > 0,
     });

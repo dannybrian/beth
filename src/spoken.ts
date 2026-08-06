@@ -19,7 +19,19 @@ export const SPEECH_LEVELS: SpeechLevel[] = ['full', 'brief', 'headlines', 'off'
  * `/api/speech`, and Beth herself through the `speech` tool. Narrow on purpose:
  * who holds it (SpeakOut) is nobody else's business.
  */
-export type SpeechControl = { level: () => SpeechLevel; set: (level: SpeechLevel) => void };
+/**
+ * The dial the session holds over the speech plane.
+ *
+ * `setVoice` is optional because the level is the part every caller needs and
+ * the voice is the part only a persona switch touches — a test driving speech
+ * levels should not have to know that directors have voices.
+ */
+export type SpeechControl = {
+  level: () => SpeechLevel;
+  set: (level: SpeechLevel) => void;
+  /** null restores the machine's own HARNESS_VOICE_ID. */
+  setVoice?: (voiceId: string | null) => void;
+};
 
 /**
  * `say` kinds that are ANNOUNCEMENTS rather than narration — a result, not

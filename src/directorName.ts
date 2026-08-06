@@ -18,7 +18,15 @@ export const UNNAMED = 'The director';
 
 // Both anchored on a capital, which is what tells "You are **Beth**" from
 // "You are the standing director on this project".
-const PATTERNS = [/\bYou are\s+\*{0,2}([A-Z][A-Za-z'’-]{1,20})\*{0,2}/, /\bYour name is\s+\*{0,2}([A-Z][A-Za-z'’-]{1,20})\*{0,2}/];
+//
+// Exported because a PERSONA file is the same sentence in a different place (see
+// personas.ts) — a repo's DIRECTOR.md can simply be copied to become one, and it
+// would be a poor trade if the name were then found by a second, drifting regex.
+export const NAME_PATTERNS = [
+  /\bYou are\s+\*{0,2}([A-Z][A-Za-z'’-]{1,20})\*{0,2}/,
+  /\bYour name is\s+\*{0,2}([A-Z][A-Za-z'’-]{1,20})\*{0,2}/,
+];
+const PATTERNS = NAME_PATTERNS;
 
 /** The director's name for this repo. Never throws — an unreadable guide is just unnamed. */
 export function directorName(repo: string, override = ''): string {

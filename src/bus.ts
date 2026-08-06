@@ -64,6 +64,9 @@ export type UIMessage =
       effort: string;
       /** This repo has a github.com origin, so a plan can be opened there. */
       repoOnWeb: boolean;
+      /** Every director on this machine, and which one is in force ('' = the repo's own). */
+      personas: { slug: string; name: string }[];
+      persona: string;
       // The settle window, served to the page because that is where it now runs.
       settleMs: number;
       // Project nouns to bias the recogniser toward, and how hard. Empty when
@@ -128,6 +131,10 @@ export type UIMessage =
   // select that flickered every time he reached for the mic would be a worse
   // readout than none.
   | { type: 'effort'; level: string }
+  // Who he is now talking to. Carries the resolved NAME as well as the slug,
+  // because a page that only learned the slug would have to guess at the name it
+  // puts on a permission card — and '' is a real answer meaning "the repo's own".
+  | { type: 'persona'; slug: string; name: string }
   // The health light. Republished whenever the tree moves, not only after a run:
   // "it passed, and that was before your last edit" is a different answer.
   | { type: 'tests'; state: TestState }

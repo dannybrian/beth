@@ -20,6 +20,7 @@ import { detectLinks } from './links.ts';
 import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
+import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -97,8 +98,16 @@ export class SessionManager {
   private modelValue = '';
   private turnSeq = 0;
   private interruptPending = false;
-  /** What she remembers about the PERSON. Null-behaviour lives inside the store. */
-  readonly personal: PersonalStore;
+  /**
+   * What she remembers about the PERSON. Null-behaviour lives inside the store.
+   *
+   * Not readonly: a persona switch re-points it, because the memory belongs to
+   * the director rather than to the harness. Everything that holds one gets it
+   * through `start()`, which a switch re-runs.
+   */
+  personal: PersonalStore;
+  /** Who she is, when Danny has chosen rather than inherited. See personas.ts. */
+  private personaChoice: PersonaChoice;
   /** When Danny last said something, so an arrival can be told from mid-work. */
   private lastHumanTurnAt = 0;
   /** Survives /clear, so a model chosen in the UI sticks to the next conversation. */
@@ -132,8 +141,22 @@ export class SessionManager {
     this.work = work;
     this.speech = speech;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
-    this.personal = new PersonalStore(cfg);
+    this.personaChoice = new PersonaChoice(cfg.stateDir);
+    const persona = this.personaChoice.current();
+    if (persona) seedMemory(persona.slug, persona.name, cfg.directorName, cfg.stateDir);
+    this.personal = new PersonalStore(cfg, persona ? personaStateDir(persona.slug) : undefined);
   }
+
+  /** The persona in force, or null when the bound repo's own guide is the whole of it. */
+  persona = () => this.personaChoice.current();
+
+  /**
+   * What to CALL her: the chosen person, else what the repo named.
+   *
+   * A card reading "Claude wants to use Bash" is a stranger interrupting a
+   * conversation with someone else, and so is a card naming yesterday's director.
+   */
+  directorName = () => this.persona()?.name || this.cfg.directorName;
 
   sessionId = () => this.sessionIdValue;
   model = () => this.modelValue;
@@ -148,6 +171,22 @@ export class SessionManager {
    * contract — the harness supplies the role, the project supplies the person.
    * Absent file is fine; you get a competent, unnamed director.
    */
+  /**
+   * The chosen person, when there is one.
+   *
+   * Placed BEFORE the repo's guide, and said to be about identity rather than
+   * about the work: the two compose, and where they overlap the project's
+   * standing orders are the more specific instruction and win. A persona that
+   * silently overrode "never deploy on a Friday" would be a costume with
+   * authority.
+   */
+  private personaGuide(): string {
+    const p = this.persona();
+    if (!p?.guide) return '';
+    console.log(`  persona: ${p.name} (${p.slug})${p.voiceId ? ' · own voice' : ''}`);
+    return `\n\nWho you are:\n\n${p.guide}`;
+  }
+
   private repoDirectorGuide(): string {
     const file = path.join(this.cfg.repo, '.claude', 'DIRECTOR.md');
     try {
@@ -234,6 +273,7 @@ export class SessionManager {
           append:
             `${PERSONA} ${roleInstruction(this.role, this.cfg.directorPlan)} ${VOCALIZATION_PROMPT}` +
             (this.personal.enabled ? ` ${PERSONAL_PROMPT}` : '') +
+            this.personaGuide() +
             this.repoDirectorGuide() +
             // Fixed for the life of the session, which is right: this is what she
             // knows on arrival. Anything learned mid-session is in the tool.
@@ -282,10 +322,19 @@ export class SessionManager {
     const arriving = this.lastHumanTurnAt > 0 && Date.now() - this.lastHumanTurnAt > GAP_MS;
     this.lastHumanTurnAt = Date.now();
     const beat = arriving ? this.personal.beat() : null;
-    if (beat) text = `${text}\n\n[harness: ${beat}]`;
     const refs = this.work.takePointed();
     const preamble = this.work.preamble(refs);
-    return this.send(preamble ? `${preamble}\n${text}` : text, {
+    // ⚠️ EVERY scaffold goes on the model's copy only, and `text` stays exactly
+    // what he said. Both of these are instructions to her about how to answer —
+    // the preamble naming what he pointed at, the beat inviting one human line —
+    // and both were written to be invisible. The beat was not: it was appended
+    // to `text` before `display` was taken from it, so a note addressed to Beth
+    // was rendered in the transcript as a sentence Danny had apparently typed.
+    let forModel = beat ? `${text}\n\n[harness: ${beat}]` : text;
+    if (preamble) forModel = `${preamble}\n${forModel}`;
+    return this.send(forModel, {
+      // Falls back to the pointing line only when he genuinely said nothing —
+      // which a beat glued onto an empty string used to make impossible.
       display: text || `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})`,
       refs,
     });
@@ -390,6 +439,46 @@ export class SessionManager {
 
   /** How this conversation resolves tool permissions. */
   chosenPermissionMode = (): HarnessConfig['permissionMode'] => this.permissionChoice || this.cfg.permissionMode;
+
+  /**
+   * Change who he is talking to.
+   *
+   * ⚠️ This one CANNOT be done live, and that is not an oversight to be fixed
+   * later. Model, permission mode and effort all have setters on a running query;
+   * the system prompt does not — it is fixed when the query is constructed, and
+   * `reinitialize()` is for transport gaps, not for becoming someone else. So a
+   * persona switch is a `/clear`: a new session, on the same repo, with a
+   * different person in it.
+   *
+   * Which is the right shape anyway. You do not swap who you are talking to
+   * mid-thought, and carrying one director's conversation into another's head
+   * would be a stranger reading your last hour. The page says so before it asks.
+   */
+  async setPersona(slug: string) {
+    const persona = slug ? readPersona(slug) : null;
+    if (slug && !persona) return null;
+    this.personaChoice.set(persona ? persona.slug : '');
+    // Her memory moves with her — and is seeded once from what the repo's own
+    // director already knew, when they are the same person. See seedMemory.
+    if (persona) seedMemory(persona.slug, persona.name, this.cfg.directorName, this.cfg.stateDir);
+    this.personal = new PersonalStore(this.cfg, persona ? personaStateDir(persona.slug) : undefined);
+    // Her voice is part of who she is. A swap that kept the last one would be
+    // half a swap, and the wrong half.
+    this.speech.setVoice?.(persona?.voiceId ?? null);
+    this.events.append({
+      source: 'harness',
+      session: this.sessionIdValue,
+      kind: 'persona',
+      text: `director → ${persona?.name ?? 'the repo default'}`,
+    });
+    // ⚠️ AFTER the clear, not before. `clear()` empties the transcript on every
+    // page, so a switch announced first announces itself into a transcript that
+    // is about to be thrown away — and the one turn where you want to see who
+    // you are now talking to is the empty one.
+    await this.clear();
+    this.bus.publish({ type: 'persona', slug: persona?.slug ?? '', name: this.directorName() });
+    return persona;
+  }
 
   /**
    * Switch permission mode mid-conversation. Like setModel, this works on a live

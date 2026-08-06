@@ -38,6 +38,15 @@ export class SpeakOut {
 
   /** How much of what she writes is read aloud. See spoken.ts. */
   private verbosity: SpeechLevel;
+  /**
+   * The VOICE of whoever is currently the director, overriding the machine's.
+   *
+   * A voice belongs to a person, and the machine-level HARNESS_VOICE_ID is the
+   * default rather than the truth — one account per Mac was always about the
+   * ACCOUNT, not about there being one director. Null means nobody has been
+   * chosen and the machine's own id stands.
+   */
+  private personaVoice: string | null = null;
 
   /**
    * What she has been BILLED for this run.
@@ -78,7 +87,7 @@ export class SpeakOut {
 
   /** Needs a key and SOMEWHERE to get a voice id from — the engine counts. */
   get configured(): boolean {
-    return Boolean(this.cfg.elevenLabsApiKey && (this.cfg.voiceId || this.cfg.speechEngineId));
+    return Boolean(this.cfg.elevenLabsApiKey && (this.personaVoice || this.cfg.voiceId || this.cfg.speechEngineId));
   }
 
   /** Why she cannot speak, in words the page can put on the mic button. */
@@ -125,6 +134,39 @@ export class SpeakOut {
     while (this.held.size > HOLD_MAX) this.held.delete(this.held.keys().next().value as string);
   }
 
+  /**
+   * The voices on this account, for the picker.
+   *
+   * Memoised for the life of the process: the list changes when Danny adds a
+   * voice on elevenlabs.io, which is not something a page load should pay a
+   * network round trip to notice. A failure is an EMPTY LIST rather than a
+   * throw — no key, no permission, no network all mean the same thing here (no
+   * picker), and none of them should turn into an error card on a page that is
+   * otherwise working.
+   */
+  private voiceList: { id: string; name: string }[] | null = null;
+
+  async voices(): Promise<{ id: string; name: string }[]> {
+    if (this.voiceList) return this.voiceList;
+    if (!this.cfg.elevenLabsApiKey) return [];
+    try {
+      const res: any = await (await this.getClient()).voices.search({ pageSize: 100 });
+      this.voiceList = (res?.voices ?? [])
+        .map((v: any) => ({ id: v.voiceId ?? v.voice_id, name: v.name ?? '(unnamed)' }))
+        .filter((v: any) => v.id)
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+      return this.voiceList!;
+    } catch (e) {
+      // Worth saying once — a picker that is silently empty looks like a bug in
+      // the picker rather than a key without the right permission.
+      console.log(`  voices: could not list (${e instanceof Error ? e.message : e})`);
+      return [];
+    }
+  }
+
+  /** What is actually speaking right now, so the picker can show it. */
+  currentVoice = () => this.personaVoice || this.cfg.voiceId || this.resolved?.voiceId || '';
+
   /** The text behind an id, without consuming it — a reload may re-request it. */
   textFor(id: string): string | null {
     return this.held.get(id)?.text ?? null;
@@ -146,11 +188,27 @@ export class SpeakOut {
    * text-to-speech endpoint, and a realtime model is the right choice for a
    * channel where first-byte latency is the whole experience.
    */
+  /**
+   * Point the plane at a different voice.
+   *
+   * ⚠️ The resolution is CACHED — the whole point of `resolved` is not asking
+   * ElevenLabs which voice an engine uses on every line — so changing the voice
+   * without dropping that cache changes nothing audible, and the failure is that
+   * the new director sounds exactly like the old one. There is nothing to notice
+   * except a wrong voice, which reads as the switch not having worked.
+   */
+  setVoice = (voiceId: string | null) => {
+    if (this.personaVoice === voiceId) return;
+    this.personaVoice = voiceId;
+    this.resolved = null;
+    this.resolving = null;
+  };
+
   private async resolve(): Promise<{ voiceId: string; modelId: string }> {
     if (this.resolved) return this.resolved;
     if (this.resolving) return this.resolving;
     this.resolving = (async () => {
-      let voiceId = this.cfg.voiceId;
+      let voiceId = this.personaVoice || this.cfg.voiceId;
       if (!voiceId) {
         const engine: any = await (await this.getClient()).speechEngine.get(this.cfg.speechEngineId);
         voiceId = engine?.config?.tts?.voiceId ?? engine?.config?.tts?.voice_id;

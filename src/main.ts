@@ -14,8 +14,12 @@ import { createPlansReader } from './plansReader.ts';
 import { Greetings, kickoffPrompt, repoSnapshot } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
+import { ensurePersonasDir } from './personas.ts';
 
 const cfg = loadConfig();
+// Machine-side, beside the .env. Created empty on first boot with a README —
+// an empty directory next to the secrets is the only hint personas exist.
+ensurePersonasDir();
 const bus = new ConversationBus();
 const events = new EventLog(cfg.eventLogPath);
 const pending = new PendingStore();
@@ -42,11 +46,15 @@ work.start();
 const speakOut = new SpeakOut(cfg, bus);
 
 let session: SessionManager;
-const gate = new AskGate(bus, events, () => session.sessionId(), cfg.directorName);
+const gate = new AskGate(bus, events, () => session.sessionId(), () => session.directorName());
 session = new SessionManager(cfg, bus, events, pending, gate, work, {
   level: speakOut.speechLevel,
   set: (level) => speakOut.setSpeechLevel(level),
+  setVoice: speakOut.setVoice,
 });
+// A persona chosen on a previous run speaks in her own voice from the first line
+// of the greeting, not from the first switch.
+speakOut.setVoice(session.persona()?.voiceId ?? null);
 
 // Terminal-session and hook writes to the event log flow into the UI too.
 events.onEvent((e) => {
@@ -57,7 +65,9 @@ events.startTail();
 // What she opened with the last few times, so this time can be different. See
 // greeting.ts: the boot line was always hers to write, but a fresh session cannot
 // know it has a habit, and identical inputs produce an identical sentence.
-const greetings = new Greetings(cfg);
+// Keyed by persona as well as repo: two directors sharing a project should not
+// be avoiding each other's opening lines.
+const greetings = new Greetings(cfg, session.persona()?.slug ?? '');
 // The boot greeting is one of exactly two moments a personal beat may ride —
 // it is already hers, and it is one sentence he is going to hear anyway. Most
 // days this returns nothing, which is correct. Called either way, so suppressing
@@ -126,7 +136,7 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  repo:  ${cfg.repo}`);
   console.log(`  bind:  ${cfg.bind}${cfg.bind === '127.0.0.1' ? ' (local-only, all of it)' : ' ⚠ REACHABLE OFF THIS MACHINE'}`);
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);
-  console.log(`  who:   ${cfg.directorName} · permissions ${session.chosenPermissionMode()}`);
+  console.log(`  who:   ${session.directorName()} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
   tests.start();
   console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);

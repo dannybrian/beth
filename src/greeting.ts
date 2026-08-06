@@ -38,10 +38,18 @@ const MAX_STORED = 400;
 export class Greetings {
   private file: string;
 
-  constructor(cfg: HarnessConfig) {
-    // Per-repo, beside the other state: greetings name the project, so the rut
-    // to avoid is this project's rut.
-    this.file = path.join(cfg.stateDir, 'greetings.json');
+  /**
+   * Per-repo, beside the other state: greetings name the project, so the rut to
+   * avoid is this project's rut. That argument survives personas intact — what
+   * it does not cover is two directors sharing one repo, where a single file
+   * would have each of them avoiding the other's phrasings. So the rut is keyed
+   * by BOTH: this project, this person.
+   *
+   * ⚠️ Unlike her memory, which follows her between repos, this stays here. A
+   * habit is formed against a project; what she knows about Danny is not.
+   */
+  constructor(cfg: HarnessConfig, persona = '') {
+    this.file = path.join(cfg.stateDir, persona ? `greetings-${persona}.json` : 'greetings.json');
   }
 
   /** Newest first. */

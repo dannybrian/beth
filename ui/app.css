@@ -75,7 +75,9 @@ body {
 #model-select,
 #effort-select,
 #perm-select,
-#speech-select {
+#speech-select,
+#voice-select,
+#persona-select {
   background: #1b1f26;
   border: 1px solid var(--line);
   color: var(--text);
@@ -86,10 +88,30 @@ body {
   font-size: 11px;
   cursor: pointer;
 }
+/* WHO rather than a dial, so it reads as identity: her own colour, no box, and
+   it sits with the repo name on the left. `[hidden]` needs saying because the
+   rules above give it a display value the UA default would otherwise lose to. */
+#persona-select {
+  background: none;
+  border: none;
+  color: var(--say);
+  padding: 1px 2px;
+  /* Reads as a name beside the repo name, so it takes the strip's own type
+     rather than the mono the dials on the right use. */
+  font-family: inherit;
+  font-size: 12px;
+}
+#persona-select[hidden] { display: none; }
+#persona-select:hover { color: var(--text); }
 #model-select:focus,
 #effort-select:focus,
 #perm-select:focus,
-#speech-select:focus { outline: none; border-color: var(--accent); }
+#speech-select:focus,
+#voice-select:focus { outline: none; border-color: var(--accent); }
+/* A voice name can be anything the account calls it, and the strip has four
+   other controls to fit — so it truncates rather than pushing them around. */
+#voice-select { max-width: 96px; color: var(--say); }
+#voice-select[hidden] { display: none; }
 /* Unset reads as the field's own name and stays quiet. Any explicit level is a
    standing decision about what every turn costs, so it says so from across the
    room — warm at the top end, where it is a deliberate expense. */
