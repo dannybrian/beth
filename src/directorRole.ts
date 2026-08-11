@@ -53,6 +53,12 @@ export function liveRecords(repo: string): SessionRecord[] {
 }
 
 export function assessRole(repo: string, directorPlan: string): RoleAssessment {
+  // A repo with no role-lock plan configured cannot have a holder — the role is
+  // free by construction, and matching '' against session records would let a
+  // record with no plan_path read as a phantom director.
+  if (!directorPlan) {
+    return { mode: 'director', reason: 'This repo names no role-lock plan (HARNESS_DIRECTOR_PLAN); the director role is free.' };
+  }
   const holder = liveRecords(repo).find((r) => r.plan_path === directorPlan);
   if (holder) {
     return {

@@ -21,6 +21,16 @@ precisely as it did before. Persona and `DIRECTOR.md` COMPOSE: the persona says 
 is, the repo says what this project needs from a director, and the repo's guide comes
 second because it is the more specific instruction.
 
+`skills/director-skills/` is the repo-side half of the contract made executable: a
+machine-installed skill (symlinked to `~/.claude/skills/`) that diagnoses a repo against
+the contract and bootstraps the missing half — format from vendored templates, person by
+interview. `docs/director-skills.md` is the record. ⚠ The vendored `/plans` CLI under
+`templates/` is a SNAPSHOT that bootstrapped repos own; two of its tests fail when run
+IN PLACE here (they resolve the repo root four dirs up, which is only true after copying
+into a real `.claude/skills/plans/`) and pass 94/94 from a bootstrapped location. This
+repo itself has a `.claude/DIRECTOR.md` (Wren — the interview's worked example) but
+deliberately NO plans machinery, per Process below.
+
 The same split holds for work: the harness defines the SHAPE of a work item
 (`src/workItems.ts`) and a *reader* produces it from whatever the project stores.
 `/plans` is a BUILT-IN reader because dated-markdown-with-frontmatter is Danny's
@@ -75,7 +85,10 @@ call recovered from the real payload), `planName` (the one writer — that it ro
 through the real reader, and that nothing else in the file moves), `pins` (that a shelved
 plan survives a restart and still shows when it is not in flight), `state` (a worker
 leaving the roster when nothing will ever report it), `keyterms`, `greeting`, and
-`stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere.
+`stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
+`sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `repoWeb`
+(the scp-style remote `new URL()` parses confidently wrong), and the greeting's
+onboarding offer (a nag if it repeats, silently absent if it never fires).
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output

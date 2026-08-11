@@ -32,7 +32,11 @@ const KNOWN_STATUS: WorkStatus[] = [
 ];
 
 /** Directories never worth walking, whatever they contain. */
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'tmp', 'logs', 'releases', 'old', '.next', 'Library']);
+// `templates` earns its place the day this harness grew /director-skills: a
+// `plans/` directory inside a templates tree is scaffolding for OTHER repos,
+// and without the skip the harness bound to its own repo showed the role-lock
+// TEMPLATE as an active plan on the board.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'tmp', 'logs', 'releases', 'old', '.next', 'Library', 'templates']);
 
 /** Files inside a plans directory that are not plans. */
 const NOT_A_PLAN = /^(INDEX|README|CONTINUE|EVENTS|ONBOARDING|TEMPLATE)\.md$/i;

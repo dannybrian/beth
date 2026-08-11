@@ -138,6 +138,65 @@ function sinceLine(now: number, lastAt: number | null): string {
  * main" · "Beth is online and ready" · "Ready when you are"). Everything below
  * adds MATERIAL for one sentence. Nothing below asks for a second one.
  */
+/**
+ * What the harness noticed about a repo that is not set up for it.
+ *
+ * These facts used to die in console lines nobody reads ("no .claude/DIRECTOR.md
+ * — running as a generic director"). As kickoff MATERIAL they let the greeting
+ * OFFER /director-skills with evidence — "you have 34 files in plans/ I can't
+ * read" is a colleague; "want me to set up plans?" is a wizard.
+ *
+ * ⚠️ Offered ONCE, ever, per repo (the caller gates on OnboardingOffer). A
+ * declined offer must never repeat; Danny can always invoke the skill himself.
+ */
+export type OnboardingFacts = {
+  /** The repo has no .claude/DIRECTOR.md. */
+  noGuide: boolean;
+  /** Markdown files sitting in a plans-shaped directory the index read NOTHING from. */
+  unreadPlans: { dir: string; count: number } | null;
+};
+
+/** Files that look like plans, in the default root, that the index cannot see. */
+export function unreadPlanFiles(repo: string, indexed: number): OnboardingFacts['unreadPlans'] {
+  if (indexed > 0) return null;
+  try {
+    const dir = path.join(repo, 'plans');
+    const count = fs.readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').length;
+    return count ? { dir: 'plans/', count } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The once-ever gate, stored beside the greeting history for the same reason
+ * the personal beat's lastBeatAt is stored: a fresh session cannot know what a
+ * previous one already offered.
+ */
+export class OnboardingOffer {
+  private file: string;
+
+  constructor(cfg: HarnessConfig) {
+    this.file = path.join(cfg.stateDir, 'onboarding.json');
+  }
+
+  offered(): boolean {
+    try {
+      return Boolean(JSON.parse(fs.readFileSync(this.file, 'utf8')).offeredAt);
+    } catch {
+      return false;
+    }
+  }
+
+  markOffered() {
+    try {
+      fs.writeFileSync(this.file, JSON.stringify({ offeredAt: new Date().toISOString() }));
+    } catch {
+      /* a state dir we cannot write costs a repeat offer, not a boot */
+    }
+  }
+}
+
 export function kickoffPrompt(input: {
   now?: Date;
   repoName: string;
@@ -145,6 +204,8 @@ export function kickoffPrompt(input: {
   live: WorkItem[];
   priors: Opening[];
   lastAt: number | null;
+  /** Present only when the offer should be made THIS boot. See OnboardingOffer. */
+  onboarding?: OnboardingFacts;
 }): string {
   const now = input.now ?? new Date();
   const { snapshot: s } = input;
@@ -163,6 +224,18 @@ export function kickoffPrompt(input: {
   }
   facts.push(`- it is ${now.toLocaleString('en-GB', { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false })} where he is`);
   facts.push(`- ${sinceLine(now.getTime(), input.lastAt)}`);
+  // ⚠️ Material, not a second instruction — the greeting stays ONE sentence,
+  // and asking for two things is what once made booting speak three times.
+  // The offer is a fact she may fold in, phrased with its evidence.
+  if (input.onboarding?.unreadPlans) {
+    facts.push(
+      `- ${input.onboarding.unreadPlans.count} markdown file${input.onboarding.unreadPlans.count === 1 ? '' : 's'} sit in ${input.onboarding.unreadPlans.dir} that you cannot read as plans — /director-skills can diagnose why; you may offer it, once, if you fold it into your one sentence`
+    );
+  } else if (input.onboarding?.noGuide) {
+    facts.push(
+      '- this repo has no .claude/DIRECTOR.md and no plans the harness can see — /director-skills sets both up; you may offer it, once, if you fold it into your one sentence'
+    );
+  }
 
   const out = [
     'You just came online. Greet Danny in ONE short sentence — that sentence is the whole of it. Do not call the say tool, do not add a status report and do not add a closing line: everything you write here is read aloud, so a second line that repeats the first is simply heard twice.',

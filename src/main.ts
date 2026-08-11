@@ -1,4 +1,5 @@
 // Wiring. One process per instance, bound to one repo.
+import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from './config.ts';
 import { ConversationBus } from './bus.ts';
@@ -11,7 +12,7 @@ import { TestMonitor } from './testRunner.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
-import { Greetings, kickoffPrompt, repoSnapshot } from './greeting.ts';
+import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFiles } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { ensurePersonasDir } from './personas.ts';
@@ -73,6 +74,15 @@ const greetings = new Greetings(cfg, session.persona()?.slug ?? '');
 // days this returns nothing, which is correct. Called either way, so suppressing
 // the greeting does not silently bank a follow-up for a turn that never happens.
 const beat = session.personal.beat();
+// A repo that is not set up for the harness gets ONE offer of /director-skills,
+// with evidence, folded into the greeting. Once ever: the mark is written when
+// the offer rides, so declining it is durable. See docs/director-skills.md.
+const onboardOffer = new OnboardingOffer(cfg);
+const hasGuide = fs.existsSync(path.join(cfg.repo, '.claude', 'DIRECTOR.md'));
+const unread = unreadPlanFiles(cfg.repo, work.all().length);
+const onboarding =
+  !onboardOffer.offered() && (!hasGuide || unread) ? { noGuide: !hasGuide, unreadPlans: unread } : undefined;
+if (onboarding) onboardOffer.markOffered();
 const kickoff = process.env.HARNESS_NO_KICKOFF
   ? undefined
   : [
@@ -83,6 +93,7 @@ const kickoff = process.env.HARNESS_NO_KICKOFF
         live: work.live(),
         priors: greetings.recent(),
         lastAt: greetings.lastAt(),
+        onboarding,
       }),
       beat,
     ]

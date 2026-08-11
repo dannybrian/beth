@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Greetings, kickoffPrompt, repoSnapshot, type Opening } from './greeting.ts';
+import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFiles, type Opening } from './greeting.ts';
 import type { HarnessConfig } from './config.ts';
 import type { WorkItem } from './workItems.ts';
 
@@ -106,4 +106,49 @@ test('a snapshot of a real repo reads the branch; a directory without git is all
 
   const bare = repoSnapshot(fs.mkdtempSync(path.join(os.tmpdir(), 'harness-nogit-')));
   assert.deepEqual(bare, { branch: null, dirty: null, lastCommit: null });
+});
+
+// --- the onboarding offer ----------------------------------------------------
+//
+// Two invisible failure modes: an offer that repeats every boot (a nag), and an
+// offer that never fires (the feature silently absent). Both are bookkeeping,
+// which is what makes them testable here.
+
+test('onboarding facts ride as material, evidence first', () => {
+  const p = prompt({ onboarding: { noGuide: true, unreadPlans: { dir: 'plans/', count: 34 } } });
+  // The unread-plans line wins over the bare no-guide line: it has evidence.
+  assert.match(p, /34 markdown files sit in plans\//);
+  assert.match(p, /director-skills/);
+  // Still one sentence: the offer is a fact to fold in, not a second ask.
+  assert.match(p, /ONE short sentence/);
+  assert.doesNotMatch(p, /no \.claude\/DIRECTOR\.md and no plans/, 'one offer line, not two');
+});
+
+test('no guide alone still offers, quietly', () => {
+  const p = prompt({ onboarding: { noGuide: true, unreadPlans: null } });
+  assert.match(p, /no \.claude\/DIRECTOR\.md/);
+});
+
+test('a repo with no onboarding gap says nothing about it', () => {
+  assert.doesNotMatch(prompt(), /director-skills/);
+});
+
+test('the offer is once, ever, per repo', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-onboard-'));
+  const offer = new OnboardingOffer({ stateDir: dir } as any);
+  assert.equal(offer.offered(), false);
+  offer.markOffered();
+  assert.equal(offer.offered(), true);
+  // A new instance — a restart — still knows.
+  assert.equal(new OnboardingOffer({ stateDir: dir } as any).offered(), true);
+});
+
+test('unread plans are counted only when the index read nothing', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-unread-'));
+  fs.mkdirSync(path.join(repo, 'plans'));
+  fs.writeFileSync(path.join(repo, 'plans', '2026-01-01-a.md'), 'x');
+  fs.writeFileSync(path.join(repo, 'plans', 'README.md'), 'x');
+  assert.deepEqual(unreadPlanFiles(repo, 0), { dir: 'plans/', count: 1 }, 'README is not a plan');
+  assert.equal(unreadPlanFiles(repo, 5), null, 'an index that reads plans has no unread case');
+  assert.equal(unreadPlanFiles(fs.mkdtempSync(path.join(os.tmpdir(), 'harness-noplans-')), 0), null);
 });

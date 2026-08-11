@@ -250,8 +250,11 @@ export function loadConfig(): HarnessConfig {
     // it — and the default below is beadgame's own plan path, which is exactly
     // the project-specific knowledge this harness is not supposed to hold. Set
     // HARNESS_DIRECTOR_PLAN in each repo's .env and the default stops mattering.
-    directorPlan:
-      conf('HARNESS_DIRECTOR_PLAN') ?? 'plans/2026-07-30-director-consolidation.md',
+    // No default. This used to fall back to a beadgame path — the last
+    // project-specific fact baked into the harness. A repo names its role-lock
+    // plan in its own .env (/director-skills creates both); an empty value
+    // means the repo has no lock and the role is simply free.
+    directorPlan: conf('HARNESS_DIRECTOR_PLAN') ?? '',
     planRoots: (conf('HARNESS_PLAN_ROOTS') ?? '')
       .split(',')
       .map((s) => s.trim())
