@@ -900,6 +900,24 @@ const speakBacklog = [];
 let speakingId = null;
 
 /**
+ * How loud she is ON THIS PAGE. A page-side dial, not a server one: each tab
+ * has its own <audio> element, and the tab on the quiet monitor being quiet is
+ * the point. Persisted like autosend — one person's preference on one machine.
+ *
+ * ⚠️ Zero is mute, not silence: the audio is still requested and still BILLED.
+ * "Stop talking" is the speech level's job; this is the knob on the speaker.
+ */
+const VOLUME_KEY = 'harness.volume';
+let speakerVolume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem(VOLUME_KEY) ?? '1') || 0));
+speaker.volume = speakerVolume;
+
+function setSpeakerVolume(v) {
+  speakerVolume = Math.min(1, Math.max(0, v));
+  speaker.volume = speakerVolume;
+  localStorage.setItem(VOLUME_KEY, String(speakerVolume));
+}
+
+/**
  * ONE MOUTH, however many tabs are open.
  *
  * Voice used to be a machine singleton, so two pages could not both speak. Now
@@ -1224,6 +1242,26 @@ function renderStats() {
   // hidden: a number you can check beats a number you have to trust.
   const s = planLimits?.speech;
   box.append(el('h3', null, 'Speech'));
+  // The volume, first — it is a control, and the only one in a panel of
+  // readouts, so it sits at the top of its section rather than among the bill
+  // rows. Drawn whenever she CAN speak; a text-only harness has nothing to dial.
+  if (s?.available) {
+    const row = el('div', 'srow');
+    row.title = "Playback volume on this page. Zero still bills — characters are requested either way; 'silent' on the speech level is what stops that.";
+    row.append(el('span', 'sk', 'volume'));
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = String(Math.round(speakerVolume * 100));
+    const pct = el('span', 'sv', `${Math.round(speakerVolume * 100)}%`);
+    slider.oninput = () => {
+      setSpeakerVolume(Number(slider.value) / 100);
+      pct.textContent = `${slider.value}%`;
+    };
+    row.append(slider, pct);
+    box.append(row);
+  }
   if (!planLimits) box.append(el('div', 'snote', 'checking…'));
   else if (!s) box.append(el('div', 'snote', 'not reported'));
   else if (!s.available) box.append(el('div', 'snote', 'text-only — nothing spoken'));

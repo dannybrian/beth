@@ -243,6 +243,9 @@ button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 .sbar.warm > i { background: var(--warn); }
 .sbar.hot > i { background: var(--err); }
 .snote { color: var(--muted); font-style: italic; }
+/* The one control in a panel of readouts. `accent-color` is the whole styling
+   story — a hand-built track would be more chrome than the panel it sits in. */
+.srow input[type="range"] { flex: 1; min-width: 0; accent-color: var(--say); }
 
 /* Mic lives with the composer — it is an input control, not a status readout. */
 button.voice {
