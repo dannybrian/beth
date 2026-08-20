@@ -490,6 +490,13 @@ export function createServer(deps: {
         const scope = url.searchParams.get('scope');
         return json(200, { items: scope === 'all' ? work.all() : work.live() });
       }
+      if (url.pathname === '/api/wire') {
+        // The wire panel PULLS while open, on a cursor. Deliberately not on the
+        // bus: traffic this size in the replay would bloat every connecting tab
+        // whether or not anyone ever opens the panel. See wireTap.ts.
+        const since = Number(url.searchParams.get('since')) || 0;
+        return json(200, session.wire.read(since));
+      }
       if (url.pathname === '/api/voices') {
         // Fetched by the page after `hello` rather than shipped with it: the
         // list needs a network call to ElevenLabs, and nothing about opening a

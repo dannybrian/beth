@@ -243,6 +243,66 @@ button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 .sbar.warm > i { background: var(--warn); }
 .sbar.hot > i { background: var(--err); }
 .snote { color: var(--muted); font-style: italic; }
+
+/* --- the wire panel ---
+   Anchored LEFT, under the dot that opens it; everything inside is mono and
+   small because it is an instrument, not a reading surface. */
+.stats.wire { left: 14px; right: auto; width: 440px; max-height: 78vh; }
+.stats.wire details { margin-bottom: 10px; }
+.stats.wire summary { cursor: pointer; color: var(--text); margin-bottom: 6px; }
+.stats.wire .w-h {
+  margin: 8px 0 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Anatomy: wall time, coloured by who had the floor. The track shows through
+   where nothing was happening on our side — that gap IS the API latency. */
+.w-strip { display: flex; height: 14px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.w-strip > i { display: block; height: 100%; flex: none; }
+.w-think { background: var(--say); }
+.w-write { background: var(--accent); }
+.w-tool { background: #46505f; }
+.w-legend { color: var(--muted); font-size: 10px; margin-top: 3px; }
+.w-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: -1px; }
+/* Tokens: one stacked bar per request, normalized to the biggest request. */
+.w-tokens { display: grid; grid-template-columns: 24px 1fr 92px; gap: 3px 7px; align-items: center; margin-top: 2px; }
+.w-k { color: var(--muted); font-size: 10px; }
+.w-v { color: var(--muted); font-size: 10px; text-align: right; }
+.w-bar { display: flex; height: 10px; border-radius: 2px; overflow: hidden; background: none; }
+.w-bar > i { display: block; height: 100%; flex: none; }
+.w-cr { background: #39424f; } /* pale and DOMINANT — the giant block is the lesson */
+.w-cw { background: var(--warn); }
+.w-in { background: var(--text); }
+.w-out { background: var(--accent); }
+.w-sum { color: var(--ok); font-size: 10.5px; margin-top: 4px; }
+/* Exchange: the raw back-and-forth, truncated at capture. */
+.w-exchange { border-left: 2px solid var(--line); padding-left: 9px; display: flex; flex-direction: column; gap: 2px; }
+.w-line { font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.w-user { color: var(--ok); }
+.w-thk { color: var(--say); }
+.w-txt { color: var(--accent); }
+.w-toolcall { color: var(--muted); }
+.w-res { color: var(--muted); }
+.w-open { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.w-err { color: var(--err); }
+.w-final { color: var(--text); margin-top: 2px; }
+.w-evt { color: var(--warn); }
+.w-preview {
+  color: var(--muted);
+  font-size: 10.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #1b1f26;
+  border-radius: 3px;
+  padding: 5px 7px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+/* The dot earned a click. */
+#status-dot { cursor: pointer; }
 /* The one control in a panel of readouts. `accent-color` is the whole styling
    story — a hand-built track would be more chrome than the panel it sits in. */
 .srow input[type="range"] { flex: 1; min-width: 0; accent-color: var(--say); }

@@ -21,6 +21,7 @@ import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
+import { WireTap } from './wireTap.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -115,6 +116,8 @@ export class SessionManager {
   /** Likewise for the permission mode — /clear drops context, not preferences. */
   private permissionChoice: HarnessConfig['permissionMode'] | '' = '';
   role: RoleAssessment;
+  /** The wire tap — every SDK message, compactly, for the panel to pull. */
+  readonly wire = new WireTap();
 
   private cfg: HarnessConfig;
   private bus: ConversationBus;
@@ -249,6 +252,10 @@ export class SessionManager {
         // that reaches the gate stops a spoken conversation until Danny is back at
         // the page. See config.ts for why bypass is not on the menu.
         permissionMode: this.chosenPermissionMode(),
+        // For the wire tap: stream events carry the SDK's own time-to-first-token
+        // stamp and the content-block boundaries the anatomy strip is drawn
+        // from. The deltas themselves are folded away at capture (wireTap.ts).
+        includePartialMessages: true,
         ...(resume ? { resume } : {}),
         // settingSources omitted on purpose — defaults to user+project+local so
         // CLAUDE.md, skills, and repo hooks load exactly like a terminal session.
@@ -299,6 +306,9 @@ export class SessionManager {
    */
   send(text: string, opts: { silent?: boolean; display?: string; refs?: WorkRef[] } = {}): number {
     const turn = ++this.turnSeq;
+    // What Danny actually sent — scaffolding included, because the panel's job
+    // is precisely to show what the transcript does not.
+    this.wire.userTurn(turn, text);
     if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs });
     this.bus.publish({ type: 'status', state: 'thinking', turn });
     this.input.push(userMsg(text));
@@ -554,6 +564,9 @@ export class SessionManager {
   }
 
   private async handle(m: any) {
+    // The tap sees EVERYTHING, including the types the switch below ignores —
+    // that difference is the whole point of the wire panel.
+    this.wire.record(m);
     switch (m.type) {
       case 'system':
         return this.handleSystem(m);

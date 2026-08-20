@@ -66,6 +66,11 @@
 
     <div id="test-panel" class="stats wide" hidden></div>
 
+    <!-- The wire: what actually happened on the API. Opened from the status
+         dot, PULLED while open — nothing here rides the stream or the replay,
+         so a closed panel costs the page nothing at all. -->
+    <div id="wire-panel" class="stats wide wire" hidden></div>
+
     <!-- The numbers, behind the meter. They answer a question nobody asks
          mid-conversation, so they do not get the top right. -->
     <div id="stats" class="stats" hidden></div>

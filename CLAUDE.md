@@ -266,6 +266,14 @@ These cost hours. Don't rediscover them.
   `clear()` re-applies what was in force. The select shows the CHOICE, not the duck —
   a readout that dropped to `low` every time he reached for the mic would look like the
   harness overruling him.
+- **The wire panel PULLS; nothing about it rides the bus.** `wireTap.ts` records a
+  compact form of every SDK message (session.ts taps `handle()` before its switch — the
+  types the switch ignores are the panel's whole point) and the page fetches
+  `/api/wire?since=` on a cursor only while the panel is open. Putting this on the bus
+  would bloat the replay for every tab whether or not anyone ever looks. ⚠ Previews are
+  truncated AT CAPTURE (a test run's output is megabytes, the ring holds 800 entries),
+  and `includePartialMessages` is on so the anatomy strip gets block boundaries and the
+  SDK's own ttft stamp — the deltas themselves are folded away in the tap, never stored.
 - **One mouth, however many tabs are open.** Voice used to be a machine singleton, so two
   browser pages could not both speak no matter what. Every page can play audio now, and two
   tabs on one harness means hearing her twice, slightly out of phase, on top of herself.
