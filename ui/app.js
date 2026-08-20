@@ -785,6 +785,13 @@ const handlers = {
   speech: (m) => {
     setSpeechLevel(m.level);
     entry('activity', (n) => (n.textContent = `🔈 speech → ${m.level}`));
+    // Silent means NOW, not "after she finishes the paragraph". Same stop as a
+    // barge-in: pause the line in flight, drop the backlog. The dropped lines
+    // are a real saving, not just quiet — a queued line is only an id until it
+    // plays, and ElevenLabs bills at the fetch — while the line mid-play is
+    // already paid for either way. Handled on the broadcast rather than the
+    // click so her own `speech` tool call mutes exactly like the dropdown.
+    if (m.level === 'off') bargeIn();
   },
   effort: (m) => {
     setEffortLevel(m.level);
@@ -946,6 +953,11 @@ function playNextSpoken() {
   voice?.park?.();
   speaker.src = `/api/voice/say/${encodeURIComponent(id)}`;
   speaker.play().catch((e) => {
+    // A pause() while play() is still resolving rejects it with AbortError —
+    // which is barge-in and the mute doing their job, not a line failing. It
+    // must not be reported: "stopped speaking" already was, and a 🔇 underneath
+    // it reads as something broken.
+    if (e.name === 'AbortError') return;
     // Chrome refuses audio until the page has been interacted with. Say so:
     // silence is indistinguishable from a hang, which is the bug this replaces.
     entry('activity', (n) => (n.textContent = `🔇 not spoken — ${e.name === 'NotAllowedError' ? 'click the page once to allow audio' : e.message}`));
