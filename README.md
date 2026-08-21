@@ -10,6 +10,14 @@ Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fa
 
 But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
+## What This Is Not
+
+- **Not an orchestrator.** Conductor, Vibe Kanban, Claude Squad, and Claude Code's own Agent Teams manage *many parallel sessions* — worktrees, dashboards, merge queues. Beth is the opposite bet: one standing director with judgment, who happens to dispatch workers. If your bottleneck is parallelism plumbing, use those; mine was **attention**.
+- **Not an issue tracker.** Beads exists precisely because piles of markdown plans go stale, and Backlog.md does markdown-as-source-of-truth properly. The harness takes no side: it defines the *shape* of a work item (`workItems.ts`) and reads it through a small contract — `/plans` is the built-in reader because dated markdown is *my* convention across *my* repos. A repo that lives in Linear, beads, or GitHub issues would supply its own reader; the panel doesn't care.
+- **Not voice mode.** Claude Code's `/voice` is dictation in. This is conversation — she talks back, in a voice that's hers, excerpted because ninety seconds of unskippable audio is not six paragraphs of skimmable text. And because the harness does this via an in-process MCP, saying out loud "I'm on a call, shhh" will deactivate or activate such settings.
+
+Everything here is opinionated, and the opinions are mine. Where I expect yours to differ, the seam is marked. This is what evolved for me in my own workflows.
+
 ## Benefits No One Without a Platform
 
 A director agent's time/tokens and the tokens its subagents spend are wasted on errors, bugs, or other problems encountered during execution. This is not just a question of proper context or prompting; it's the likelihood of agents having success without their own retries or ratholes. This comes at an up-front cost of quality (of all kinds; think beyond tests towards telemetry etc.) for the repos in which a director agent can work. Of all the hurdles to my using AI more effectively for development, this is the one that most necessitated my need for a director agent: As the quality of a project increased, so did execution velocity. I was always the bottleneck. But once a platform is in place — something underneath to have already made the important decisions and answered the important questions — and knowing it was being done *how* I wanted, fully validated as such, I could step back a little. 
@@ -53,7 +61,7 @@ Beth puts an emphasis on proper planning, implementation oversight, and autonomo
 
 Coordinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
 
-Markdown (indexed) plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on.
+Markdown (indexed) plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Call them specs if you like; you can write and organize these however, and create your own plans skill that works best for your repo.
 
 Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents.
 
@@ -67,7 +75,11 @@ One consequence of queuing up issues for you is that Beth's interactions with su
 
 This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with these highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project (or at least, I haven't yet), and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below for details on bootstrapping a new project using `/director-skills`.
 
-(A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the *mark* for this kind of work. If you prefer a different source for artifacts, you probably want to use the DevOps tool provided for those artifacts.. or just write a new `/plans` skill for that integration, and fix the UI.)
+(For me, markdown hits the *mark* for this kind of work. If your source of
+truth is JIRA, GitHub issues, or something else with an API, the seam is
+`workItems.ts`: the harness defines the shape of a work item, `/plans` is just
+the built-in reader, and a reader of your own feeds the same panel. See *What
+This Is Not*, above.)
 
 
 ```bash
