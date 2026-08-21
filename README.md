@@ -4,20 +4,22 @@ Yet another harness. But the one that fits my brain, workflows, talks to me, and
 
 Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
 
-Beth integrates with ElevenLabs for voice, and you can set the chattiness.
-
-<img src="docs/images/speech-levels.png" width="488" alt="The speech-level menu in the strip, beside the persona: say + last paragraph, silent, speak all, headlines." />
-
-Multiple personas can be assigned, using your own (ElevenLabs) defined voices.
-
 <img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
 
-Beth tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part).
+Beth integrates with ElevenLabs for voice, and you can set the chattiness. 
+Multiple personas can be assigned, using your own (ElevenLabs) defined voices.
 
-<img src="docs/images/stats-panel.png" width="340" alt="The stats popup behind the context meter: context at 9%, this turn&#39;s tokens split into fresh, cached, and output with cost, session cost and model, the speech bill with its volume slider and the assumed rate printed beside the estimate, and the plan&#39;s 5-hour and 7-day windows." />
+<img src="docs/images/speech-levels.png" width="293" alt="The speech-level menu in the strip, beside the persona: say + last paragraph, silent, speak all, headlines." />
+
+Beth tracks token use.
+
+<img src="docs/images/stats-panel.png" width="204" alt="The stats popup behind the context meter: context at 9%, this turn&#39;s tokens split into fresh, cached, and output with cost, session cost and model, the speech bill with its volume slider and the assumed rate printed beside the estimate, and the plan&#39;s 5-hour and 7-day windows." />
+
+It also provides an under-the-hood visualization of token consumption, cache reads/writes, and thinking, which I find useful mainly for education demonstration.
+
+<img src="docs/images/wire-panel.png" width="300" alt="The wire panel: one turn as nine API requests — an anatomy strip of thinking, writing, and tools; stacked token bars showing cache writes becoming cache reads; and the raw exchange underneath." />
 
 The harness will also run repo tests automatically if you want, making it easy to see the status as well as quickly as Beth to dig in. I have not yet given the harness any knowledge of automation; it won't troubleshoot automatically, and this is intentional.
-
 
 
 ## Director Agent
@@ -25,6 +27,10 @@ The harness will also run repo tests automatically if you want, making it easy t
 Beth puts an emphasis on proper planning, implementation oversight, and autonomous execution. This repo includes the /plans and /tidyrepo skills I use. The /plans skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with this highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project, and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below.
 
 Plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Beth surfaces pending questions and need for your validation across many plans and potentially dozens of subagents. One consequence is that Beth's interactions with subagents are more frequent and often narrowly-scoped: the director pattern incurs token cost, and benefits most from the best reasoning models. 
+
+<img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
+
+<img src="docs/images/queues.png" width="240" alt="The queues: three pending decisions, each carrying the plan it belongs to, and a running worker with its start time and a close control." />
 
 You run one instance of Beth for one project. You don't talk much about code. But this only works because the code is strictly built and strictly tested. I even have tests for some skills, in some projects where I use Beth.
 
@@ -58,6 +64,7 @@ the harness falls out of it:
 crosses one loopback listener:
 
 ```mermaid
+%%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
 flowchart TB
   subgraph BROWSER["Chrome — the room (loopback only)"]
     EAR["🎙 the ear<br/>listen.js"]
@@ -94,6 +101,7 @@ flowchart TB
 your repo; who she is lives on your machine:
 
 ```mermaid
+%%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
 flowchart TB
   subgraph HARNESS["beth"]
     SES2["session.ts"]
@@ -155,7 +163,7 @@ The reasoning is in `docs/director-skills.md`. This repo's own
 
 Text works like any chat, with three differences that matter to me:
 
-- **The panel is shared ground.** Clicking a plan *points at it* — she gets the
+- **The panel is shared ground.** Clicking a plan (or a failing test) *points at it* — she gets the
   reference, you get a chip, and "what's left on this?" needs no name. Rows
   carry a pin, a rename, a GitHub link, and one-click handoff to a fresh
   Claude Code terminal session seeded with the plan.
@@ -297,3 +305,7 @@ My default `node` is x64 under Rosetta, so the SDK's bundled Bun CLI hangs
 silently ("CPU lacks AVX support" on stderr is the only tell). Every session
 passes `pathToClaudeCodeExecutable` pointing at the native arm64 install —
 `HARNESS_CLAUDE_BIN` if yours lives elsewhere.
+
+## The name
+
+Beth is lovingly named after my grandmother, Beth Brian.
