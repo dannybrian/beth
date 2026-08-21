@@ -2,7 +2,11 @@
 
 Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than Claude Code directly (Beth is built on the Claude Code SDK). I fully realize there are many tools like it out there, and that I skipped over many elements some may wish to see (existing memory libraries, context "lakes", user auth...); personally, I'm happy with the only dependencies here being the vendor SDKs. I welcome ideas and pull requests, if you find this also fits your own (solo) workflow. I plan to maintain it.
 
-Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
+*What this harness does not do:* Ensure code quality, care about best practices, or write good code. Beth couldn't really care less how anything happens under the hood. Implementation, TDD, debugging, coding guidelines are not things provided here; those exist in your repo. Beth can help you build that all out, but won't do it for you.
+
+*What this harness does:* Beth gives you a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while you hold a coffee, and can be talked to out loud while you pace. Basically, it fills in a lot of coordination, SDLC gaps. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work together, while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
+
+Coodinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, and how to queue all of that.
 
 
 <img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
@@ -250,16 +254,25 @@ commit, what's in flight, the clock, the gap since the harness was last up.
 
 ## Running it
 
+Prerequisites: **Node ≥ 23** (the harness runs TypeScript natively — no build
+step), and **[Claude Code](https://claude.com/claude-code) installed and logged
+in** — the Agent SDK drives the `claude` binary, and Beth rides its
+authentication, so if `claude` works in your terminal, Beth has what it needs.
+Chrome, if you want voice.
+
 ```bash
+git clone git@github.com:dannybrian/beth.git ~/Sources/beth
+cd ~/Sources/beth && pnpm install                      # or npm install
 ln -sf ~/Sources/beth/bin/beth.mjs ~/.local/bin/beth   # once
 cd <a-project-repo> && beth
 ```
 
 Or directly, without port-picking: `node src/main.ts` → http://localhost:4620.
 
-No build step — Node ≥ 23 runs `.ts` natively. Three dependencies, each
-deliberate: the Claude Agent SDK, zod, and the ElevenLabs SDK (TTS only). The
-UI is dependency-free vanilla DOM over SSE + POST.
+The three dependencies `pnpm install` pulls are each deliberate: the
+[Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk),
+zod, and the ElevenLabs SDK (TTS only, and only used if you configure voice).
+The UI is dependency-free vanilla DOM over SSE + POST.
 
 Config layers, most specific first: real env vars → the bound repo's `.env` →
 `~/.director-harness/.env` (credentials belong in the machine file). Per-repo
