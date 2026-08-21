@@ -1,6 +1,6 @@
 # Plans
 
-*Bootstrapped from the director-harness reference templates by `/director-skills`
+*Bootstrapped from the beth reference templates by `/director-skills`
 (snapshot 2026-08-06). This repo owns this copy — edit freely.*
 
 Plans are the canonical, repo-housed record of work. They live alongside the

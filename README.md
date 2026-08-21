@@ -6,13 +6,13 @@ Yes another harness. But the one that fits *my* brain and workflows, talks to me
  
 Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; *Beth will not save you money, only time*.
 
-Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fact, neither I or the agents like her very much. 🤷‍♂️🤷 (I will readily admit my tendency to anthropomorphize; the incongruity of "don't like her" was a joke she found funny. And frankly saying "it" doesn't quite work here, either. I work with .. it, quite a bit. Anyway, I will try to refrain from the pronouns.)
+Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fact, neither I nor the agents like her very much. 🤷‍♂️🤷 (I will readily admit my tendency to anthropomorphize; the incongruity of "don't like her" was a joke she found funny. And frankly saying "it" doesn't quite work here, either. I work with .. it, quite a bit. Anyway, I will try to refrain from the pronouns.)
 
 But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
 ## Benefits No One Without a Platform
 
-A director agent's time/tokens and the tokens its subagents spend are wasted on errors, bugs, or other problems encountered during execution. This is not just a question of proper context or prompting; it's the likelihood of agents having success without their own retries or ratholes. This comes at an up-front cost of quality (of all kinds; think beyond tests towards telemetry etc.) for the repos in which a director agent can work. Of all the hurdles to my using AI more effectively for development, this is the one that most necesitated my need for a director agent: As the quality of a project increased, so did execution velocity. I was always the bottleneck. But once a platform is in place — something underneath to have already made the important decisions and answered the important questions — and knowing it was being done *how* I wanted, fully validated as such, I could step back a little. 
+A director agent's time/tokens and the tokens its subagents spend are wasted on errors, bugs, or other problems encountered during execution. This is not just a question of proper context or prompting; it's the likelihood of agents having success without their own retries or ratholes. This comes at an up-front cost of quality (of all kinds; think beyond tests towards telemetry etc.) for the repos in which a director agent can work. Of all the hurdles to my using AI more effectively for development, this is the one that most necessitated my need for a director agent: As the quality of a project increased, so did execution velocity. I was always the bottleneck. But once a platform is in place — something underneath to have already made the important decisions and answered the important questions — and knowing it was being done *how* I wanted, fully validated as such, I could step back a little. 
 
 *What this harness does not do:* Ensure code quality, care about best practices, or, well, write good code, per se. Beth couldn't really care less how anything happens under the hood. Implementation, TDD, debugging, coding guidelines are not things provided here; those exist in your repo. Beth can help you build that all out, but won't do it for you.
 
@@ -51,7 +51,7 @@ Beth puts an emphasis on proper planning, implementation oversight, and autonomo
 <img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
 
 
-Coodinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
+Coordinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
 
 Markdown (indexed) plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on.
 
@@ -67,7 +67,7 @@ One consequence of queuing up issues for you is that Beth's interactions with su
 
 This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with these highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project (or at least, I haven't yet), and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below for details on bootstrapping a new project using `/director-skills`.
 
-(A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the *mark* for this kind of work. If you prefer a different source for artifacts, you probably want to use the DevOps tool provided for those artifacts.. or just write a new `/plans` skill for that integraion, and fix the UI.)
+(A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the *mark* for this kind of work. If you prefer a different source for artifacts, you probably want to use the DevOps tool provided for those artifacts.. or just write a new `/plans` skill for that integration, and fix the UI.)
 
 
 ```bash
@@ -87,7 +87,8 @@ the harness falls out of it:
   *how* to direct, none about *what*.
 - **Your repo supplies the PERSON and the WORK** — who the director is
   (`.claude/DIRECTOR.md`) and what is in flight (`plans/`). The harness only
-  ever *reads* your repo.
+  ever *reads* your repo — the director *session* it hosts writes code and
+  commits through permission gates, like any Claude Code session (see Anatomy).
 - **Your machine supplies the IDENTITIES** — credentials, and optionally
   *personas*: directors of your own that exist across every repo, with their
   own voices and their own memory of you (`~/.director-harness/personas/`).
@@ -163,7 +164,11 @@ flowchart TB
 ```
 
 Every arrow touching your repo is a *read*; the one thing that ever writes
-to a plan file is a rename you click. The browser and the harness
+to a plan file is a rename you click. That is a claim about the harness
+*plumbing*, not the whole system, obviously: the Claude session it hosts dispatches
+workers that write code and commit, exactly as any Claude Code session would —
+through the same permission gates. The safety story is the gate, not
+read-onlyness. The browser and the harness
 speak over one loopback listener — voice included — which is why the
 shell-executing parts are safe by construction rather than by rule.
 
@@ -205,7 +210,7 @@ Heading was her idea. Text here works like any chat, with three differences:
 - **Beth narrates.** Before anything longer than a breath — "hold on, running
   the suites" — and after it lands. Silence reading as failure is a voice
   lesson, but it improved the text too.
-- **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or preapred for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
+- **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or prepared for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
 
 **Voice is local end to end.** The browser recognizes what you say
 (`ui/listen.js`) and posts an ordinary turn; Beth's replies stream back over

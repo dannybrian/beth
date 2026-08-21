@@ -143,7 +143,7 @@ server.on('error', (err: NodeJS.ErrnoException) => {
  * safe to have at all.
  */
 server.listen(cfg.port, cfg.bind, () => {
-  console.log(`director-harness → http://localhost:${cfg.port}`);
+  console.log(`beth → http://localhost:${cfg.port}`);
   console.log(`  repo:  ${cfg.repo}`);
   console.log(`  bind:  ${cfg.bind}${cfg.bind === '127.0.0.1' ? ' (local-only, all of it)' : ' ⚠ REACHABLE OFF THIS MACHINE'}`);
   console.log(`  role:  ${session.role.mode} — ${session.role.reason}`);

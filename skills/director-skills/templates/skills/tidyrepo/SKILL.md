@@ -7,7 +7,7 @@ allowed-tools: Bash, Read, Grep, Glob, AskUserQuestion
 
 # /tidyrepo — Working-Tree Triage & Surgical Commit
 
-*Bootstrapped from the director-harness reference templates by `/director-skills`
+*Bootstrapped from the beth reference templates by `/director-skills`
 (snapshot 2026-08-06). This repo owns this copy — the § Project-specific rules
 section is yours to grow.*
 
