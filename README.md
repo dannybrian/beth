@@ -1,12 +1,24 @@
 # Beth
 
-Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC. I welcome ideas and pull requests, if you find this also fits your own workflow; this tool would be much less useful in a team environment than it is for a solo developer.
+Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than Claude Code directly (it is the CC SDK). I welcome ideas and pull requests, if you find this also fits your own (solo) workflow. I plan to maintain it.
 
 Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
 
-Beth integrates with ElevenLabs for voice, and you can set the chattiness. Beth  tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part). The harness will also run repo tests automatically if you want, making it easy to see the status as well as quickly as Beth to dig in. I have not yet given the harness any knowledge of automation; it won't troubleshoot automatically, and this is intentional.
+Beth integrates with ElevenLabs for voice, and you can set the chattiness.
 
-<img src="docs/images/director-session.png" alt="A director session: Johnny coordinating a worker on a music platform repo — narrated progress and tool calls in the transcript; pending decisions, a running worker, events, and the plans board on the panel." />
+<img src="docs/images/speech-levels.png" width="488" alt="The speech-level menu in the strip, beside the persona: say + last paragraph, silent, speak all, headlines." />
+
+Multiple personas can be assigned, using your own (ElevenLabs) defined voices.
+
+<img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
+
+Beth tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part).
+
+<img src="docs/images/stats-panel.png" width="340" alt="The stats popup behind the context meter: context at 9%, this turn&#39;s tokens split into fresh, cached, and output with cost, session cost and model, the speech bill with its volume slider and the assumed rate printed beside the estimate, and the plan&#39;s 5-hour and 7-day windows." />
+
+The harness will also run repo tests automatically if you want, making it easy to see the status as well as quickly as Beth to dig in. I have not yet given the harness any knowledge of automation; it won't troubleshoot automatically, and this is intentional.
+
+
 
 ## Director Agent
 
