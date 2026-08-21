@@ -343,4 +343,4 @@ passes `pathToClaudeCodeExecutable` pointing at the native arm64 install —
 
 ## The name
 
-Beth is lovingly named after my grandmother, Beth Brian.
+Beth is lovingly named after my grandmother, Beth Brian. It would be proud.
