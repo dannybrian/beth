@@ -18,6 +18,15 @@
              personas, because the bound repo's own DIRECTOR.md is the default
              and always was. -->
         <select id="persona-select" title="Who you are talking to. Switching starts a new conversation." hidden></select>
+        <!-- How much of what she writes is read ALOUD, beside WHO is talking —
+             the dial belongs to the speaker, not to the settings pile on the
+             right. The transcript always has all of it either way. -->
+        <select id="speech-select" title="How much of what she writes is spoken aloud — the transcript always has all of it">
+          <option value="brief">say + last ¶</option>
+          <option value="off">silent</option>
+          <option value="full">speak all</option>
+          <option value="headlines">headlines</option>
+        </select>
         <span class="mode" id="mode-label"></span>
       </div>
       <div class="strip-right">
@@ -48,14 +57,6 @@
              durable answer lives in a persona file, and this is how you find out
              which id to put there. Hidden when the account lists no voices. -->
         <select id="voice-select" title="Try a voice — not saved. The durable choice is the voice: line in a persona file." hidden></select>
-        <!-- How much of what she writes is read ALOUD. The transcript always has
-             all of it — a page skims in seconds where audio cannot. -->
-        <select id="speech-select" title="How much of what she writes is spoken aloud — the transcript always has all of it">
-          <option value="brief">say + last ¶</option>
-          <option value="off">silent</option>
-          <option value="full">speak all</option>
-          <option value="headlines">headlines</option>
-        </select>
         <!-- "Is the tree green" — the question asked twenty times a day, which
              the page could not answer until the numbers moved out of here. -->
         <button id="test-light" class="tlight grey" title="Tests">

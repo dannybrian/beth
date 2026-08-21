@@ -1,14 +1,16 @@
 # Beth
 
-Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC.
+Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC. I welcome ideas and pull requests, if you find this also fits your own workflow; this tool would be much less useful in a team environment than it is for a solo developer.
 
 Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
 
-Beth integrates with ElevenLabs for voice, and you can set the chattiness. Beth  tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part).
+Beth integrates with ElevenLabs for voice, and you can set the chattiness. Beth  tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part). The harness will also run repo tests automatically if you want, making it easy to see the status as well as quickly as Beth to dig in. I have not yet given the harness any knowledge of automation; it won't troubleshoot automatically, and this is intentional.
+
+<img src="docs/images/director-session.png" alt="A director session: Johnny coordinating a worker on a music platform repo — narrated progress and tool calls in the transcript; pending decisions, a running worker, events, and the plans board on the panel." />
 
 ## Director Agent
 
-Beth puts an emphasis on proper planning, implementation oversight, and autonomous execution. Although this repo includes the /plans and /tidyrepo skills I use, it presumes a lot of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with this highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project, and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below.
+Beth puts an emphasis on proper planning, implementation oversight, and autonomous execution. This repo includes the /plans and /tidyrepo skills I use. The /plans skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with this highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project, and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below.
 
 Plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Beth surfaces pending questions and need for your validation across many plans and potentially dozens of subagents. One consequence is that Beth's interactions with subagents are more frequent and often narrowly-scoped: the director pattern incurs token cost, and benefits most from the best reasoning models. 
 
@@ -40,56 +42,72 @@ the harness falls out of it:
 
 ## Anatomy
 
+**The room, the harness, and the cloud** — everything she says and hears
+crosses one loopback listener:
+
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph BROWSER["Chrome — the room (loopback only)"]
-    direction TB
-    UI["transcript · plans panel<br/>queues · wire panel"]
-    EAR["the ear — listen.js<br/>Web Speech recognition"]
-    MOUTH["the mouth — speaker.js<br/>streamed audio"]
+    EAR["🎙 the ear<br/>listen.js"]
+    UI["the page<br/>transcript · panels"]
+    MOUTH["🔊 the mouth<br/>speaker.js"]
+    EAR ~~~ UI ~~~ MOUTH
   end
 
   subgraph HARNESS["beth — one Node process per repo"]
-    direction TB
-    SRV["server.ts<br/>one listener: SSE + POST"]
-    SES["session.ts<br/>one long-lived SDK query"]
-    MCP["tools.ts — in-process MCP<br/>say · plans · queue_decision …"]
-    TTS["speakOut.ts<br/>her lines, as audio"]
-    IDX["workIndex + plansReader<br/>the work, as data"]
-    TAP["wireTap.ts<br/>every SDK message, kept"]
+    SRV["server.ts<br/>the one listener"]
+    SES["session.ts<br/>one SDK query"]
+    MCP["tools.ts<br/>in-process MCP"]
+    TTS["speakOut.ts"]
+    TAP["wireTap.ts"]
+    SRV --- SES
+    SES --- MCP
+    SES --- TAP
+    SES --- TTS
   end
 
-  subgraph REPO["your repo — the harness only reads"]
-    direction TB
-    PLANS["plans/*.md<br/>the work"]
-    DIR[".claude/DIRECTOR.md<br/>the person"]
-    PROJ["CLAUDE.md · skills · hooks"]
-  end
-
-  subgraph HOME["your machine — ~/.director-harness"]
-    direction TB
-    PERS["personas/*.md<br/>who she is + her voice"]
-    MEM["persona-state/<br/>her memory of you"]
-  end
-
-  CC["Claude Code CLI<br/>(Agent SDK)"]
+  CC["Claude Code CLI<br/>Agent SDK"]
   ANTH(["Anthropic API"])
   XI(["ElevenLabs TTS"])
 
-  UI <-->|"SSE + POST"| SRV
   EAR -->|"a spoken turn"| SRV
+  UI <-->|"SSE + POST"| SRV
   SRV -->|"mp3 stream"| MOUTH
-  SRV --- SES
-  SES --- MCP
-  SES --- TAP
-  TTS -->|"one line"| XI
   SES <--> CC
   CC <--> ANTH
-  PLANS -->|"watched"| IDX
-  DIR -->|"system prompt"| SES
-  PERS -->|"system prompt"| SES
-  MEM <--> SES
-  PROJ -->|"cwd = your repo"| CC
+  TTS -->|"one line"| XI
+```
+
+**What she reads, and where she is a person** — the harness only ever *reads*
+your repo; who she is lives on your machine:
+
+```mermaid
+flowchart TB
+  subgraph HARNESS["beth"]
+    SES2["session.ts"]
+    IDX["the work index"]
+    CC2["Claude Code CLI"]
+    SES2 ~~~ IDX ~~~ CC2
+  end
+
+  subgraph REPO["your repo — read only"]
+    PLANS["plans/*.md"]
+    DIR[".claude/DIRECTOR.md"]
+    PROJ["CLAUDE.md · skills"]
+    PLANS ~~~ DIR ~~~ PROJ
+  end
+
+  subgraph HOME["your machine — ~/.director-harness"]
+    PERS["personas/*.md"]
+    MEM["persona-state/<br/>her memory of you"]
+    PERS ~~~ MEM
+  end
+
+  IDX -->|"watches"| PLANS
+  SES2 -->|"system prompt"| DIR
+  SES2 -->|"system prompt"| PERS
+  SES2 <-->|"remembers"| MEM
+  CC2 -->|"loads"| PROJ
 ```
 
 Every arrow into the harness from the right is a *read*; the one thing that
