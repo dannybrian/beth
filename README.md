@@ -67,9 +67,8 @@ One consequence of queuing up issues for you is that Beth's interactions with su
 
 This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with these highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project (or at least, I haven't yet), and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below for details on bootstrapping a new project using `/director-skills`.
 
-You run one instance of Beth for one project. You don't talk much about code (you do that using Claude Code). But this only works because the project — the underlying platform within your repo — is strictly defined, built, and tested. I even have tests for some skills, in some projects where I use Beth.
-
 (A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the *mark* for this kind of work. If you prefer a different source for artifacts, you probably want to use the DevOps tool provided for those artifacts.. or just write a new `/plans` skill for that integraion, and fix the UI.)
+
 
 ```bash
 cd ~/Sources/your-project && beth
