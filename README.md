@@ -1,19 +1,24 @@
 # Beth, a director agent harness
 
-Yes another harness. But the one that fits *my* brain and workflows, talks to me about things I want to know, and keeps me on task. On a mature (or simply large enough) software project, especially as a solo developer, trying to actively manage more than 5-6 agents, *trying to spend a week's worth of tokens over the weekend*, then it might be time for a director.
+Yes another harness. But the one that fits *my* brain and workflows, talks to me about things I want to know, and keeps me on task. On a mature (or simply large enough) software project, especially as a solo developer, trying to actively manage more than 5-6 agents (I've had well over 20 going on a single project), *trying to spend a week's worth of tokens over the weekend*, manage worktrees and streams and dependencies... well, then it might be time for a director.
 
 ## Too Well Paid to Code
  
-Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; Beth will not save you money, only time.
+Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; *Beth will not save you money, only time*.
 
 Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fact, neither I or the agents like her very much. 🤷‍♂️🤷 (I will readily admit my tendency to anthropomorphize; the incongruity of "don't like her" was a joke she found funny. And frankly saying "it" doesn't quite work here, either. I work with .. it, quite a bit. Anyway, I will try to refrain from the pronouns.)
 
-But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. In other words, it's a question of scale, the need for additional agentic judgement in the loop, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
+But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
+
+## Benefits No One Without a Platform
+
+A director agent's time/tokens and the tokens its subagents spend are wasted on errors, bugs, or other problems encountered during execution. This is not just a question of proper context or prompting; it's the likelihood of agents having success without their own retries or ratholes. This comes at an up-front cost of quality (docs/tests/policy/observability/process/etc.) for the repos in which a director can work. Of all the hurdles to my using AI more effectively for development, this is the one that most necesitated my need for a director agent: As quality of a project -- at every layer -- increased, so did execution velocity. I was always the bottleneck, something was always waiting on me, because I simply could not context switch between so many thing.
 
 *What this harness does not do:* Ensure code quality, care about best practices, or, well, write good code, per se. Beth couldn't really care less how anything happens under the hood. Implementation, TDD, debugging, coding guidelines are not things provided here; those exist in your repo. Beth can help you build that all out, but won't do it for you.
 
 *What this harness does:* Beth gives you a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while you hold a coffee, and can be talked to out loud while you pace. Basically, it fills in a lot of coordination, SDLC gaps. Claude Code and other tools give you a coding session (and I use it actively in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work together, while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation. *Beth cares about plans and managing their execution, and little else.*
 
+## How I Use It
 
 <img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
 
