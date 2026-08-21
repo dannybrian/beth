@@ -1,4 +1,4 @@
-# Beth
+# Beth, a director agent harness
 
 Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* Beth is not needed, no project depends on her; in fact, they don't like her very much. 🤷‍♂️🤷‍♂️ But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. In other words, it's a question of scale, the need for additional agentic judgement in the loop, *and a scale I don't think many projects achieve, or require*. If, however, you are legitimately trying to manage more than 5-6 agents, *trying to spend a week's worth of tokens over the weekend*, I think it might be time.
 
@@ -38,9 +38,9 @@ Beth puts an emphasis on proper planning, implementation oversight, and autonomo
 <img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
 
 
-Coodinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, and how to queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform).
+Coodinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
 
-For Beth, markdown plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on.
+Markdown (indexed) plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on.
 
 Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents.
 
