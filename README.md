@@ -177,7 +177,7 @@ nothing to read — with evidence, not as a wizard.
 The reasoning is in `docs/director-skills.md`. This repo's own
 `.claude/DIRECTOR.md` is the worked example of the interview's output.
 
-## Talking to Beth
+## Talking To Beth Be Like
 
 Text works like any chat, with three differences:
 
