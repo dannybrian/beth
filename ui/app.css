@@ -520,6 +520,24 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
 .entry .body s { color: var(--muted); }
 .entry .body .heading { display: inline-block; margin-top: 2px; letter-spacing: 0.01em; }
 
+/* The re-read speaker: after every paragraph, quiet until wanted. The glyph is
+   ::before rather than text so the body's textContent stays the canonical
+   string (the offsets depend on it) and a copied selection never carries a
+   stray icon; user-select backs that up in browsers that copy pseudo-content. */
+.reread {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  margin-left: 5px;
+  cursor: pointer;
+  opacity: 0.22;
+  user-select: none;
+  font-size: 0.85em;
+  vertical-align: baseline;
+}
+.reread:hover { opacity: 0.85; }
+.reread::before { content: '🔊'; }
+
 /* say events read as announcements, never as ordinary reply text */
 .entry.say {
   border-left: 3px solid var(--say);

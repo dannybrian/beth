@@ -3,6 +3,7 @@
 import { Listener, listenSupported } from '/listen.js';
 import { createSpeaker } from '/speaker.js';
 import { createWirePanel } from '/wire.js';
+import { addRereadButtons } from '/reread.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
 const el = (tag, cls, text) => {
@@ -142,12 +143,21 @@ function bodyWithLinks(text, links, spans) {
   return div;
 }
 
-const renderAssistant = (m) => entry('assistant', (n) => n.append(bodyWithLinks(m.text, m.links, m.spans)));
+// A faint speaker per paragraph, spoken on demand at ANY level — `off`
+// included: a click is an explicit request, not ambience. Extra nodes only;
+// the canonical string underneath is untouched (see reread.js).
+const withReread = (m) => {
+  const body = bodyWithLinks(m.text, m.links, m.spans);
+  addRereadButtons(body, m.text, (para) => post('/api/reread', { text: para }));
+  return body;
+};
+
+const renderAssistant = (m) => entry('assistant', (n) => n.append(withReread(m)));
 
 const renderSay = (m) =>
   entry('say', (n) => {
     n.append(el('span', 'tag', m.kind));
-    n.append(bodyWithLinks(m.text, m.links, m.spans));
+    n.append(withReread(m));
     // The announcement's own ref is already structured — make it the most
     // obvious thing to click.
     if (m.refLink) n.append(linkNode(m.refLink, m.refLink.spoken ?? m.ref));

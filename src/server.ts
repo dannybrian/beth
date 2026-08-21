@@ -325,6 +325,25 @@ export function createServer(deps: {
             deps.speakOut.setSpeechLevel(level as SpeechLevel);
             return json(200, { ok: true, level });
           }
+          case '/api/reread': {
+            // A paragraph Danny clicked to hear (again). Two deliberate
+            // properties: only text the TRANSCRIPT carries is spoken — same
+            // principle as /api/github, where loopback is not a reason to let a
+            // request name anything it likes — and it speaks at every level
+            // including `off`, because a click is an explicit request, not
+            // ambience (speak() has no level gate, which is exactly right
+            // here). Billing counts at stream() as always, so a re-read is
+            // billed like anything else she says.
+            const text = String(body.text ?? '').trim();
+            if (!text) return json(400, { error: 'empty' });
+            const known = bus
+              .replay()
+              .some((m) => (m.type === 'assistant' || m.type === 'say') && m.text.includes(text));
+            if (!known) return json(404, { error: 'not in the transcript' });
+            const id = deps.speakOut.speak(text);
+            if (!id) return json(409, { error: 'voice unavailable' });
+            return json(200, { ok: true, id });
+          }
           case '/api/tests/enable': {
             // ⚠️ The one switch that lets this harness execute project code on a
             // schedule. Off by default, per repo, and the page shows the detected
