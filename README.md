@@ -1,10 +1,14 @@
 # Beth, a director agent harness
 
-Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!*
+Yes another harness. But the one that fits *my* brain and workflows, talks to me about things I want to know, and keeps me on task. On a mature (or simply large enough) software project, especially as a solo developer, trying to actively manage more than 5-6 agents, *trying to spend a week's worth of tokens over the weekend*, then it might be time for a director.
+
+## Too Well Paid to Code
+ 
+Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; Beth will not save you money, only time.
 
 Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fact, neither I or the agents like her very much. 🤷‍♂️🤷 (I will readily admit my tendency to anthropomorphize; the incongruity of "don't like her" was a joke she found funny. And frankly saying "it" doesn't quite work here, either. I work with .. it, quite a bit. Anyway, I will try to refrain from the pronouns.)
 
-But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. In other words, it's a question of scale, the need for additional agentic judgement in the loop, *and a scale I don't think many projects achieve, or require*. If, however, you are legitimately trying to manage more than 5-6 agents, *trying to spend a week's worth of tokens over the weekend*, I think it might be time.
+But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. In other words, it's a question of scale, the need for additional agentic judgement in the loop, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
 *What this harness does not do:* Ensure code quality, care about best practices, or, well, write good code, per se. Beth couldn't really care less how anything happens under the hood. Implementation, TDD, debugging, coding guidelines are not things provided here; those exist in your repo. Beth can help you build that all out, but won't do it for you.
 
