@@ -40,7 +40,9 @@ Beth puts an emphasis on proper planning, implementation oversight, and autonomo
 <img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
 
 
-Plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Beth surfaces pending questions and need for your validation across many plans and potentially dozens of subagents.
+Plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on.
+
+Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents.
 
 
 <img src="docs/images/queues.png" width="240" alt="The queues: three pending decisions, each carrying the plan it belongs to, and a running worker with its start time and a close control." />
