@@ -193,7 +193,7 @@ The reasoning is in `docs/director-skills.md`. This repo's own
 
 ## Talking To Beth Be Like
 
-Text works like any chat, with three differences:
+Heading was her idea. Text here works like any chat, with three differences:
 
 - **The panel is shared ground.** Clicking a plan (or a failing test) *points at it* — Beth gets the
   reference, you get a chip, and "what's left on this?" needs no name. Rows
@@ -205,6 +205,7 @@ Text works like any chat, with three differences:
 - **Beth narrates.** Before anything longer than a breath — "hold on, running
   the suites" — and after it lands. Silence reading as failure is a voice
   lesson, but it improved the text too.
+- **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or preapred for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
 
 **Voice is local end to end.** The browser recognizes what you say
 (`ui/listen.js`) and posts an ordinary turn; Beth's replies stream back over
