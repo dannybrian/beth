@@ -1,4 +1,4 @@
-# "Beth"
+# Beth
 
 Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC.
 
