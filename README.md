@@ -237,6 +237,8 @@ the two things a fresh session can't otherwise have: what it opened with
 recently ("not these"), and the facts that changed — branch, dirt, last
 commit, what's in flight, the clock, the gap since the harness was last up.
 
+(And yeah, I considered using a common memory library or data "lake" here, but I like that there are no dependencies beyond the two vendor SDKs. And again, nobody *needs* Beth.)
+
 ## The rest of the surface
 
 - **Tests**: the top-right light detects the project's test command (never
