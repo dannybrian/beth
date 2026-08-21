@@ -7,7 +7,7 @@ allowed-tools: Bash, Read, Write, Edit, Grep, Glob, AskUserQuestion
 
 # /director-skills — onboard a repo to the director workflow
 
-The [director harness](https://github.com/dannybrian/director-harness) is one
+The [director harness](https://github.com/dannybrian/beth) is one
 contract with two halves: the harness supplies the director's ROLE; the repo
 supplies the PERSON (`.claude/DIRECTOR.md`), the WORK (`plans/`), and the
 machinery that keeps both honest (`/plans`, `/tidyrepo`). This skill supplies

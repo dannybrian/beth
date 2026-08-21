@@ -9,16 +9,16 @@ import { webBase, blobUrl } from './repoWeb.ts';
 const HERE = new URL('..', import.meta.url).pathname;
 
 test('every spelling of the same github remote reduces to one base', () => {
-  const want = 'https://github.com/dannybrian/director-harness';
+  const want = 'https://github.com/dannybrian/beth';
   for (const remote of [
     // The real one, from `git remote -v` in this repo.
-    'git@github.com:dannybrian/director-harness.git',
-    'git@github.com:dannybrian/director-harness',
-    'ssh://git@github.com/dannybrian/director-harness.git',
-    'https://github.com/dannybrian/director-harness.git',
-    'https://github.com/dannybrian/director-harness',
-    'http://github.com/dannybrian/director-harness/',
-    'git://github.com/dannybrian/director-harness.git',
+    'git@github.com:dannybrian/beth.git',
+    'git@github.com:dannybrian/beth',
+    'ssh://git@github.com/dannybrian/beth.git',
+    'https://github.com/dannybrian/beth.git',
+    'https://github.com/dannybrian/beth',
+    'http://github.com/dannybrian/beth/',
+    'git://github.com/dannybrian/beth.git',
   ]) {
     assert.equal(webBase(remote), want, remote);
   }
@@ -33,7 +33,7 @@ test('anything whose URL shape we cannot know returns nothing', () => {
     'git@github.company.com:owner/repo.git',
     // A gist, or anything else that is not owner/repo.
     'https://github.com/dannybrian',
-    'https://github.com/dannybrian/director-harness/tree/main/docs',
+    'https://github.com/dannybrian/beth/tree/main/docs',
     '',
     'not a url',
   ]) {

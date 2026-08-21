@@ -1,14 +1,13 @@
 {
-  "name": "director-harness",
+  "name": "beth",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A conversational harness for a standing director on your repo \u2014 a long-lived Claude Agent SDK session with a voice, a memory, and your plans on the panel beside it.",
   "scripts": {
     "start": "node src/main.ts",
     "test": "node --test src/*.test.ts"
   },
   "keywords": [],
-  "author": "",
+  "author": "Danny Brian",
   "license": "ISC",
   "packageManager": "pnpm@10.29.2",
   "type": "module",
@@ -19,5 +18,9 @@
   },
   "bin": {
     "beth": "./bin/beth.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dannybrian/beth.git"
   }
 }

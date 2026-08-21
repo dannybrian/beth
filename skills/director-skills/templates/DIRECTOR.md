@@ -1,6 +1,6 @@
 # DIRECTOR.md — who the director is on this project
 
-Read by the [director harness](https://github.com/dannybrian/director-harness)
+Read by the [director harness](https://github.com/dannybrian/beth)
 and appended to the director session's system prompt. The harness supplies the
 ROLE (project manager, conversational, tool discipline); this file supplies the
 PERSON and anything specific to working in this repo.

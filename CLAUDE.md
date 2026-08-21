@@ -55,7 +55,11 @@ machine, so it lives in the state dir and no plan file learns about it.
   ⚠️ Strip-only mode rejects **TypeScript parameter properties** (`constructor(private
   x: T)`) — declare the field and assign it.
 - **No framework in the UI.** `ui/` is vanilla DOM and plain CSS. It is small enough that
-  a framework would cost more than it saves.
+  a framework would cost more than it saves. It is ONE loom (`app.js` — the handler map,
+  composer, panels, shared state) plus native ES modules for the seams whose bookkeeping
+  fails invisibly: `listen.js`, `speaker.js`, `wire.js` — each testable from node with a
+  stub where the browser object would be, no build step involved. The criterion for
+  extracting a module is that testability, never line count.
 - **Ask before adding any dependency.** Current total: the Agent SDK, zod, and the
   ElevenLabs SDK (for TTS, nothing else). Each was a deliberate decision. Prefer rolling
   a small thing over taking a package. The browser client and `ws` both left with the
@@ -77,8 +81,11 @@ Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdow
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `speakOut` — which is now
 the whole speech plane, billing included — the `testRunner` detectors and failure parsers,
 and `listen`, which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be
-tested at all. Browser code is testable when the hard part is bookkeeping rather than the
-browser.
+tested at all; `speaker` (the playback queue against a stubbed `<audio>` — a wedged queue
+looks like her going quiet, a deliberate stop reported as an error looks like a bug) and
+`wire` (the panel's anatomy/token math, which renders plausibly WRONG rather than failing)
+follow the same pattern. Browser code is testable when the hard part is bookkeeping rather
+than the browser.
 
 The rest earn their tests by being places a mistake is INVISIBLE: `toolInput` (a malformed
 call recovered from the real payload), `planName` (the one writer — that it round-trips

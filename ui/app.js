@@ -1,6 +1,8 @@
 // Minimal vanilla UI — no framework, no build step. The plan calls for
 // "Lit/vanilla"; at this size vanilla DOM keeps the dependency count at zero.
 import { Listener, listenSupported } from '/listen.js';
+import { createSpeaker } from '/speaker.js';
+import { createWirePanel } from '/wire.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
 const el = (tag, cls, text) => {
@@ -791,7 +793,7 @@ const handlers = {
     // plays, and ElevenLabs bills at the fetch — while the line mid-play is
     // already paid for either way. Handled on the broadcast rather than the
     // click so her own `speech` tool call mutes exactly like the dropdown.
-    if (m.level === 'off') bargeIn();
+    if (m.level === 'off') spk.stop();
   },
   effort: (m) => {
     setEffortLevel(m.level);
@@ -885,7 +887,7 @@ const handlers = {
     }
     renderVoice(m.status, m.detail);
   },
-  speak: (m) => enqueueSpeak(m.id),
+  speak: (m) => spk.enqueue(m.id),
   tests: (m) => renderTests(m.state),
   event: (m) => {
     renderEvent(m);
@@ -895,16 +897,10 @@ const handlers = {
 
 // --- her voice, outbound ------------------------------------------------------
 //
-// The whole transport: an HTTP stream into an <audio> element. No session to
-// open, no transcript to answer, no mic — which is the entire reason this
-// exists, because Speech Engine can only carry a reply to something it heard.
-//
-// ONE line at a time. Assigning `src` while a play() is still resolving aborts
-// it, and both lines are lost — the browser calls that `AbortError: interrupted
-// by a new load request`, and it cost an afternoon in the spike.
-const speaker = new Audio();
-const speakBacklog = [];
-let speakingId = null;
+// Playback lives in speaker.js (a module for the same reason listen.js is one:
+// the bookkeeping is testable when node can stub the <audio>). What stays here
+// is what belongs to the PAGE: which tab owns the mouth, and where the volume
+// preference is persisted.
 
 /**
  * How loud she is ON THIS PAGE. A page-side dial, not a server one: each tab
@@ -915,13 +911,18 @@ let speakingId = null;
  * "Stop talking" is the speech level's job; this is the knob on the speaker.
  */
 const VOLUME_KEY = 'harness.volume';
-let speakerVolume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem(VOLUME_KEY) ?? '1') || 0));
-speaker.volume = speakerVolume;
+
+const spk = createSpeaker({
+  audio: new Audio(),
+  park: () => voice?.park?.(),
+  unpark: () => voice?.unpark?.(),
+  note: (text) => entry('activity', (n) => (n.textContent = text)),
+  initialVolume: parseFloat(localStorage.getItem(VOLUME_KEY) ?? '1') || 0,
+});
 
 function setSpeakerVolume(v) {
-  speakerVolume = Math.min(1, Math.max(0, v));
-  speaker.volume = speakerVolume;
-  localStorage.setItem(VOLUME_KEY, String(speakerVolume));
+  spk.setVolume(v);
+  localStorage.setItem(VOLUME_KEY, String(spk.volume()));
 }
 
 /**
@@ -936,64 +937,6 @@ let myStreamId = 0;
 const claimVoice = () => myStreamId && post('/api/voice/claim', { streamId: myStreamId });
 window.addEventListener('focus', claimVoice);
 document.addEventListener('visibilitychange', () => !document.hidden && claimVoice());
-
-function enqueueSpeak(id) {
-  speakBacklog.push(id);
-  playNextSpoken();
-}
-
-function playNextSpoken() {
-  if (speakingId !== null) return;
-  const id = speakBacklog.shift();
-  if (id === undefined) return;
-  speakingId = id;
-  // HALF DUPLEX. The ear closes while she talks, because echo cancellation cannot
-  // reach the recogniser's own capture — it opens its own microphone and takes no
-  // constraints. Parking it is what stops her hearing herself and answering it.
-  voice?.park?.();
-  speaker.src = `/api/voice/say/${encodeURIComponent(id)}`;
-  speaker.play().catch((e) => {
-    // A pause() while play() is still resolving rejects it with AbortError —
-    // which is barge-in and the mute doing their job, not a line failing. It
-    // must not be reported: "stopped speaking" already was, and a 🔇 underneath
-    // it reads as something broken.
-    if (e.name === 'AbortError') return;
-    // Chrome refuses audio until the page has been interacted with. Say so:
-    // silence is indistinguishable from a hang, which is the bug this replaces.
-    entry('activity', (n) => (n.textContent = `🔇 not spoken — ${e.name === 'NotAllowedError' ? 'click the page once to allow audio' : e.message}`));
-    doneSpeaking(id);
-  });
-}
-
-/** Advance exactly once per line, however it ended. */
-function doneSpeaking(id) {
-  if (speakingId !== id) return;
-  speakingId = null;
-  if (speakBacklog.length) return void playNextSpoken();
-  // Only reopen when she has genuinely finished — between two queued lines the
-  // ear would otherwise open into the gap and hear the second one.
-  voice?.unpark?.();
-}
-
-/**
- * Cut her off. What half duplex costs is the ability to interrupt, and this is
- * the meter buying it back — see the barge-in gate in listen.js.
- */
-function bargeIn() {
-  speaker.pause();
-  // A backlog she was going to read is no longer wanted: you interrupted the
-  // whole thought, not one sentence of it. The transcript still has every word.
-  const dropped = speakBacklog.length;
-  speakBacklog.length = 0;
-  speakingId = null;
-  if (dropped) entry('activity', (n) => (n.textContent = `⏹ stopped speaking — ${dropped} line${dropped > 1 ? 's' : ''} not read aloud`));
-  voice?.unpark?.();
-}
-
-speaker.addEventListener('ended', () => doneSpeaking(speakingId));
-// A failed fetch (502 from a missing permission, say) must not wedge the queue.
-// The server publishes its own `unspoken` line with the reason.
-speaker.addEventListener('error', () => doneSpeaking(speakingId));
 
 // --- in-progress indicator -------------------------------------------------
 //
@@ -1038,213 +981,12 @@ function paintDot() {
 
 // --- the wire panel ----------------------------------------------------------
 //
-// What actually happens: the turn as the API saw it. The dot answers "is
-// anything running"; clicking it opens the anatomy of exactly that. Everything
-// here is PULLED while the panel is open (GET /api/wire, on a cursor) — none of
-// it rides the stream, the replay, or the page while the panel is closed.
+// Lives in wire.js — self-contained by design, pull-only, math tested in node.
+// The dot answers "is anything running"; clicking it opens the anatomy of
+// exactly that.
 
-let wireOpen = false;
-let wireSeq = 0;
-let wireEntries = [];
-let wireTimer = null;
-
-const fmtTok = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n));
-const fmtMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`);
-
-async function pollWire() {
-  const r = await fetch(`/api/wire?since=${wireSeq}`).then((x) => x.json()).catch(() => null);
-  if (!r) return;
-  const had = wireSeq;
-  wireSeq = r.seq;
-  if (!r.entries.length && had) return;
-  wireEntries.push(...r.entries);
-  if (wireEntries.length > 800) wireEntries.splice(0, wireEntries.length - 800);
-  renderWire();
-}
-
-function toggleWire() {
-  wireOpen = !wireOpen;
-  $('wire-panel').hidden = !wireOpen;
-  if (!wireOpen) {
-    clearInterval(wireTimer);
-    wireTimer = null;
-    return;
-  }
-  // Fresh pull on every open — the buffer may have moved a long way while
-  // nobody was looking, and a stale cursor would render a gap as history.
-  wireSeq = 0;
-  wireEntries = [];
-  void pollWire();
-  wireTimer = setInterval(pollWire, 2000);
-}
-$('status-dot').onclick = toggleWire;
-
-/** Group the flat entry list into turns, newest first. */
-function wireTurns() {
-  const turns = new Map();
-  for (const e of wireEntries) {
-    if (!turns.has(e.turn)) turns.set(e.turn, []);
-    turns.get(e.turn).push(e);
-  }
-  return [...turns.entries()].sort((a, b) => b[0] - a[0]);
-}
-
-/**
- * The anatomy strip: wall time, coloured by who had the floor.
- *
- * Segments come from the stream-event block boundaries inside each request
- * (thinking/writing) and from the gaps between a request completing and its
- * tool results arriving (tools). Purely positional — nothing is measured
- * beyond timestamps that already exist.
- */
-function wireAnatomy(entries) {
-  const spans = [];
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    if (e.kind === 'request') {
-      const end = e.ts;
-      const blocks = e.blocks?.length ? e.blocks : [{ type: 'text', at: e.startAt }];
-      for (let j = 0; j < blocks.length; j++) {
-        const b = blocks[j];
-        const to = blocks[j + 1]?.at ?? end;
-        if (to > b.at) spans.push({ kind: b.type === 'thinking' ? 'think' : 'write', from: b.at, to });
-      }
-    } else if (e.kind === 'tool_result' && e.sinceMs > 0) {
-      spans.push({ kind: 'tool', from: e.ts - e.sinceMs, to: e.ts });
-    }
-  }
-  if (!spans.length) return null;
-  const t0 = spans[0].from;
-  const t1 = spans[spans.length - 1].to;
-  const total = Math.max(1, t1 - t0);
-  const strip = el('div', 'w-strip');
-  const sums = { think: 0, write: 0, tool: 0 };
-  let prevEnd = t0;
-  for (const s of spans) {
-    const seg = el('i', `w-${s.kind}`);
-    seg.style.width = `${((s.to - s.from) / total) * 100}%`;
-    // Gaps (waiting on the API) render as track background showing through.
-    seg.style.marginLeft = `${(Math.max(0, s.from - prevEnd) / total) * 100}%`;
-    prevEnd = Math.max(prevEnd, s.to);
-    strip.append(seg);
-    sums[s.kind] += s.to - s.from;
-  }
-  const legend = el('div', 'w-legend');
-  for (const [key, cls, label] of [['think', 'w-think', 'thinking'], ['write', 'w-write', 'writing'], ['tool', 'w-tool', 'tools']]) {
-    legend.append(el('i', `w-dot ${cls}`), document.createTextNode(` ${label} ${fmtMs(sums[key])}  `));
-  }
-  const wrap = el('div');
-  wrap.append(strip, legend);
-  return wrap;
-}
-
-/** One stacked token bar per request — the whole conversation rides every one. */
-function wireTokens(entries) {
-  const reqs = entries.filter((e) => e.kind === 'request');
-  if (!reqs.length) return null;
-  const max = Math.max(...reqs.map((r) => r.usage.cacheR + r.usage.cacheW + r.usage.in + r.usage.out));
-  const grid = el('div', 'w-tokens');
-  reqs.forEach((r, i) => {
-    const total = r.usage.cacheR + r.usage.cacheW + r.usage.in + r.usage.out;
-    grid.append(el('span', 'w-k', `#${i + 1}`));
-    const bar = el('div', 'w-bar');
-    for (const [key, cls] of [['cacheR', 'w-cr'], ['cacheW', 'w-cw'], ['in', 'w-in'], ['out', 'w-out']]) {
-      if (!r.usage[key]) continue;
-      const seg = el('i', cls);
-      seg.style.width = `${(r.usage[key] / max) * 100}%`;
-      seg.title = `${key === 'cacheR' ? 'cache read' : key === 'cacheW' ? 'cache write' : key === 'in' ? 'fresh input' : 'output'} ${fmtTok(r.usage[key])}`;
-      bar.append(seg);
-    }
-    grid.append(bar);
-    grid.append(el('span', 'w-v', `${fmtTok(total)}${r.ttftMs ? ` · ${fmtMs(r.ttftMs)}` : ''}`));
-  });
-  const moved = reqs.reduce((n, r) => n + r.usage.cacheR + r.usage.cacheW + r.usage.in + r.usage.out, 0);
-  const cached = reqs.reduce((n, r) => n + r.usage.cacheR, 0);
-  const wrap = el('div');
-  wrap.append(grid);
-  const legend = el('div', 'w-legend');
-  for (const [cls, label] of [['w-cr', 'cache read'], ['w-cw', 'cache write'], ['w-in', 'fresh in'], ['w-out', 'out']]) {
-    legend.append(el('i', `w-dot ${cls}`), document.createTextNode(` ${label}  `));
-  }
-  wrap.append(legend);
-  wrap.append(
-    el('div', 'w-sum', `${fmtTok(moved)} tokens moved · ${moved ? Math.round((cached / moved) * 100) : 0}% cache reads`)
-  );
-  return wrap;
-}
-
-/** The raw exchange, chronological — the conversation the transcript hides. */
-function wireExchange(entries) {
-  const list = el('div', 'w-exchange');
-  for (const e of entries) {
-    if (e.kind === 'user') list.append(el('div', 'w-line w-user', `→ ${e.text}`));
-    else if (e.kind === 'request') {
-      for (const t of e.thinking) list.append(el('div', 'w-line w-thk', `▸ thinking  ${t}`));
-      for (const t of e.text) list.append(el('div', 'w-line w-txt', `${t}`));
-      for (const t of e.tools) list.append(el('div', 'w-line w-toolcall', `⚙ ${t.name}  ${t.input}`));
-    } else if (e.kind === 'tool_result') {
-      const line = el('div', `w-line w-res${e.isError ? ' w-err' : ''}`);
-      line.textContent = `↳ ${e.isError ? 'error' : 'result'} · ${fmtMs(e.sinceMs)} · ${(e.bytes / 1024).toFixed(1)} KB`;
-      if (e.preview) {
-        line.classList.add('w-open');
-        const body = el('div', 'w-preview', e.preview);
-        body.hidden = true;
-        line.onclick = () => (body.hidden = !body.hidden);
-        list.append(line, body);
-        continue;
-      }
-      list.append(line);
-    } else if (e.kind === 'result') {
-      list.append(
-        el(
-          'div',
-          'w-line w-final',
-          `■ ${e.isError ? 'ERROR' : 'done'} · ${e.requests} request${e.requests === 1 ? '' : 's'} · ${fmtMs(e.durationMs)} (${fmtMs(e.apiMs)} api) · in ${fmtTok(e.usage.in)} · cached ${fmtTok(e.usage.cacheR)} · out ${fmtTok(e.usage.out)}`
-        )
-      );
-    } else if (e.kind === 'event') {
-      list.append(el('div', 'w-line w-evt', `⚠ ${e.label}${e.detail ? ` — ${e.detail}` : ''}`));
-    }
-  }
-  return list;
-}
-
-function renderWire() {
-  if (!wireOpen) return;
-  const box = $('wire-panel');
-  // The poll rebuilds this while it is being READ, so which turns are expanded
-  // must survive the rebuild — losing your place every two seconds mid-
-  // demonstration is the panel undermining its own point.
-  const openTurns = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.turn));
-  const hadAny = box.querySelector('details') !== null;
-  box.replaceChildren();
-  box.append(el('h3', null, 'The wire — what actually happens'));
-  const turns = wireTurns();
-  if (!turns.length) {
-    box.append(el('div', 'snote', 'nothing captured yet — say something'));
-    return;
-  }
-  turns.forEach(([turn, entries], i) => {
-    const d = document.createElement('details');
-    d.dataset.turn = String(turn);
-    // Newest turn open on first render; after that, wherever Danny left things.
-    d.open = hadAny ? openTurns.has(String(turn)) : i === 0;
-    const summary = document.createElement('summary');
-    const user = entries.find((e) => e.kind === 'user');
-    const result = entries.find((e) => e.kind === 'result');
-    const reqs = entries.filter((e) => e.kind === 'request').length;
-    summary.textContent = `turn ${turn} — ${user ? `“${user.text.slice(0, 60)}”` : '(boot)'}${
-      result ? ` · ${fmtMs(result.durationMs)} · ${reqs} req` : turnInFlight && i === 0 ? ' · in flight' : ''
-    }`;
-    d.append(summary);
-    const anatomy = wireAnatomy(entries);
-    const tokens = wireTokens(entries);
-    if (anatomy) d.append(el('h4', 'w-h', 'anatomy'), anatomy);
-    if (tokens) d.append(el('h4', 'w-h', 'tokens'), tokens);
-    d.append(el('h4', 'w-h', 'exchange'), wireExchange(entries));
-    box.append(d);
-  });
-}
+const wirePanel = createWirePanel({ box: $('wire-panel'), el, isTurnInFlight: () => turnInFlight });
+$('status-dot').onclick = wirePanel.toggle;
 
 function paintProgress() {
   const busy = turnInFlight || workersRunning > 0;
@@ -1475,8 +1217,8 @@ function renderStats() {
     slider.type = 'range';
     slider.min = '0';
     slider.max = '100';
-    slider.value = String(Math.round(speakerVolume * 100));
-    const pct = el('span', 'sv', `${Math.round(speakerVolume * 100)}%`);
+    slider.value = String(Math.round(spk.volume() * 100));
+    const pct = el('span', 'sv', `${Math.round(spk.volume() * 100)}%`);
     slider.oninput = () => {
       setSpeakerVolume(Number(slider.value) / 100);
       pct.textContent = `${slider.value}%`;
@@ -1788,8 +1530,8 @@ function buildVoice(hello) {
       if (showInterim(text)) send();
       else entry('activity', (n) => (n.textContent = `🎙 heard "${text}" — composer is busy, not sent`));
     },
-    isSpeaking: () => speakingId !== null,
-    stopSpeaking: bargeIn,
+    isSpeaking: spk.isSpeaking,
+    stopSpeaking: spk.stop,
   });
   paintVoiceButton(voice.state);
 }

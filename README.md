@@ -2,7 +2,9 @@
 
 Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC.
 
-Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I iften use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
+Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
+
+Beth integrates with ElevenLabs for voice, and you can set the chattiness. Beth  tracks token use, and visualizes turns with under-the-hood insights (mostly for education, that last part).
 
 ## Director Agent
 
@@ -36,6 +38,65 @@ the harness falls out of it:
   *personas*: directors of your own that exist across every repo, with their
   own voices and their own memory of you (`~/.director-harness/personas/`).
 
+## Anatomy
+
+```mermaid
+flowchart LR
+  subgraph BROWSER["Chrome — the room (loopback only)"]
+    direction TB
+    UI["transcript · plans panel<br/>queues · wire panel"]
+    EAR["the ear — listen.js<br/>Web Speech recognition"]
+    MOUTH["the mouth — speaker.js<br/>streamed audio"]
+  end
+
+  subgraph HARNESS["beth — one Node process per repo"]
+    direction TB
+    SRV["server.ts<br/>one listener: SSE + POST"]
+    SES["session.ts<br/>one long-lived SDK query"]
+    MCP["tools.ts — in-process MCP<br/>say · plans · queue_decision …"]
+    TTS["speakOut.ts<br/>her lines, as audio"]
+    IDX["workIndex + plansReader<br/>the work, as data"]
+    TAP["wireTap.ts<br/>every SDK message, kept"]
+  end
+
+  subgraph REPO["your repo — the harness only reads"]
+    direction TB
+    PLANS["plans/*.md<br/>the work"]
+    DIR[".claude/DIRECTOR.md<br/>the person"]
+    PROJ["CLAUDE.md · skills · hooks"]
+  end
+
+  subgraph HOME["your machine — ~/.director-harness"]
+    direction TB
+    PERS["personas/*.md<br/>who she is + her voice"]
+    MEM["persona-state/<br/>her memory of you"]
+  end
+
+  CC["Claude Code CLI<br/>(Agent SDK)"]
+  ANTH(["Anthropic API"])
+  XI(["ElevenLabs TTS"])
+
+  UI <-->|"SSE + POST"| SRV
+  EAR -->|"a spoken turn"| SRV
+  SRV -->|"mp3 stream"| MOUTH
+  SRV --- SES
+  SES --- MCP
+  SES --- TAP
+  TTS -->|"one line"| XI
+  SES <--> CC
+  CC <--> ANTH
+  PLANS -->|"watched"| IDX
+  DIR -->|"system prompt"| SES
+  PERS -->|"system prompt"| SES
+  MEM <--> SES
+  PROJ -->|"cwd = your repo"| CC
+```
+
+Every arrow into the harness from the right is a *read*; the one thing that
+ever writes to a plan file is a rename you click. The browser and the harness
+speak over one loopback listener — voice included — which is why the
+shell-executing parts are safe by construction rather than by rule.
+
 ## Getting a repo ready: /director-skills
 
 The fastest way to see is with a repo that supplies its half
@@ -44,7 +105,7 @@ drift from the parser the moment either changed), the repo half ships as a
 skill that sets it up with you:
 
 ```bash
-ln -sf ~/Sources/director-harness/skills/director-skills ~/.claude/skills/director-skills
+ln -sf ~/Sources/beth/skills/director-skills ~/.claude/skills/director-skills
 ```
 
 Then, in any repo, ask its director (or any Claude Code session) to run
@@ -140,7 +201,7 @@ commit, what's in flight, the clock, the gap since she was last up.
 ## Running it
 
 ```bash
-ln -sf ~/Sources/director-harness/bin/beth.mjs ~/.local/bin/beth   # once
+ln -sf ~/Sources/beth/bin/beth.mjs ~/.local/bin/beth   # once
 cd <a-project-repo> && beth
 ```
 
@@ -186,7 +247,7 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
 | `speakOut.ts` / `spoken.ts` / `audioTags.ts` | The speech plane: what is said, held, streamed, billed |
-| `ui/listen.js` | The ear: recognition, settle window, carry across recogniser seams, barge-in |
+| `ui/listen.js` / `ui/speaker.js` / `ui/wire.js` | The ear, the mouth, and the wire panel — native ES modules, each tested from node with a stubbed browser object |
 | `workIndex.ts` / `workItems.ts` / `plansReader.ts` | The work contract and its built-in reader |
 | `planName.ts` | ⚠ The one plan-file writer — `name:` on rename, nothing else |
 | `pins.ts` / `repoWeb.ts` / `handoff.ts` | Shelf, GitHub links resolved at click, terminal handoff |

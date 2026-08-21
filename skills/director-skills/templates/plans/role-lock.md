@@ -17,7 +17,7 @@ depends_on: []
 ## Context
 
 This plan is the DIRECTOR ROLE LOCK, not a deliverable. The
-[director harness](https://github.com/dannybrian/director-harness) reads this
+[director harness](https://github.com/dannybrian/beth) reads this
 file's claim state to decide whether a terminal session already holds the
 director role: a live `owner:` here means a terminal director is running, and
 the harness comes up as a shadow — read everything, claim nothing.

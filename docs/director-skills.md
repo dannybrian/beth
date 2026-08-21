@@ -79,7 +79,7 @@ A skill carried in this repo is only invocable with cwd HERE — but the moment
 of need is in some OTHER repo. Resolution:
 
 - **`/director-skills` alone goes user-level**, symlinked:
-  `ln -sf ~/Sources/director-harness/skills/director-skills ~/.claude/skills/director-skills`.
+  `ln -sf ~/Sources/beth/skills/director-skills ~/.claude/skills/director-skills`.
   Same pattern as `bin/beth.mjs` and the personas directory: this repo is the
   source of machine-level things without shipping project things. The symlink
   also means the skill can find its own templates (and the harness's parser,

@@ -5,7 +5,7 @@
 
 Plans are the canonical, repo-housed record of work. They live alongside the
 code, get edited as understanding evolves, and outlast any individual session.
-The [director harness](https://github.com/dannybrian/director-harness) reads this
+The [director harness](https://github.com/dannybrian/beth) reads this
 directory to build its work panel; the `/plans` skill tracks which session is
 doing what.
 

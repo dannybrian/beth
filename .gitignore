@@ -9,3 +9,6 @@ logs/
 !.env.example
 
 .DS_Store
+
+# Claude Code scratch worktrees — session-local, never history.
+.claude/worktrees/
