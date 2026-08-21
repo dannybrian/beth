@@ -1,15 +1,18 @@
-# director-harness
+# "Beth"
 
-I wanted to talk to my projects.
+Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than CC.
 
-Not to a chatbot about code in general — to a standing director on *this* repo:
-someone who has already read the board, knows what shipped yesterday, holds the
-shape of the work while I hold a coffee, and can be talked to out loud while I
-pace. Claude Code gives me the session; what it doesn't give me is the *person*
-across from me — a name, a voice, a memory of me, an opinion about what I
-should do next, and a place to see the work while we argue about it. So I built
-the room: a long-lived Agent SDK session bound to one repo, reachable by text
-or by voice, with the project's work on a panel beside the conversation.
+Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I iften use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
+
+## Director Agent
+
+Beth puts an emphasis on proper planning, implementation oversight, and autonomous execution. Although this repo includes the /plans and /tidyrepo skills I use, it presumes a lot of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with this highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project, and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below.
+
+Plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Beth surfaces pending questions and need for your validation across many plans and potentially dozens of subagents. One consequence is that Beth's interactions with subagents are more frequent and often narrowly-scoped: the director pattern incurs token cost, and benefits most from the best reasoning models. 
+
+You run one instance of Beth for one project. You don't talk much about code. But this only works because the code is strictly built and strictly tested. I even have tests for some skills, in some projects where I use Beth.
+
+(A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the mark for this kind of work.)
 
 ```bash
 cd ~/Sources/your-project && beth
@@ -35,7 +38,7 @@ the harness falls out of it:
 
 ## Getting a repo ready: /director-skills
 
-The fastest way to see what the fuss is about is a repo that supplies its half
+The fastest way to see is with a repo that supplies its half
 of the contract — and rather than document the formats in prose (which would
 drift from the parser the moment either changed), the repo half ships as a
 skill that sets it up with you:
