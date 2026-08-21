@@ -1,6 +1,6 @@
 # Beth
 
-Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than Claude Code directly (it is the CC SDK). I fully realize there are many tools like it out there, and that I skipped over many elements some may wish to see (existing memory libraries, context "lakes", user auth...); personally, I'm happy with the only dependencies here being the vendor SDKs. I welcome ideas and pull requests, if you find this also fits your own (solo) workflow. I plan to maintain it.
+Yet another harness. But the one that fits my brain, workflows, talks to me, and keeps me on task. Most of my agent interactions occur through this tool now, rather than Claude Code directly (Beth is built on the Claude Code SDK). I fully realize there are many tools like it out there, and that I skipped over many elements some may wish to see (existing memory libraries, context "lakes", user auth...); personally, I'm happy with the only dependencies here being the vendor SDKs. I welcome ideas and pull requests, if you find this also fits your own (solo) workflow. I plan to maintain it.
 
 Beth gives me a standing director on a single repo: someone who has already read the board, knows what shipped yesterday, holds the shape of the work while I hold a coffee, and can be talked to out loud while I pace. Claude Code and other tools give you a coding session (and I often use it in parallel); what they don't give you is the *assistant* across from you — a name, a voice, a memory of me, an opinion about what I should do next, and a place to see the work while we argue about it. So I built a long-lived Agent SDK session bound to one repo, reachable by text or by voice, with the project's work on a panel beside the conversation.
 
@@ -8,8 +8,7 @@ Beth gives me a standing director on a single repo: someone who has already read
 <img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
 
 
-Beth integrates with ElevenLabs for voice, and you can set the chattiness. 
-Multiple personas can be assigned, using your own (ElevenLabs) defined voices.
+Beth integrates with ElevenLabs for voice, and you can set the chattiness. Multiple personas can be defined, each with its own voice from your ElevenLabs account.
 
 <img src="docs/images/speech-levels.png" width="342" alt="The speech-level menu in the strip, beside the persona: say + last paragraph, silent, speak all, headlines." />
 
@@ -20,13 +19,13 @@ Beth tracks token use.
 <img src="docs/images/stats-panel.png" width="238" alt="The stats popup behind the context meter: context at 9%, this turn&#39;s tokens split into fresh, cached, and output with cost, session cost and model, the speech bill with its volume slider and the assumed rate printed beside the estimate, and the plan&#39;s 5-hour and 7-day windows." />
 
 
-It also provides an under-the-hood visualization of token consumption, cache reads/writes, and thinking, which I find useful mainly for education demonstration.
+It also provides an under-the-hood visualization of token consumption, cache reads/writes, and thinking, which I find useful mainly for demonstration and education.
 
 
 <img src="docs/images/wire-panel.png" width="350" alt="The wire panel: one turn as nine API requests — an anatomy strip of thinking, writing, and tools; stacked token bars showing cache writes becoming cache reads; and the raw exchange underneath." />
 
 
-The harness will also run repo tests automatically if you want, making it easy to see the status as well as quickly as Beth to dig in. I have not yet given the harness any knowledge of automation; it won't troubleshoot automatically, and this is intentional.
+The harness can also run the repo's tests automatically, so status is a glance away and failures are easy for Beth to dig into. It doesn't act on results by itself — no automatic troubleshooting, by design.
 
 
 ## Director Agent
@@ -45,9 +44,9 @@ Plan files are *the* first-class citizen, and get displayed prominently as the s
 
 One consequence of queuing up issues for you is that Beth's interactions with subagents are more frequent and often narrowly-scoped: the director pattern incurs token cost, and benefits most from the best reasoning models. 
 
-This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with this highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project (or at least, I haven't yet), and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below for details on bootstrapping a new project using `/director-skills`.
+This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill is what understands the plan file formats and indexing, and Beth's UI is built on that (and tidyrepo is used by the director periodically). However, the director still presumes *a lot* of discipline in a project's own documentation, skills, and so on. For example, clearly defined TDD/validation contracts throughout the documentation and skills that subagents will use. A director workflow *only* works after demonstrated success with these highly project-specific guardrails. In other words, you're unlikely to use Beth to bootstrap a new project (or at least, I haven't yet), and if you do, the conversation would start with planning to *build* those contracts, guidelines, clear testing strategies, and docs/skills to maintain them. See below for details on bootstrapping a new project using `/director-skills`.
 
-You run one instance of Beth for one project. You don't talk much about code (you do that using Claude Code). But this only works because the project -- the underlying platform within your repo -- is strictly defined, built and tested. I even have tests for some skills, in some projects where I use Beth.
+You run one instance of Beth for one project. You don't talk much about code (you do that using Claude Code). But this only works because the project — the underlying platform within your repo — is strictly defined, built, and tested. I even have tests for some skills, in some projects where I use Beth.
 
 (A future enhancement would be to integrate with JIRA or GitHub issues/etc. for this source of truth, but for me, markdown hits the mark for this kind of work.)
 
@@ -75,8 +74,7 @@ the harness falls out of it:
 
 ## Anatomy
 
-**The room, the harness, and the cloud** — everything she says and hears
-crosses one loopback listener:
+Everything Beth says and hears crosses one loopback listener:
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
@@ -112,8 +110,7 @@ flowchart TB
   TTS -->|"one line"| XI
 ```
 
-**What she reads, and where she is a person** — the harness only ever *reads*
-your repo; who she is lives on your machine:
+The harness only ever *reads* your repo:
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
@@ -134,7 +131,7 @@ flowchart TB
 
   subgraph HOME["your machine — ~/.director-harness"]
     PERS["personas/*.md"]
-    MEM["persona-state/<br/>her memory of you"]
+    MEM["persona-state/<br/>Beth's memory of you"]
     PERS ~~~ MEM
   end
 
@@ -145,14 +142,14 @@ flowchart TB
   CC2 -->|"loads"| PROJ
 ```
 
-Every arrow into the harness from the right is a *read*; the one thing that
-ever writes to a plan file is a rename you click. The browser and the harness
+Every arrow touching your repo is a *read*; the one thing that ever writes
+to a plan file is a rename you click. The browser and the harness
 speak over one loopback listener — voice included — which is why the
 shell-executing parts are safe by construction rather than by rule.
 
 ## Getting a repo ready: /director-skills
 
-The fastest way to see is with a repo that supplies its half
+The fastest way to see it working is a repo that supplies its half
 of the contract — and rather than document the formats in prose (which would
 drift from the parser the moment either changed), the repo half ships as a
 skill that sets it up with you:
@@ -174,23 +171,23 @@ nothing to read — with evidence, not as a wizard.
 The reasoning is in `docs/director-skills.md`. This repo's own
 `.claude/DIRECTOR.md` is the worked example of the interview's output.
 
-## What talking to it is like
+## Talking to Beth
 
-Text works like any chat, with three differences that matter to me:
+Text works like any chat, with three differences:
 
-- **The panel is shared ground.** Clicking a plan (or a failing test) *points at it* — she gets the
+- **The panel is shared ground.** Clicking a plan (or a failing test) *points at it* — Beth gets the
   reference, you get a chip, and "what's left on this?" needs no name. Rows
   carry a pin, a rename, a GitHub link, and one-click handoff to a fresh
   Claude Code terminal session seeded with the plan.
-- **Decisions queue instead of interrupting.** Anything she wants decided but
+- **Decisions queue instead of interrupting.** Anything Beth wants decided but
   isn't blocked on lands in a queue with candidate answers as buttons. Both of
   you can close items; a queue with settled things in it stops being read.
-- **She narrates.** Before anything longer than a breath — "hold on, running
+- **Beth narrates.** Before anything longer than a breath — "hold on, running
   the suites" — and after it lands. Silence reading as failure is a voice
   lesson, but it improved the text too.
 
-**Voice is local end to end.** The browser recognises what you say
-(`ui/listen.js`) and posts an ordinary turn; her replies stream back over
+**Voice is local end to end.** The browser recognizes what you say
+(`ui/listen.js`) and posts an ordinary turn; Beth's replies stream back over
 loopback as audio (`src/speakOut.ts`). Nothing dials in, nothing tunnels,
 nothing is billed while idle, one listener bound to 127.0.0.1. Chrome only —
 the Web Speech API is not in Safari or Firefox. Speech is an *excerpt* (the
@@ -200,8 +197,8 @@ autosend toggle turns conversation into dictation when you want to edit before
 sending. `docs/voice-plane.md` has the full story, including everything this
 replaced.
 
-She speaks in whatever voice her file names (`voice:` in a persona, or
-`HARNESS_VOICE_ID`); the picker in the strip auditions the account's voices
+Beth speaks in whatever voice the persona names (`voice:`), falling back to
+`HARNESS_VOICE_ID`; the picker in the strip auditions the account's voices
 live without writing anything down. Needs an `ELEVENLABS_API_KEY` with the
 **Text to Speech** permission — without it the harness runs text-only and the
 mic button explains what is missing.
@@ -209,38 +206,38 @@ mic button explains what is missing.
 ## Personas
 
 `~/.director-harness/personas/*.md` — one markdown file per director, none
-shipped. Frontmatter names her and her voice; the body is who she is. A repo's
-`DIRECTOR.md` still composes on top: the persona says who she is, the repo says
-what this project needs from her, and the repo wins where they overlap. Her
-memory of you follows *her* (switching repos doesn't reset the relationship);
-her greeting habits stay per-project. Switching personas is a new conversation
+shipped. Frontmatter names the director and the voice. A repo's
+`DIRECTOR.md` still composes on top: the persona says who the director is, the
+repo says what this project needs, and the repo wins where they overlap. Beth's
+memory of you follows the *persona* (switching repos doesn't reset the
+relationship); greeting habits stay per-project. Switching personas is a new conversation
 — the page warns you — because a system prompt is fixed at session birth, and
 you don't swap who you're talking to mid-thought.
 
 An existing `DIRECTOR.md` copied into that directory *is* a valid persona —
 the name is read from the same "You are **X**" sentence.
 
-## What she remembers, and when she asks
+## What Beth remembers, and when it asks
 
 `personal.jsonl`, append-only, never in your repo. The rule that keeps it from
-being a rapport script: she may only ask about something she actually recorded
-— a question comes from a fact with a date on it, at most once a day, only at
-a moment already hers (the boot greeting, or the first turn after a long gap).
+being a rapport script: Beth may only ask about something it actually recorded
+— a question comes from a fact with a date on it, at most once a day, and only at
+a natural moment — the boot greeting, or the first turn after a long gap.
 Most days that is silence, which is correct. `HARNESS_PERSONAL=off` means off:
 nothing recorded, nothing asked.
 
-The greeting itself is hers to write, one sentence, made different each day by
-the two things a fresh session can't otherwise have: what she opened with
+The greeting itself is model-written, one sentence, made different each day by
+the two things a fresh session can't otherwise have: what it opened with
 recently ("not these"), and the facts that changed — branch, dirt, last
-commit, what's in flight, the clock, the gap since she was last up.
+commit, what's in flight, the clock, the gap since the harness was last up.
 
 ## The rest of the surface
 
 - **Tests**: the top-right light detects the project's test command (never
-  invents one), runs it when the tree settles and she is idle, and is **off
+  invents one), runs it when the tree settles and the session is idle, and is **off
   until you enable it per repo** — this executes project code on a schedule.
   Clicking a failure drops a chip, not a stack trace.
-- **Permission cards**: tool calls she can't settle herself become cards; a
+- **Permission cards**: tool calls the session can't settle on its own become cards; a
   card cannot be answered by voice, so the session defaults to the SDK's
   `auto` mode and "Always" scopes its rule to the session — never written to
   your repo's settings from a button.
@@ -306,7 +303,7 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 | `pins.ts` / `repoWeb.ts` / `handoff.ts` | Shelf, GitHub links resolved at click, terminal handoff |
 | `personal.ts` / `greeting.ts` | Memory of the person; the boot line and the onboarding offer |
 | `testRunner.ts` | Detect, settle, run, parse failures |
-| `directorRole.ts` / `directorName.ts` | Shadow vs director; what to call her |
+| `directorRole.ts` / `directorName.ts` | Shadow vs director; what to call the director |
 | `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` | Transport, replay, events, queues |
 | `keyterms.ts` / `links.ts` / `markdown.ts` / `activity.ts` | Vocabulary, file links as offsets, span overlays, activity lines |
 
