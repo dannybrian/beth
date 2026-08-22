@@ -28,6 +28,8 @@ A director agent's time/tokens and the tokens its subagents spend are wasted on 
 
 ## How I Use It
 
+`% beth`, run from a repo root:
+
 <img src="docs/images/director-session.png" alt="A director session: Johnny shipping a feature end to end on a music platform repo — narrated verification in the transcript, an event card linking its plan, and pending decisions, two workers, and the plans board on the panel." />
 
 
