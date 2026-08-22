@@ -53,7 +53,7 @@ The harness can also run the repo's tests automatically, so status is a glance a
 
 ## Director Agent
 
-Beth puts an emphasis on proper planning, implementation oversight, and autonomous execution -- *and expects a properly documented, and well-tested workflow under that to make it happen*. The harness edits, maintains, updates, indexes, and displays ... well, plans.
+Beth puts an emphasis on planning, implementation oversight, and autonomous execution -- *and expects a well-documented, well-tested workflow under that to make it happen*. The harness edits, maintains, updates, indexes, and displays ... well, plans.
 
 
 <img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
