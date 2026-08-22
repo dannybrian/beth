@@ -12,8 +12,8 @@ But she knows how to sequence, how to manage agents effectively, how to manage b
 
 ## What This Is Not
 
-- **Not an orchestrator.** Conductor, Vibe Kanban, Claude Squad, and Claude Code's own Agent Teams manage *many parallel sessions* — worktrees, dashboards, merge queues. Beth is the opposite bet: one standing director with judgment, who happens to dispatch workers. If your bottleneck is parallelism plumbing, use those; mine was **attention**.
-- **Not an issue tracker.** Beads exists precisely because piles of markdown plans go stale, and Backlog.md does markdown-as-source-of-truth properly. The harness takes no side: it defines the *shape* of a work item (`workItems.ts`) and reads it through a small contract — `/plans` is the built-in reader because dated markdown is *my* convention across *my* repos. A repo that lives in Linear, beads, or GitHub issues would supply its own reader; the panel doesn't care.
+- **Not an orchestrator.** Conductor, Vibe Kanban, Claude Code's own Squad and Agent Teams manage *many parallel sessions* — worktrees, dashboards, merge queues. Beth is the opposite bet: one standing director with judgment, who happens to dispatch workers. *If your bottleneck is parallelism plumbing, use those; mine was **attention**.*
+- **Not an issue tracker.** [Beads](https://github.com/gastownhall/beads) exists precisely because piles of markdown plans go stale, and [Backlog.md](https://github.com/MrLesk/Backlog.md) does markdown-as-source-of-truth properly (and I might use one eventually). This harness takes no side: it defines the *shape* of a work item (`workItems.ts`) and reads it through a small contract — `/plans` is the built-in reader because dated markdown is *my* convention across *my* repos. A repo that lives in Linear, beads, or GitHub issues would supply its own reader; the panel doesn't care.
 - **Not voice mode.** Claude Code's `/voice` is dictation in. This is conversation — she talks back, in a voice that's hers, excerpted because ninety seconds of unskippable audio is not six paragraphs of skimmable text. And because the harness does this via an in-process MCP, saying out loud "I'm on a call, shhh" will deactivate or activate such settings.
 
 Everything here is opinionated, and the opinions are mine. Where I expect yours to differ, the seam is marked. This is what evolved for me in my own workflows.
@@ -143,7 +143,7 @@ flowchart TB
   TTS -->|"one line"| XI
 ```
 
-The harness only ever *reads* your repo:
+This harness only ever *reads* your repo (subagents will read and write):
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
