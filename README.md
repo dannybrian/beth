@@ -109,6 +109,8 @@ the harness falls out of it:
 
 ## Anatomy
 
+The client is stateless, refreshes don't underrupt anything (beyond voice, something being spoken). So, you can also open the same session in multiple browsers, or remotely (zero security provided here).
+
 Everything Beth says and hears crosses one loopback listener:
 
 ```mermaid
@@ -310,6 +312,8 @@ The three dependencies `pnpm install` pulls are each deliberate: the
 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk),
 zod, and the ElevenLabs SDK (TTS only, and only used if you configure voice).
 The UI is dependency-free vanilla DOM over SSE + POST.
+
+## Configuration
 
 Config layers, most specific first: real env vars → the bound repo's `.env` →
 `~/.director-harness/.env` (credentials belong in the machine file). Per-repo
