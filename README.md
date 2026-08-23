@@ -221,9 +221,8 @@ Heading was her idea. Text here works like any chat, with three differences:
 - **Decisions queue instead of interrupting.** Anything Beth wants decided but
   isn't blocked on lands in a queue with candidate answers as buttons. Both of
   you can close items; a queue with settled things in it stops being read.
-- **Beth narrates.** Before anything longer than a breath — "hold on, running
-  the suites" — and after it lands. Silence reading as failure is a voice
-  lesson, but it improved the text too.
+- **Beth narrates.** Several modes for voice let me hear what I want, although this needs some refinement. I want the updates like, "hold on, running
+  the suites", and hearing the report when it lands. It's something I'm sure other harnesses have done, and that some vendors provide.
 - **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or prepared for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
 
 **Voice is local end to end.** The browser recognizes what you say
