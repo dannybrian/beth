@@ -178,8 +178,13 @@ const renderEvent = (m) =>
 const askCards = new Map();
 
 function renderAsk(m) {
+  // A pending ask arrives TWICE per connect — once in the bus replay, once from
+  // the gate's "still waiting" re-send — and a card per copy left a twin that
+  // greyed out unanswered when the echo found only the last one. One id, one card.
+  if (askCards.has(m.id)) return;
   const card = el('div', 'card');
   const answers = {};
+  const blocks = [];
   let remaining = m.questions.length;
 
   for (const q of m.questions) {
@@ -220,9 +225,26 @@ function renderAsk(m) {
     free.append(input, go);
     block.append(free);
 
+    blocks.push({ q, block, opts, free });
     card.append(block);
   }
-  askCards.set(m.id, card);
+
+  // Settled by the bus echo, like the approval cards: a reload replays a
+  // resolved ask as a live-looking card, and only the echo carries the answers
+  // it never saw clicked. Skips anything already answered locally, so the echo
+  // of your own click is a no-op.
+  const settle = (given) => {
+    for (const { q, block, opts, free } of blocks) {
+      if (answers[q.question] !== undefined) continue;
+      answers[q.question] = given[q.question] ?? '';
+      block.append(el('div', 'answer', `→ ${answers[q.question]}`));
+      opts.remove();
+      free.remove();
+    }
+    card.classList.add('answered');
+  };
+
+  askCards.set(m.id, { card, settle });
   add(card);
   card.querySelector('input')?.focus();
 }
@@ -838,7 +860,7 @@ const handlers = {
     renderActivity(m);
   },
   ask: renderAsk,
-  ask_resolved: (m) => askCards.get(m.id)?.classList.add('answered'),
+  ask_resolved: (m) => askCards.get(m.id)?.settle(m.answers ?? {}),
   approval: renderApproval,
   approval_resolved: (m) => resolveApprovalCard(m.id, m.allowed, m.always),
   usage: (m) => {
