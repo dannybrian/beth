@@ -63,8 +63,6 @@ Beth puts an emphasis on planning, implementation oversight, and autonomous exec
 
 Coordinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
 
-Markdown (indexed) plan files are *the* first-class citizen, and get displayed prominently as the source of truth for both Beth and you. Everything is a plan, subplan, tasks, and so on. Call them specs if you like; you can write and organize these however, and create your own plans skill that works best for your repo.
-
 Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents.
 
 
