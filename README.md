@@ -10,7 +10,7 @@ Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fa
 
 But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
-A director agent must be status-aware, and capable of planning, modifying, tracking, and coordinating. And because you want it capable of doing this across *multiple* plans, that means context about many things — just not implementation. Beth makes zero assumptions about what those plans *are* — they could be detailed specs, they could be plans that still need specs, or they could be umbrella placeholders for upcoming tasks.
+A director agent must be status-aware, and capable of planning, modifying, tracking, and coordinating. And because you want it capable of doing this across *multiple* plans, that means context about many things — just not implementation. Beth makes zero assumptions about what those plans *are* — they could be detailed specs, they could be plans that still need specs, or they could be umbrella placeholders for upcoming tasks. (However, the sweet spot is plans for features and enhancements on an existing platform/project.)
 
 ## What This Is Not
 
@@ -224,7 +224,7 @@ Heading was her idea. Text here works like any chat, with three differences:
   isn't blocked on lands in a queue with candidate answers as buttons. Both of
   you can close items; a queue with settled things in it stops being read.
 - **Beth narrates.** Several modes for voice let me hear what I want, although this needs some refinement. I want the updates like, "hold on, running
-  the suites", and hearing the report when it lands. It's something I'm sure other harnesses have done, and that some vendors provide.
+  the suites", and hearing the report when it lands. It's something I'm sure other harnesses have done, and that some vendors provide, or will — it's something that benefits a director harness more than any other dev workflow would, in my opinion.
 - **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or prepared for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
 
 **Voice is local end to end.** The browser recognizes what you say
