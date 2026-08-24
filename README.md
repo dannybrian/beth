@@ -10,6 +10,8 @@ Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fa
 
 But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
+A director agent must be status-aware, and capable of planning, modifying, tracking, and coordinating. And because you want it capable of doing this across *multiple* plans, that means context about many things — just not implementation.
+
 ## What This Is Not
 
 - **Not an orchestrator.** Conductor, Vibe Kanban, Claude Code's own Squad and Agent Teams manage *many parallel sessions* — worktrees, dashboards, merge queues. Beth is the opposite bet: one standing director with judgment, who happens to dispatch workers. *If your bottleneck is parallelism plumbing, use those; mine was **attention**.*
