@@ -17,6 +17,20 @@ import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { ensurePersonasDir } from './personas.ts';
 
+// The harness runs ON node, but the PATH it inherited may not carry one — beth
+// launched outside an interactive shell (nvm lives in .zshrc) hands us a PATH
+// where every child that shebangs `#!/usr/bin/env node` (pnpm's shims, npm
+// bins) dies with `env: node: No such file or directory`. The test runner is
+// where that surfaced, but the director's own shell commands inherit the same
+// PATH. Add the node that is provably here — ours — and only when none is on
+// the PATH already, so a deliberately-chosen node keeps winning.
+const pathHasNode = (process.env.PATH ?? '')
+  .split(path.delimiter)
+  .some((d) => d && fs.existsSync(path.join(d, 'node')));
+if (!pathHasNode) {
+  process.env.PATH = `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ''}`;
+}
+
 const cfg = loadConfig();
 // Machine-side, beside the .env. Created empty on first boot with a README —
 // an empty directory next to the secrets is the only hint personas exist.
