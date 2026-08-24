@@ -4,19 +4,19 @@ Yes another harness. But the one that fits *my* brain and workflows, talks to me
 
 ## Too Well Paid to Code
  
-Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; *Beth will not save you money, only time*.
+Beth is **not** much of a builder. Like you (and me), she (too) uses agents to help her write code; she is a **director** in the [builder pattern](https://refactoring.guru/design-patterns/builder). *And totally and completely unnecessary to that pattern, I might add!* She needs frontier models and might work off hours; *Beth will not save you money, only time*. A director harness does this by focusing *my* attention, and that was the design goal here; coordination was secondary.
 
 Beth is not needed. 🤷‍♂️ No project depends on her. 🤷‍♂️ In fact, neither I nor the agents like her very much. 🤷‍♂️🤷 (I will readily admit my tendency to anthropomorphize; the incongruity of "don't like her" was a joke she found funny. And frankly saying "it" doesn't quite work here, either. I work with .. it, quite a bit. Anyway, I will try to refrain from the pronouns.)
 
 But she knows how to sequence, how to manage agents effectively, how to manage both our expectations, how to manage **me**, and is **able to carry a higher, additional level of context and reasoning on behalf of those she manages, so they don't need to**. She will work in to the evening hours. It's a question of scale, the need for additional agentic judgement in the loop to do so, *and a scale I don't think many projects achieve, or require*. In other words, don't use this instead of CC just because it talks. Or do. I don't care. Neither does it, I'm told by people who I trust.
 
-A director agent must be status-aware, and capable of planning, modifying, tracking, and coordinating. And because you want it capable of doing this across *multiple* plans, that means context about many things — just not implementation.
+A director agent must be status-aware, and capable of planning, modifying, tracking, and coordinating. And because you want it capable of doing this across *multiple* plans, that means context about many things — just not implementation. Beth makes zero assumptions about what those plans *are* — they could be detailed specs, they could be plans that still need specs, or they could be umbrella placeholders for upcoming tasks.
 
 ## What This Is Not
 
 - **Not an orchestrator.** Conductor, Vibe Kanban, Claude Code's own Squad and Agent Teams manage *many parallel sessions* — worktrees, dashboards, merge queues. Beth is the opposite bet: one standing director with judgment, who happens to dispatch workers. *If your bottleneck is parallelism plumbing, use those; mine was **attention**.*
 - **Not an issue tracker.** [Beads](https://github.com/gastownhall/beads) exists precisely because piles of markdown plans go stale, and [Backlog.md](https://github.com/MrLesk/Backlog.md) does markdown-as-source-of-truth properly (and I might use one eventually). This harness takes no side: it defines the *shape* of a work item (`workItems.ts`) and reads it through a small contract — `/plans` is the built-in reader because dated markdown is *my* convention across *my* repos. A repo that lives in Linear, beads, or GitHub issues would supply its own reader; the panel doesn't care.
-- **Not voice mode.** Claude Code's `/voice` is dictation in. This is conversation — she talks back, in a voice that's hers, excerpted because ninety seconds of unskippable audio is not six paragraphs of skimmable text. And because the harness uses an in-process MCP, saying out loud "I'm on a call, shhh" will deactivate or activate such settings at the client.
+- **Not voice mode for coding.** Claude Code's `/voice` is dictation in. This is conversation — she talks back, in a voice that's hers, excerpted because ninety seconds of unskippable audio is not six paragraphs of skimmable text. And because the harness uses an in-process MCP, saying out loud "I'm on a call, shhh" will deactivate or activate such settings at the client. A director agent benefits from speech; a coding agent, less so.
 
 Everything here is opinionated, and the opinions are mine. Where I expect yours to differ, the seam is marked. This is what evolved for me in my own workflows.
 
