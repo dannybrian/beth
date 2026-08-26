@@ -25,6 +25,7 @@ import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { setPlanName } from './planName.ts';
+import { originAllowed } from './origin.ts';
 import { blobUrl, hasWeb } from './repoWeb.ts';
 import { listPersonas } from './personas.ts';
 
@@ -201,6 +202,11 @@ export function createServer(deps: {
     // --- API ---
     if (url.pathname.startsWith('/api/')) {
       if (req.method === 'POST') {
+        // Every write goes through here, so this is the one place the check
+        // has to live. See origin.ts for why loopback stopped being enough.
+        if (!originAllowed(req.headers.origin, req.headers.host)) {
+          return json(403, { error: 'cross-origin write refused' });
+        }
         const body = await readJson(req);
         switch (url.pathname) {
           case '/api/point': {
