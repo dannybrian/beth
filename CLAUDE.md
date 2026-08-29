@@ -95,7 +95,13 @@ leaving the roster when nothing will ever report it), `keyterms`, `greeting`, an
 `stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
 `sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `repoWeb`
 (the scp-style remote `new URL()` parses confidently wrong), and the greeting's
-onboarding offer (a nag if it repeats, silently absent if it never fires).
+onboarding offer (a nag if it repeats, silently absent if it never fires). The Scribe
+ear added four more in the same two shapes: `ear/pcm` (a resampler that drifts or
+warbles at chunk seams doesn't error — she just mishears him), `ear/scribeEngine`
+(driven by REAL captured frames from `src/ear/fixtures/`, including a live
+`auth_error` and the fatal oversized-keyterm `invalid_request`), `earHost` (two armed
+tabs would be two paid sessions; spend counted on parked audio), and `remoteEar`
+(off() sending what it held, a steal leaving a mic that looks live).
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -207,7 +213,11 @@ These cost hours. Don't rediscover them.
   replaced session is not), and the by-hand drops stay as the escape hatch (`× ` in the
   panel, `close_worker` for her). Same reasoning gives her `close_decision`: a queue with
   settled items in it is a queue you learn to ignore.
-- **The Web Speech API grew keyterms, and `docs/voice-plane.md` predates it.** That
+- **The Web Speech API grew keyterms, and `docs/voice-plane.md` predates it.**
+  (Since 2026-08-29 this whole entry describes the FALLBACK ear — the default is
+  Scribe, whose keyterms are server-side query params via `earHost.ts`, biased
+  unconditionally from the same `keyterms.ts` vocabulary. What follows still
+  governs `ui/listen.js` whenever it is the ear in force.) That
   record says a mangled project noun is "the keyterms case, and it is the signal to
   revisit [Scribe]" — no longer true on its own: Chrome now has contextual biasing
   (`recognition.phrases`, `new SpeechRecognitionPhrase(term, boost)`, verified present in
@@ -325,14 +335,32 @@ the conversation that produced it. Where things stand:
   (loopback audio, no session, no mic) and hears over `ui/listen.js` (browser
   recognition posting an ordinary turn). Speech Engine, the voice port, the tunnel, the
   singleton, the announcement queue, `speakable`, `SILENT_ACK`, `runTurn` and the cost
-  meter are all gone. Read it for the reasoning, not for work — what is left is the
-  question it ends on — Scribe — which is DEFERRED as of 2026-08-02: the Web Speech API
-  stays for now. The research is recorded there (realtime Scribe has VAD endpointing and
-  keyterms, both of which would retire patches). ⚠ Its "what would flip this" table said
-  mangled project nouns could only be fixed by Scribe; that stopped being true when Chrome
-  grew contextual biasing, and the record carries a dated correction saying so. The
-  reopening signal is now narrower: nouns still wrong WITH a boosted vocabulary in place.
-  Punctuation and VAD are untouched by biasing and remain Scribe's case.
+  meter are all gone. Read it for the reasoning, not for work. ⚠ Its "what would flip
+  this" table has two dated corrections: Chrome grew contextual biasing (2026-08-02,
+  which narrowed the Scribe case to punctuation and VAD), and the Scribe deferral was
+  LIFTED on 2026-08-29 — the reason from use was punctuation, the half biasing never
+  touched. The ear's future lives in `ear.md`; this record is history.
+- **`ear.md`** — AGREED, unbuilt (2026-08-29). Owning the capture: the page streams
+  PCM to the harness, the recogniser sits behind an `EarEngine` interface (Scribe
+  first, local later), VAD commits replace the settle window, the engine punctuates,
+  and `ui/listen.js` stays whole as the fallback. Read it for the module boundary,
+  which is the requirement that shapes everything: the speech stack — ear AND mouth —
+  becomes a liftable library with harness adapters, because Danny wants it in other
+  projects. BUILT through step 4 (2026-08-29): `src/ear/` is the liftable engine
+  (native `WebSocket`, single-use token as `?token=` — `ws` stays deleted; ⚠
+  `session_started`, not socket open, is the go signal, because errors arrive as
+  typed frames after a clean open; keyterms are repeated query params, ⚠ ≤20 chars
+  each — oversized is FATAL, so `filterKeyterms` drops loudly), `src/earHost.ts` is
+  the harness adapter (one ear, newest armer steals, spend metered at forwarding),
+  and `ui/pcm.js`/`capture.js`/`remoteEar.js` are the page half — `RemoteEar` wears
+  the Listener's exact surface so `app.js` swaps by `hello.ear`, and `degraded`
+  swaps the browser ear back in mid-conversation. `scribe` is the DEFAULT since
+  2026-08-29 (first real Chrome session worked; Danny called it earned):
+  `HARNESS_EAR=browser` opts out, a keyless harness degrades to the browser ear at
+  `hello`, and `listen.js` stays untouched as that fallback. The engine
+  round-tripped the live service VERBATIM (keyterms on; "Coliseus" without).
+  Echo/duplex is still unmeasured — parking ships. Fixtures in `src/ear/fixtures/`
+  are REAL captured frames; keep them so.
 - **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,

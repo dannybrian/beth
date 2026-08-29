@@ -135,6 +135,24 @@ export type HarnessConfig = {
    */
   keytermBoost: number;
   /**
+   * WHICH ear. 'scribe' (the default since 2026-08-29, earned in first real
+   * use) owns the capture: the page streams PCM to the harness and Scribe v2
+   * realtime recognises — punctuation, keyterms, VAD commits. See docs/ear.md.
+   * 'browser' is the Web Speech API path (ui/listen.js), kept whole as the
+   * opt-out AND the automatic fallback: a keyless harness degrades to it at
+   * `hello` (server.ts guards, so the page is never offered an ear that cannot
+   * arm), and a degraded Scribe session swaps to it mid-conversation.
+   */
+  ear: 'browser' | 'scribe';
+  /** Seconds of silence before a VAD commit. Unset means Scribe's default (1.5). */
+  earVadSilenceSecs?: number;
+  /**
+   * The STT rate for the estimate in the stats panel — same honesty contract
+   * as ttsUsdPer1kCredits: seconds are exact, dollars are this assumption,
+   * and the panel prints the assumption beside the number.
+   */
+  sttUsdPerHour: number;
+  /**
    * Reasoning effort applied while the MIC IS OPEN, then restored.
    *
    * Spoken conversation trades depth for latency; typed work keeps full effort.
@@ -283,6 +301,9 @@ export function loadConfig(): HarnessConfig {
     // 1800 was still short for Danny in practice, so 2500: the cost of waiting is
     // a beat, and the cost of firing early is half a question.
     voiceSettleMs: Number(conf('HARNESS_VOICE_SETTLE_MS') ?? 2500),
+    ear: conf('HARNESS_EAR') === 'browser' ? 'browser' : 'scribe',
+    earVadSilenceSecs: Number(conf('HARNESS_EAR_VAD_SECS')) || undefined,
+    sttUsdPerHour: Number(conf('HARNESS_STT_USD_PER_HOUR')) || 0.39,
     personal: conf('HARNESS_PERSONAL') !== 'off',
     testCmd: conf('HARNESS_TEST_CMD'),
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),

@@ -299,3 +299,33 @@ recogniser, not to change what it hears. Chrome may tie `phrases` to its on-devi
 in which case the page reports a refusal and listens without it. Reopen Scribe if the
 nouns are still wrong with a boosted vocabulary in place — that, not the bare symptom, is
 now the signal.
+
+### Update, 2026-08-29: the deferral is lifted
+
+The reason from use arrived, and it was not the one the table above waited for. Nouns
+were biasing's half; the wish that accumulated with use was **punctuation and general
+intelligibility** — the half this record always said only owning the capture could fix
+("the durable fix is a recogniser that punctuates, not a longer table").
+
+The landscape was re-checked before deciding, because a year had passed:
+
+- **Scribe v2 realtime is GA** — websocket, sub-150 ms partials, VAD commit strategy,
+  keyterms as a first-class (metered) feature, roughly $0.28–0.39/hr.
+- **Local caught up more than expected.** Kyutai STT streams with punctuation and a
+  *semantic VAD* (it predicts that the speaker is done — the thing the settle window
+  approximates), with MLX builds for this Mac. Parakeet TDT v3 via MLX is
+  top-of-leaderboard accurate, punctuated, and 30x realtime. macOS 26's
+  SpeechAnalyzer is on-device, punctuated, and would mean a compiled Swift sidecar.
+- The privacy frame inverted along the way: today's path already ships audio to
+  Google as a Chrome side effect. Scribe moves it to the vendor already trusted with
+  her voice; only local ships it nowhere.
+
+Decided: **own the capture once, put the engine behind an interface, run Scribe
+first, and keep this file's ear as the fallback** — which retires the one real
+argument against Scribe recorded above, because an outage now flips a flag instead
+of taking voice input down. The settle window, the dictation table, and the biasing
+probe all retire on the new path and survive on this one.
+
+The design — including the requirement that the speech stack become a liftable
+library, wanted beyond this harness — is **`docs/ear.md`**. This file stays the
+record of leaving Speech Engine; the ear's future continues there.

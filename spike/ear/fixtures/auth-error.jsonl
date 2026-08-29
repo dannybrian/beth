@@ -1,0 +1,5 @@
+{"t":1788027688253,"dir":"meta","url":"wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&token=<token>&audio_format=pcm_16000&commit_strategy=vad"}
+{"t":1788027688356,"dir":"event","event":"open"}
+{"t":1788027688356,"dir":"send","bytes":8000}
+{"t":1788027688357,"dir":"recv","frame":{"message_type":"auth_error","error":"You must be authenticated to use this endpoint."}}
+{"t":1788027688397,"dir":"event","event":"close","code":1000,"reason":""}

@@ -1,0 +1,5 @@
+{"t":1788027665782,"dir":"meta","url":"wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&token=<token>&audio_format=pcm_16000&commit_strategy=vad&keyterms=%5B%22pnpm%22%2C%22colyseus%22%2C%22beadgame%22%2C%22tulito%22%5D"}
+{"t":1788027665847,"dir":"event","event":"open"}
+{"t":1788027665849,"dir":"send","bytes":8000}
+{"t":1788027665850,"dir":"recv","frame":{"message_type":"invalid_request","error":"Each keyterm must be at most 20 characters. '[\"pnpm\",\"colyseus\",\"beadgame\",\"tulito\"]' is 39 characters."}}
+{"t":1788027665881,"dir":"event","event":"close","code":1008,"reason":"invalid_request"}

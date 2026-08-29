@@ -26,6 +26,8 @@ import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { setPlanName } from './planName.ts';
 import { originAllowed } from './origin.ts';
+import { EarHost } from './earHost.ts';
+import { ScribeEngine } from './ear/scribeEngine.ts';
 import { blobUrl, hasWeb } from './repoWeb.ts';
 import { listPersonas } from './personas.ts';
 
@@ -105,6 +107,28 @@ export function createServer(deps: {
   const streams = new Set<number>();
   let speakerId = 0;
 
+  /**
+   * The Scribe ear (docs/ear.md): the page streams PCM here, the harness holds
+   * the recognition session. Constructed even when HARNESS_EAR is 'browser' —
+   * arming is what costs, and a host that exists is one the page can be
+   * offered on a later `hello` without a restart dance.
+   *
+   * The vocabulary deliberately ignores cfg.speechBiasing: that switch guards
+   * CHROME's biasing, which is fragile enough to be opt-in. Scribe keyterms
+   * are server-side, proven (the spike's with/without diff is verbatim vs
+   * "Coliseus"), and the engine reports anything its limits drop.
+   */
+  const earHost = new EarHost({
+    engine: cfg.elevenLabsApiKey
+      ? new ScribeEngine({ apiKey: cfg.elevenLabsApiKey, vadSilenceSecs: cfg.earVadSilenceSecs })
+      : null,
+    unavailable: 'no ELEVENLABS_API_KEY — the Scribe ear needs one',
+    vocabulary: () =>
+      keyterms({ configured: cfg.keyterms, live: work.live().map((i) => i.spoken), mined: deps.mined }).terms,
+    publish: (m) => bus.publish(m),
+    usdPerHour: cfg.sttUsdPerHour,
+  });
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${cfg.port}`);
     const json = (code: number, body: unknown) => {
@@ -159,6 +183,11 @@ export function createServer(deps: {
         settleMs: cfg.voiceSettleMs,
         keyterms: biasing(),
         keytermBoost: cfg.keytermBoost,
+        // Which ear this harness has. 'scribe' only when it can actually be
+        // armed — a page offered an ear with no key behind it gets a mic
+        // button that fails on the first click, which is worse than the
+        // browser path it would have had.
+        ear: cfg.ear === 'scribe' && cfg.elevenLabsApiKey ? 'scribe' : 'browser',
         streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
@@ -206,6 +235,18 @@ export function createServer(deps: {
         // has to live. See origin.ts for why loopback stopped being enough.
         if (!originAllowed(req.headers.origin, req.headers.host)) {
           return json(403, { error: 'cross-origin write refused' });
+        }
+        // Audio is the one RAW body — 250ms parcels of 16k PCM, four a second
+        // while the mic is open, so it skips the JSON reader and answers
+        // before the switch. Ownership is checked in earHost: a straggler
+        // parcel from a tab that lost the mic drops silently.
+        if (url.pathname === '/api/ear/audio') {
+          const chunks: Buffer[] = [];
+          for await (const c of req) chunks.push(c as Buffer);
+          const buf = Buffer.concat(chunks);
+          const even = buf.length - (buf.length % 2);
+          earHost.audio(Number(url.searchParams.get('stream')), new Int16Array(buf.buffer, buf.byteOffset, even / 2));
+          return json(200, { ok: true });
         }
         const body = await readJson(req);
         switch (url.pathname) {
@@ -387,6 +428,27 @@ export function createServer(deps: {
             await session.duckEffort(on ? cfg.voiceEffort : null).catch(() => {});
             return json(200, { ok: true, effort: on ? cfg.voiceEffort : null });
           }
+          case '/api/ear': {
+            // Arm or release the Scribe ear for one tab. ONE ear per harness —
+            // arming steals from a previous owner (earHost tells the loser) the
+            // way focus claims the mouth. Effort ducking is not here: the page
+            // still calls /api/listening on the same state change it always did.
+            const id = Number(body.streamId);
+            if (!streams.has(id)) return json(400, { ok: false, reason: 'unknown stream' });
+            if (!body.on) {
+              earHost.disarm(id);
+              return json(200, { ok: true });
+            }
+            const armed = earHost.arm(id);
+            return json(armed.ok ? 200 : 409, armed);
+          }
+          case '/api/ear/abandon': {
+            // "Don't send that", by voice. The utterance lives in the Scribe
+            // session, so the drop happens where the words are — the page
+            // clears its composer only after this is on the wire.
+            earHost.abandon(Number(body.streamId));
+            return json(200, { ok: true });
+          }
           case '/api/clear': {
             await session.clear();
             return json(200, { ok: true });
@@ -501,6 +563,9 @@ export function createServer(deps: {
           // already re-reads it on every open, and speech spend is exactly the
           // kind of number you go looking for rather than watch.
           speech: deps.speakOut.spend(),
+          // And the ear's half: seconds exact, dollars an estimate with the
+          // assumed rate alongside. Zero for the browser ear, which is free.
+          stt: earHost.spend(),
         });
       }
       if (url.pathname === '/api/context') {

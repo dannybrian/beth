@@ -1,0 +1,57 @@
+{"t":1788027666185,"dir":"meta","url":"wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&token=<token>&audio_format=pcm_16000&commit_strategy=vad&keyterms=pnpm&keyterms=colyseus&keyterms=beadgame&keyterms=tulito"}
+{"t":1788027666288,"dir":"event","event":"open"}
+{"t":1788027666288,"dir":"send","bytes":8000}
+{"t":1788027666289,"dir":"recv","frame":{"message_type":"session_started","session_id":"bc895fdf02c84cdb857eef562f44f0e4","config":{"sample_rate":16000,"audio_format":"pcm_16000","language_code":null,"secondary_languages":[],"timestamps_granularity":"word","vad_commit_strategy":true,"vad_silence_threshold_secs":1.5,"vad_threshold":0.4,"min_speech_duration_ms":100,"min_silence_duration_ms":100,"max_tokens_to_recompute":5,"model_id":"scribe_v2_realtime","disable_logging":false,"include_timestamps":false,"include_language_detection":false,"filter_background_audio":false,"keyterms":["pnpm","colyseus","beadgame","tulito"],"no_verbatim":false,"entity_detection":null}}}
+{"t":1788027666540,"dir":"send","bytes":8000}
+{"t":1788027666792,"dir":"send","bytes":8000}
+{"t":1788027667044,"dir":"send","bytes":8000}
+{"t":1788027667296,"dir":"send","bytes":8000}
+{"t":1788027667547,"dir":"send","bytes":8000}
+{"t":1788027667800,"dir":"send","bytes":8000}
+{"t":1788027668052,"dir":"send","bytes":8000}
+{"t":1788027668201,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the set"}}
+{"t":1788027668201,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period."}}
+{"t":1788027668305,"dir":"send","bytes":8000}
+{"t":1788027668558,"dir":"send","bytes":8000}
+{"t":1788027668810,"dir":"send","bytes":8000}
+{"t":1788027669063,"dir":"send","bytes":8000}
+{"t":1788027669212,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnp"}}
+{"t":1788027669316,"dir":"send","bytes":8000}
+{"t":1788027669568,"dir":"send","bytes":8000}
+{"t":1788027669821,"dir":"send","bytes":8000}
+{"t":1788027670072,"dir":"send","bytes":8000}
+{"t":1788027670216,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus?"}}
+{"t":1788027670325,"dir":"send","bytes":8000}
+{"t":1788027670577,"dir":"send","bytes":8000}
+{"t":1788027670829,"dir":"send","bytes":8000}
+{"t":1788027671082,"dir":"send","bytes":8000}
+{"t":1788027671221,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus?"}}
+{"t":1788027671335,"dir":"send","bytes":8000}
+{"t":1788027671587,"dir":"send","bytes":8000}
+{"t":1788027671839,"dir":"send","bytes":8000}
+{"t":1788027672091,"dir":"send","bytes":8000}
+{"t":1788027672225,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus? Open bead"}}
+{"t":1788027672343,"dir":"send","bytes":8000}
+{"t":1788027672595,"dir":"send","bytes":8000}
+{"t":1788027672848,"dir":"send","bytes":8000}
+{"t":1788027673034,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus? Open beadgame, then"}}
+{"t":1788027673101,"dir":"send","bytes":8000}
+{"t":1788027673353,"dir":"send","bytes":8000}
+{"t":1788027673606,"dir":"send","bytes":8000}
+{"t":1788027673858,"dir":"send","bytes":6688}
+{"t":1788027674039,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus? Open beadgame, then run the tests."}}
+{"t":1788027674109,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027674362,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027674614,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027674867,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027675047,"dir":"recv","frame":{"message_type":"partial_transcript","text":"Let's check the settle period. Does pnpm work with colyseus? Open beadgame, then run the tests."}}
+{"t":1788027675119,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027675371,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027675438,"dir":"recv","frame":{"message_type":"committed_transcript","text":"Let's check the settle period. Does pnpm work with colyseus? Open beadgame, then run the tests."}}
+{"t":1788027675623,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027675875,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027676127,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027676379,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027676630,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027676882,"dir":"send","bytes":8000,"silence":true}
+{"t":1788027677160,"dir":"event","event":"close","code":1000,"reason":""}

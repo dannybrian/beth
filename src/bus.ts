@@ -73,6 +73,8 @@ export type UIMessage =
       // biasing is off — see keyterms.ts.
       keyterms: string[];
       keytermBoost: number;
+      /** Which ear this harness offers: the browser recogniser, or Scribe. */
+      ear: 'browser' | 'scribe';
       // Which connection this is, so a page can claim the mouth when it is the
       // one you are looking at. See the speaker election in server.ts.
       streamId: number;
@@ -122,6 +124,12 @@ export type UIMessage =
   // no words: the transcript already has them, and shipping them twice invites
   // the page to render a copy. Never replayed — see publish().
   | { type: 'speak'; id: string; chars: number }
+  /**
+   * The Scribe ear (earHost.ts). `owner` is the SSE stream id of the tab whose
+   * mic is armed — partials render only where the mic is, and a steal tells
+   * the tab that lost it. Not replayed: a partial is a moment, not history.
+   */
+  | { type: 'ear'; state: 'live' | 'partial' | 'commit' | 'degraded' | 'off'; owner: number; text?: string; detail?: string }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
@@ -164,7 +172,10 @@ export class ConversationBus {
       m.type !== 'work' &&
       m.type !== 'pointing' &&
       m.type !== 'speak' &&
-      m.type !== 'tests'
+      m.type !== 'tests' &&
+      // A partial transcript is a moment; replaying an hour of them into a
+      // reconnecting tab would render someone's morning into the composer.
+      m.type !== 'ear'
     ) {
       this.history.push(m);
       if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();

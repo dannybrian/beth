@@ -227,22 +227,27 @@ Heading was her idea. Text here works like any chat, with three differences:
   the suites", and hearing the report when it lands. It's something I'm sure other harnesses have done, and that some vendors provide, or will — it's something that benefits a director harness more than any other dev workflow would, in my opinion.
 - **I'm still learning how best to use it.** I have to speak differently to Beth; it's easy to go down a rathole, or ask Beth to do something I should probably be doing with Claude Code (e.g. an implementation I haven't thought through or prepared for) or myself. Then something comes up in another workstream and my director is blocked on a rathole with me, and time is lost. So, Beth works best when plans (and if complex, implementation plans too) are written elsewhere, since those tend to require her focus.
 
-**Voice is local end to end.** The browser recognizes what you say
-(`ui/listen.js`) and posts an ordinary turn; Beth's replies stream back over
-loopback as audio (`src/speakOut.ts`). Nothing dials in, nothing tunnels,
-nothing is billed while idle, one listener bound to 127.0.0.1. Chrome only —
-the Web Speech API is not in Safari or Firefox. Speech is an *excerpt* (the
+**Voice stays on loopback.** The page captures your microphone and streams it
+to the harness (`ui/capture.js`), which recognises over ElevenLabs Scribe v2
+realtime (`src/ear/`) — punctuated, cased, biased toward the project's own
+nouns, with utterances ended by real voice-activity detection instead of a
+guessed pause. Beth's replies stream back the same way as audio
+(`src/speakOut.ts`). Nothing dials in, nothing tunnels, nothing is billed
+while idle, one listener bound to 127.0.0.1; listening meters by the second
+(~$0.39/hr, itemised in the stats panel). Without an `ELEVENLABS_API_KEY` —
+or with `HARNESS_EAR=browser`, or when Scribe degrades mid-conversation — the
+ear falls back to Chrome's free Web Speech path (`ui/listen.js`): no
+punctuation, audio to Google, Chrome only. Speech out is an *excerpt* (the
 page skims in seconds what audio cannot skip), the mic ducks reasoning effort
-for latency, a settle window keeps half-sentences from becoming turns, and an
-autosend toggle turns conversation into dictation when you want to edit before
-sending. `docs/voice-plane.md` has the full story, including everything this
-replaced.
+for latency, and an autosend toggle turns conversation into dictation when you
+want to edit before sending. `docs/ear.md` and `docs/voice-plane.md` have the
+full story, including everything this replaced.
 
 Beth speaks in whatever voice the persona names (`voice:`), falling back to
 `HARNESS_VOICE_ID`; the picker in the strip auditions the account's voices
-live without writing anything down. Needs an `ELEVENLABS_API_KEY` with the
-**Text to Speech** permission — without it the harness runs text-only and the
-mic button explains what is missing.
+live without writing anything down. The key needs the **Text to Speech**
+permission — without a key the harness runs text-only and the mic button
+explains what is missing.
 
 ## Personas
 

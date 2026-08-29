@@ -1,6 +1,7 @@
 // Minimal vanilla UI — no framework, no build step. The plan calls for
 // "Lit/vanilla"; at this size vanilla DOM keeps the dependency count at zero.
 import { Listener, listenSupported } from '/listen.js';
+import { RemoteEar } from '/remoteEar.js';
 import { createSpeaker } from '/speaker.js';
 import { createWirePanel } from '/wire.js';
 import { addRereadButtons } from '/reread.js';
@@ -920,6 +921,10 @@ const handlers = {
     renderVoice(m.status, m.detail);
   },
   speak: (m) => spk.enqueue(m.id),
+  // The Scribe ear's frames — partials, commits, a steal, a degrade. RemoteEar
+  // filters by owner and translates into the same composer callbacks the
+  // browser ear uses; a page running listen.js has no onEar and ignores these.
+  ear: (m) => voice?.onEar?.(m),
   tests: (m) => renderTests(m.state),
   event: (m) => {
     renderEvent(m);
@@ -1277,6 +1282,18 @@ function renderStats() {
     );
   }
 
+  // The ear's half of the bill, same honesty contract: seconds are exact —
+  // counted where audio is forwarded to Scribe — and the dollars carry their
+  // assumed rate beside them. Absent entirely on a browser-ear harness, where
+  // listening is free and a $0.0000 row would only invite the question.
+  const stt = planLimits?.stt;
+  if (stt?.seconds) {
+    box.append(el('h3', null, 'Listening'));
+    box.append(statRow('audio', `${stt.seconds}s`));
+    box.append(statRow('cost', `≈$${stt.usd.toFixed(4)}`));
+    box.append(el('div', 'snote', `scribe_v2_realtime · $${stt.usdPerHour}/hr assumed`));
+  }
+
   // Additive and server-driven: render the windows that are actually present
   // rather than the ones the shape says might be.
   box.append(el('h3', null, `Plan${planLimits?.subscription ? ` · ${planLimits.subscription}` : ''}`));
@@ -1508,35 +1525,26 @@ function setDirectorName(name) {
  * window the server is configured with — one knob for both ends.
  */
 let voice = null;
+/** Which ear this page runs — 'browser' or 'scribe'. Set at `hello`. */
+let earKind = 'browser';
 
 function paintVoiceButton(state, detail) {
   voiceBtn.className = `voice ${state}`;
   paintPlaceholder(state);
   voiceBtn.title =
     (state === 'listening'
-      ? 'Listening. Recognition is local, nothing is billed, and there is no channel to lose.'
+      ? earKind === 'scribe'
+        ? 'Listening over Scribe — punctuated, biased to this project, metered by the second.'
+        : 'Listening. Recognition is local, nothing is billed, and there is no channel to lose.'
       : state === 'error'
         ? (detail ?? 'voice error')
         : 'Voice off') + '  (keypad 0)';
   if (detail) console.log('[voice]', detail);
 }
 
-function buildVoice(hello) {
-  if (voice) return;
-  if (!listenSupported) {
-    // Say so rather than presenting a mic button that cannot work.
-    paintVoiceButton('error', 'This browser has no speech recognition — Chrome does.');
-    voiceBtn.disabled = true;
-    // Nothing to hold back, so it is a control over nothing.
-    autosendBtn.disabled = true;
-    return;
-  }
-  voice = new Listener({
-    settleMs: hello.settleMs,
-    // The project's own nouns, assembled server-side — the harness knows what
-    // this repo is called and what is on the board; the page only speaks them.
-    phrases: hello.keyterms ?? [],
-    boost: hello.keytermBoost,
+/** The Listener contract, shared by both ears — see remoteEar.js for why. */
+function voiceCallbacks() {
+  return {
     onState: (state, detail) => {
       paintVoiceButton(state, detail);
       // Reasoning effort follows the MIC. It used to follow a paid session opening
@@ -1564,7 +1572,50 @@ function buildVoice(hello) {
     },
     isSpeaking: spk.isSpeaking,
     stopSpeaking: spk.stop,
+  };
+}
+
+function buildBrowserListener(hello) {
+  return new Listener({
+    settleMs: hello.settleMs,
+    // The project's own nouns, assembled server-side — the harness knows what
+    // this repo is called and what is on the board; the page only speaks them.
+    phrases: hello.keyterms ?? [],
+    boost: hello.keytermBoost,
+    ...voiceCallbacks(),
   });
+}
+
+function buildVoice(hello) {
+  if (voice) return;
+  earKind = hello.ear ?? 'browser';
+  if (earKind === 'scribe') {
+    voice = new RemoteEar({
+      streamId: () => myStreamId,
+      ...voiceCallbacks(),
+      // The engine gave up — quota, outage, a bad key. The mic stays a mic:
+      // swap in the browser ear mid-conversation and say so, once.
+      onDegraded: (detail) => {
+        entry('activity', (n) => (n.textContent = `🎙 Scribe ear degraded (${detail ?? 'unknown'}) — using browser recognition`));
+        earKind = 'browser';
+        const wasOn = voice?.state !== 'off';
+        voice = listenSupported ? buildBrowserListener(hello) : null;
+        if (voice && wasOn) void voice.arm().catch((e) => paintVoiceButton('error', String(e)));
+        else paintVoiceButton(voice ? 'off' : 'error', voice ? undefined : 'no fallback recogniser');
+      },
+    });
+    paintVoiceButton(voice.state);
+    return;
+  }
+  if (!listenSupported) {
+    // Say so rather than presenting a mic button that cannot work.
+    paintVoiceButton('error', 'This browser has no speech recognition — Chrome does.');
+    voiceBtn.disabled = true;
+    // Nothing to hold back, so it is a control over nothing.
+    autosendBtn.disabled = true;
+    return;
+  }
+  voice = buildBrowserListener(hello);
   paintVoiceButton(voice.state);
 }
 
