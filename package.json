@@ -4,7 +4,7 @@
   "description": "A conversational harness for a standing director on your repo \u2014 a long-lived Claude Agent SDK session with a voice, a memory, and your plans on the panel beside it.",
   "scripts": {
     "start": "node src/main.ts",
-    "test": "node --test src/*.test.ts src/ear/*.test.ts"
+    "test": "node --test src/*.test.ts src/ear/*.test.ts src/mouth/*.test.ts"
   },
   "keywords": [],
   "author": "Danny Brian",

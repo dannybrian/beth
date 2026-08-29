@@ -91,20 +91,22 @@ wanted beyond beth. An audit of where the mouth side already stands:
 | `audioTags.ts` → `markdown.ts` | clean as a pair — the text pipeline lifts together, tested |
 | `ui/speaker.js` (playback queue) | clean — stubbed `<audio>`, tested |
 | `keyterms.ts` | deliberately NOT in the boundary — it knows about plans and repos |
-| `src/speakOut.ts` | **the one entanglement** — imports `HarnessConfig` and publishes on the bus |
+| `src/speakOut.ts` | ~~the one entanglement~~ — CUT 2026-08-29: core in `src/mouth/`, this file is the adapter |
 
-So "make the stack modular" is mostly ALREADY TRUE, and the remaining work is one
-seam: split `speakOut.ts` into a core mouth — hold queue, TTS stream, voice/model
-resolution, tag stripping, the character meter — that takes injected credentials
-and an `onLine` callback, and a thin harness adapter that binds config and bus.
-The existing `speakOut` tests (the whole speech plane, billing included) move to
-the core and get SIMPLER, because the bus stub they currently need becomes a
-callback.
+So "make the stack modular" is now TRUE throughout: `src/mouth/mouth.ts` holds
+the core (hold queue, TTS stream, voice/model resolution, tag stripping, the
+character meter) behind injected credentials and an `onLine` callback, and
+`speakOut.ts` binds config and bus around it — the same shape as
+`src/ear/` + `earHost.ts`. The tests moved with the code and got SIMPLER,
+because the bus stub became a callback, as predicted above.
 
 End state, if it earns itself: a `speech/` directory whose contents another
 project copies whole — mouth core, ear core, text pipeline, and the two browser
-modules — with beth's adapters left behind. That reorganisation is cheap once the
-seams are cut and pointless before, so the seams come first.
+modules — with beth's adapters left behind. The seams are cut now, so that
+reorganisation is a rename whenever the second project actually reaches for it.
+Today the lift-out set is: `src/mouth/` + `src/ear/` + `audioTags.ts` +
+`markdown.ts` + `spoken.ts` + `ui/pcm.js` + `ui/pcm-worklet.js` +
+`ui/capture.js` + `ui/remoteEar.js` + `ui/speaker.js`.
 
 ## The engine interface
 
@@ -245,13 +247,41 @@ rather than as an error:
    it to retire (the dictation table and settle window are Listener-internal
    and the fallback path keeps them), and the Listening bill renders in the
    stats panel beside Speech. Done by construction.
-5. **The mouth seam** (independent, do whenever convenient): extract the
-   `speakOut` core from its config/bus binding, move its tests onto the core.
-   Pure refactor of a working plane — behaviour changes are a bug.
-6. **Later, separately, if wanted:** a local engine behind the same interface.
-   Kyutai STT is the one to spike first — streaming, punctuated, and its semantic
-   VAD speaks this interface's `onCommit` natively. That it is a model download
-   and a runtime is exactly why it is last and not first.
+5. **The mouth seam.** DONE 2026-08-29 — `src/mouth/mouth.ts` is the core
+   (held lines, TTS stream, voice resolution + its ⚠ setVoice cache drop, tag
+   stripping, the bill) with a `MouthConfig` and one `onLine` callback where
+   config and bus used to be; `src/speakOut.ts` is now the adapter (the
+   subscription that IS the plane, the speech level + spoken.ts excerpting,
+   every publish), surface unchanged. The tests split the same way, and the
+   core's got simpler exactly as predicted — the bus stub became a callback.
+   One trap the split surfaced, now pinned by a test: main.ts passes
+   `setVoice`/`speechLevel` around DETACHED, so they stay arrow properties —
+   plain methods would lose `this` and fail only at persona-switch time.
+6. **A local engine behind the same interface — DEFERRED 2026-08-29, and on
+   purpose.** Kyutai STT is the one to spike when a reason arrives: streaming,
+   punctuated, and its semantic VAD speaks this interface's `onCommit`
+   natively. Decided with Danny the day the Scribe ear shipped: the honest
+   hope was never "we don't need Scribe" — Kyutai has NO keyterms, and the
+   spike proved keyterms are the difference between verbatim and "Coliseus",
+   in a conversation made mostly of project nouns. Offline is hollow too: the
+   ear feeds a director who is herself a cloud session. What a local engine
+   would actually buy is narrower, so the reopening signals are recorded here,
+   the way the Scribe deferral was, so recognising one does not cost a second
+   afternoon:
+
+   | Signal from use | What it is the case for |
+   | --- | --- |
+   | VAD commits fire mid-thought (an "uh…" pause commits) or feel laggy, and `HARNESS_EAR_VAD_SECS` cannot tune it away | **semantic VAD** — the one capability where Kyutai beats Scribe rather than matching it locally: it predicts "is he done", not "is it quiet" |
+   | a Scribe outage, quota wall, or price/policy change bites during real work | **the insurance case** — a local engine makes the fallback as good as the primary, instead of degrading to the browser ear |
+   | another project adopts the ear and cannot ship audio off-box, has no ElevenLabs account, or runs volume where $0.39/hr matters | **the reuse case** — the constraint-bearing project, not beth, is what justifies the model download |
+
+   Against, standing: a ~1GB model plus an MLX or Rust runtime to spawn,
+   health-check, and explain when it breaks — the operational burden this
+   harness has structurally avoided — and the nouns regression, with no
+   biasing knob to fix it (a post-hoc vocabulary correction pass is
+   conceivable and unproven). A second engine would also prove `EarEngine`
+   is not merely Scribe-shaped, but that alone never justifies the spike —
+   a stub proves an interface; only a constraint justifies a model.
 
 ## Open questions
 

@@ -78,8 +78,9 @@ pnpm test        # node --test src/*.test.ts
 ```
 
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
-`spokenName`, the `plansReader` parsers, the `workIndex` watcher, `speakOut` — which is now
-the whole speech plane, billing included — the `testRunner` detectors and failure parsers,
+`spokenName`, the `plansReader` parsers, the `workIndex` watcher, `mouth` — the speech-out
+core, billing included — and `speakOut`, its bus adapter (⚠ whose `setVoice`/`speechLevel`
+are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers,
 and `listen`, which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be
 tested at all; `speaker` (the playback queue against a stubbed `<audio>` — a wedged queue
 looks like her going quiet, a deliberate stop reported as an error looks like a bug) and
@@ -346,7 +347,10 @@ the conversation that produced it. Where things stand:
   and `ui/listen.js` stays whole as the fallback. Read it for the module boundary,
   which is the requirement that shapes everything: the speech stack — ear AND mouth —
   becomes a liftable library with harness adapters, because Danny wants it in other
-  projects. BUILT through step 4 (2026-08-29): `src/ear/` is the liftable engine
+  projects. BUILT through step 5 (2026-08-29) — the mouth seam included:
+  `src/mouth/mouth.ts` is the speech-out core (held lines, TTS, voice resolution,
+  the bill) behind injected credentials and one `onLine` callback, with
+  `speakOut.ts` as its config/bus adapter, mirroring how `src/ear/` is the liftable engine
   (native `WebSocket`, single-use token as `?token=` — `ws` stays deleted; ⚠
   `session_started`, not socket open, is the go signal, because errors arrive as
   typed frames after a clean open; keyterms are repeated query params, ⚠ ≤20 chars
@@ -360,7 +364,10 @@ the conversation that produced it. Where things stand:
   `hello`, and `listen.js` stays untouched as that fallback. The engine
   round-tripped the live service VERBATIM (keyterms on; "Coliseus" without).
   Echo/duplex is still unmeasured — parking ships. Fixtures in `src/ear/fixtures/`
-  are REAL captured frames; keep them so.
+  are REAL captured frames; keep them so. Step 6 (a local Kyutai engine) is
+  DEFERRED with its reopening signals recorded in the doc — do not spike it
+  without one from use; the hope was never "we don't need Scribe" (Kyutai has no
+  keyterms, and keyterms are the whole ballgame).
 - **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
   defensively), and the test monitor has the top right. Read it for the parser lessons,
