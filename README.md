@@ -352,7 +352,7 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turns; model/effort/permission/persona switches |
 | `askgate.ts` | `canUseTool` — questions pend, everything else becomes an approve/deny card |
-| `tools.ts` | In-process MCP: `say`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
+| `tools.ts` | In-process MCP: `say`, `show`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
 | `speakOut.ts` / `spoken.ts` / `audioTags.ts` | The speech plane: what is said, held, streamed, billed |
@@ -365,6 +365,7 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 | `directorRole.ts` / `directorName.ts` | Shadow vs director; what to call the director |
 | `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` | Transport, replay, events, queues |
 | `keyterms.ts` / `links.ts` / `markdown.ts` / `activity.ts` | Vocabulary, file links as offsets, span overlays, activity lines |
+| `showImage.ts` | Proving an image path before `/api/image` serves it or `show` renders it |
 
 `docs/` holds design records — the reasoning behind the voice plane, the status
 surface, personal context, the plans panel, and `/director-skills` — written so

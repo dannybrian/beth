@@ -63,11 +63,24 @@ function openInEditor(link) {
   window.location.href = `vscode://file${abs}${link.line ? `:${link.line}` : ''}`;
 }
 
+/** A proven file link that is a picture. An image is looked at, not edited. */
+const IMAGE_LINK = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
+
 function linkNode(link, label) {
   // `label` is optional: inside a message body the anchor's contents are built
   // from the range tree below, because a link may itself contain formatting.
   const a = el('a', `filelink ${link.kind}`, label);
   a.href = '#';
+  // The server proved this resolves, so an image path gets the lightbox rather
+  // than VSCode — she does not even need the `show` tool for a casual mention.
+  if (link.kind === 'file' && IMAGE_LINK.test(link.path)) {
+    a.title = `${link.path}\nClick to view`;
+    a.onclick = (e) => {
+      e.preventDefault();
+      openLightbox(link.path);
+    };
+    return a;
+  }
   a.title =
     link.kind === 'plan'
       ? `${link.path}\nClick to open in VSCode · ${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}click to point Beth at it`
@@ -385,9 +398,28 @@ function renderDecision(d) {
   return n;
 }
 
+/** A worker card — shared by the side panel and the queue overlay. */
+function renderWorker(w) {
+  const n = el('div', 'item running');
+  n.append(el('div', null, w.description));
+  const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
+  // A worker that never reported back sits here forever with the dot lit
+  // behind it. One click to say "that one is not running".
+  const x = el('button', 'dismiss', '×');
+  x.title = 'Not running any more — drop it from the roster';
+  x.onclick = () => post('/api/close-worker', { taskId: w.taskId });
+  meta.append(x);
+  n.append(meta);
+  return n;
+}
+
 function renderPending(m) {
   setSectionCounts(m.decisions.length, m.workers.length);
   decisionsWaiting = m.decisions.length;
+  // The overlay renders the same records at full size; keep it in step when it
+  // is up, from the same message the panel repaints from.
+  lastPending = m;
+  if (pendingOverlayOpen) renderPendingOverlay();
 
   // ⚠️ Only touch the DOM when the LIST changed. Most `pending` messages are about
   // something else entirely — a worker started, a worker finished — and repainting
@@ -417,24 +449,114 @@ function renderPending(m) {
   const wsig = m.workers.map((w) => `${w.taskId}:${w.startedAt}`).join(',');
   if (wsig === workerSig) return;
   workerSig = wsig;
-  keepingFocus(wk, () =>
-    wk.replaceChildren(
-      ...m.workers.map((w) => {
-        const n = el('div', 'item running');
-        n.append(el('div', null, w.description));
-        const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
-        // A worker that never reported back sits here forever with the dot lit
-        // behind it. One click to say "that one is not running".
-        const x = el('button', 'dismiss', '×');
-        x.title = 'Not running any more — drop it from the roster';
-        x.onclick = () => post('/api/close-worker', { taskId: w.taskId });
-        meta.append(x);
-        n.append(meta);
-        return n;
-      })
-    )
-  );
+  keepingFocus(wk, () => wk.replaceChildren(...m.workers.map(renderWorker)));
 }
+
+// --- shown images and the queue overlay --------------------------------------
+//
+// Beth's `show` tool puts things on the screen: a figure in the transcript
+// (replayed — it is transcript), a pop over the page (not replayed, and sent
+// only to the elected speaker tab — "look at this" belongs on the screen Danny
+// is looking at), or the pending queue at full size. Both overlays are the
+// stats panel's species: bigger glances, not dialogs — Escape and a click off
+// the content dismiss them.
+
+const imageUrl = (path) => `/api/image?path=${encodeURIComponent(path)}`;
+
+let lightboxOpen = false;
+
+function openLightbox(path, caption) {
+  const img = $('lightbox').querySelector('img');
+  img.src = imageUrl(path);
+  img.alt = caption || path;
+  $('lightbox').querySelector('figcaption').textContent = caption || path;
+  $('lightbox').hidden = false;
+  lightboxOpen = true;
+}
+
+function closeLightbox() {
+  $('lightbox').hidden = true;
+  // Drop the src so a large image is not kept alive behind a hidden node.
+  $('lightbox').querySelector('img').removeAttribute('src');
+  lightboxOpen = false;
+}
+$('lightbox').onclick = closeLightbox;
+
+function renderShow(m) {
+  if (m.surface === 'pending') return void openPendingOverlay();
+  if (!m.image) return;
+  const { path, caption } = m.image;
+  entry('show', (n) => {
+    const fig = el('figure', 'shown');
+    const img = el('img');
+    img.src = imageUrl(path);
+    img.alt = caption || path;
+    img.loading = 'lazy';
+    img.title = `${path} — click to view large`;
+    img.onclick = () => openLightbox(path, caption);
+    // A path the server cannot serve after all (the file left the repo since
+    // this replayed) must say so, not render as a mysterious gap.
+    img.onerror = () => fig.replaceChildren(el('div', 'meta', `⚠ could not load ${path}`));
+    fig.append(img);
+    if (caption) fig.append(el('figcaption', null, caption));
+    n.append(fig);
+  });
+  if (m.pop) openLightbox(path, caption);
+}
+
+/**
+ * The queue, full size. The side panel's cards squeezed into 34vh are fine to
+ * glance at and miserable to WORK: context clipped, options below the fold,
+ * scrolling inside a scrolling column. This renders the same immutable records
+ * (renderDecision — fresh nodes, the panel's cache keeps its own) with room to
+ * read and answer them.
+ */
+let pendingOverlayOpen = false;
+let lastPending = { decisions: [], workers: [] };
+/** What the overlay last built, so a worker heartbeat does not rebuild a card mid-answer. */
+let overlaySig = null;
+
+function renderPendingOverlay() {
+  const sig = `${lastPending.decisions.map((d) => d.id).join(',')}|${lastPending.workers.map((w) => w.taskId).join(',')}`;
+  if (sig === overlaySig) return;
+  overlaySig = sig;
+  const sheet = $('pending-sheet');
+  keepingFocus(sheet, () => {
+    const kids = [el('h2', null, 'Pending')];
+    if (!lastPending.decisions.length) kids.push(el('div', 'meta', 'Nothing waiting.'));
+    for (const d of lastPending.decisions) {
+      const n = renderDecision(d);
+      n.classList.add('open'); // full size is the point — no second unfold
+      kids.push(n);
+    }
+    if (lastPending.workers.length) {
+      kids.push(el('h2', null, 'Workers'));
+      for (const w of lastPending.workers) kids.push(renderWorker(w));
+    }
+    sheet.replaceChildren(...kids);
+  });
+}
+
+function openPendingOverlay() {
+  overlaySig = null;
+  renderPendingOverlay();
+  $('pending-overlay').hidden = false;
+  pendingOverlayOpen = true;
+}
+
+function closePendingOverlay() {
+  $('pending-overlay').hidden = true;
+  pendingOverlayOpen = false;
+  overlaySig = null;
+}
+$('pending-overlay').onclick = (e) => {
+  if (!e.target.closest('.sheet')) closePendingOverlay();
+};
+$('pending-expand').onclick = (e) => {
+  // Inside the heading, whose click is the collapse toggle — this is not that.
+  e.stopPropagation();
+  openPendingOverlay();
+};
 
 // --- plans panel + click-to-reference ---------------------------------------
 //
@@ -853,6 +975,7 @@ const handlers = {
     renderSay(m);
     feedEvent({ ts: new Date().toISOString(), kind: `say/${m.kind}`, text: m.text });
   },
+  show: renderShow,
   // Tool calls are the conversation still moving. Without this, a long stretch
   // of work emits nothing the idle timer recognises, the paid session closes
   // mid-job, and the result Danny actually wanted to hear arrives to a shut
@@ -1796,9 +1919,15 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  // A glance closes first. Only when there is nothing to dismiss does Escape mean
-  // what it means in Claude Code — and the button is small now, so the keyboard
-  // has to reach the same thing your hand does.
+  // A glance closes first — the overlays before the panels, because they are on
+  // top. Only when there is nothing to dismiss does Escape mean what it means
+  // in Claude Code — and the button is small now, so the keyboard has to reach
+  // the same thing your hand does.
+  if (lightboxOpen || pendingOverlayOpen) {
+    if (lightboxOpen) closeLightbox();
+    if (pendingOverlayOpen) closePendingOverlay();
+    return;
+  }
   if (statsOpen || testPanelOpen) {
     if (statsOpen) toggleStats();
     if (testPanelOpen) toggleTestPanel();

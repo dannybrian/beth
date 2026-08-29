@@ -95,7 +95,11 @@ plan survives a restart and still shows when it is not in flight), `state` (a wo
 leaving the roster when nothing will ever report it), `keyterms`, `greeting`, and
 `stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
 `sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `repoWeb`
-(the scp-style remote `new URL()` parses confidently wrong), and the greeting's
+(the scp-style remote `new URL()` parses confidently wrong), `showImage` (the
+/api/image allowlist — a wrong refusal is a broken figure, a wrong acceptance is a
+query string reading files off the machine), `bus` (the `show` replay split — a pop
+that replayed would re-open the lightbox on every reconnect, which looks exactly
+like the feature working until the first mid-conversation reload), and the greeting's
 onboarding offer (a nag if it repeats, silently absent if it never fires). The Scribe
 ear added four more in the same two shapes: `ear/pcm` (a resampler that drifts or
 warbles at chunk seams doesn't error — she just mishears him), `ear/scribeEngine`

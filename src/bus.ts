@@ -130,6 +130,15 @@ export type UIMessage =
    * the tab that lost it. Not replayed: a partial is a moment, not history.
    */
   | { type: 'ear'; state: 'live' | 'partial' | 'commit' | 'degraded' | 'off'; owner: number; text?: string; detail?: string }
+  /**
+   * Something she put on the SCREEN — the visual half of `say`. `image` is a
+   * figure for the transcript (the path is served by /api/image, which
+   * re-proves it); `pop` asks the page to open it large NOW. A `surface` show
+   * is nothing but attention — open one of the page's own surfaces. The pop
+   * half follows the speaker election in server.ts: "look at this" belongs on
+   * the tab Danny is looking at, not on every monitor.
+   */
+  | { type: 'show'; image?: { path: string; caption?: string }; surface?: 'pending'; pop?: boolean }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
@@ -165,6 +174,15 @@ export class ConversationBus {
     // republishes on every file save, so replaying it would bury the transcript.
     if (m.type === 'status') {
       this.lastStatus = m;
+    } else if (m.type === 'show') {
+      // The figure is transcript, so it replays — but the POP is an instruction
+      // to grab attention NOW, exactly like `speak`: replaying it would re-open
+      // the lightbox on every reconnect. And a surface show is nothing BUT the
+      // pop, so none of it reaches history at all.
+      if (m.image) {
+        this.history.push({ ...m, pop: undefined });
+        if (this.history.length > ConversationBus.HISTORY_CAP) this.history.shift();
+      }
       // `speak` is an instruction to make a noise NOW. Replaying it would make a
       // reconnecting page perform the whole conversation again, out loud.
     } else if (

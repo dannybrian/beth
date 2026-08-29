@@ -82,7 +82,10 @@
            above it are short but unbounded, and plans must not get pushed off. -->
       <aside class="side">
         <section class="sect" data-sect="pending">
-          <h2><span class="caret"></span>Pending <span class="count" id="pending-count"></span></h2>
+          <h2>
+            <span class="caret"></span>Pending <span class="count" id="pending-count"></span>
+            <button id="pending-expand" class="scope" title="Open the queue full-size — Escape or a click outside puts it away">open</button>
+          </h2>
           <div id="pending-decisions" class="panel"></div>
         </section>
         <section class="sect" data-sect="workers">
@@ -158,6 +161,17 @@
         <button id="interrupt" class="ghost" title="Escape — drop what is in the box and stop the in-flight turn. The conversation continues.">Stop</button>
       </div>
     </footer>
+
+    <!-- The lightbox and the queue overlay — the stats panel's species writ
+         large: bigger GLANCES, not dialogs. A click off the content dismisses,
+         Escape dismisses, nothing steals focus. Opened by Beth's `show` tool,
+         by clicking a figure, or by the "open" button on Pending. -->
+    <div id="lightbox" class="shade" hidden>
+      <figure><img alt="" /><figcaption></figcaption></figure>
+    </div>
+    <div id="pending-overlay" class="shade" hidden>
+      <div class="sheet" id="pending-sheet"></div>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

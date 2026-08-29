@@ -6,6 +6,7 @@ import path from 'node:path';
 
 export type EventKind =
   | 'say'
+  | 'show'
   | 'ask'
   | 'answer'
   | 'decision_queued'

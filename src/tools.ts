@@ -16,6 +16,7 @@ import { stripAudioTags } from './audioTags.ts';
 import { repairArgs } from './toolInput.ts';
 import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
+import { resolveImage } from './showImage.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -87,6 +88,53 @@ export function createHarnessTools(deps: {
       // The event log is a reading surface too — store the stripped form.
       deps.events.append({ source: 'harness', session: deps.sessionId(), kind: 'say', text: read, ref });
       return ok({ delivered: true, voiced: deps.voiceActive() });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * Her hand on the SCREEN — the visual counterpart of `say`. A tool rather
+   * than markup in her prose, for the same reason links.ts refuses to make her
+   * write link syntax: she is heard, and image markup is worse punctuation soup
+   * than link markup. And mentioning a file is not the same act as showing one —
+   * an auto-embedded mention would render a diagram three times because she
+   * discussed it three times.
+   *
+   * The wire splits the way `speak` taught us: the figure replays with the
+   * transcript (bus.ts), the pop does not, and the pop lands only on the tab
+   * Danny is looking at (the speaker election in server.ts).
+   */
+  const show = tool(
+    'show',
+    'Put something on Danny\'s screen — the visual half of a spoken conversation. Pass `image` (a repo-relative path to a png/jpg/gif/webp/svg/avif that exists in the repo) to add a figure to the transcript; add `pop: true` when he should look NOW — it also opens large over the page he is looking at. Or pass `surface: "pending"` to open his pending queue full-size (natural when telling him what is waiting on him). Exactly one of `image` or `surface`. Nothing here is spoken — narrate it yourself: "here\'s the diagram".',
+    {
+      image: z.string().optional().describe('Repo-relative path to an image file in the bound repo.'),
+      caption: z.string().optional().describe('One short line under the figure. Optional — your narration usually covers it.'),
+      pop: z.boolean().optional().describe('Also open the image large over the page, on the tab Danny is looking at. For "look at this", not for every figure.'),
+      surface: z.enum(['pending']).optional().describe('Open one of the page\'s own surfaces instead of an image.'),
+    },
+    async (raw) => {
+      const { image, caption, pop, surface } = repaired('show', raw);
+      if (Boolean(image) === Boolean(surface)) {
+        return ok({ shown: false, reason: 'pass exactly one of image or surface' });
+      }
+      if (surface) {
+        deps.bus.publish({ type: 'show', surface, pop: true });
+        return ok({ shown: true, surface });
+      }
+      // Refuse BEFORE publishing: a broken <img> in the transcript tells Danny
+      // less than this reason tells her.
+      const proof = resolveImage(deps.repo, image!);
+      if (!proof.ok) return ok({ shown: false, reason: proof.reason });
+      deps.bus.publish({ type: 'show', image: { path: image!, caption }, pop: Boolean(pop) });
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'show',
+        text: caption ? `showed ${image} — ${caption}` : `showed ${image}`,
+        ref: image,
+      });
+      return ok({ shown: true, popped: Boolean(pop) });
     },
     { alwaysLoad: true }
   );
@@ -334,6 +382,7 @@ export function createHarnessTools(deps: {
     version: '1.0.0',
     tools: [
       say,
+      show,
       queueDecision,
       closeDecision,
       closeWorker,

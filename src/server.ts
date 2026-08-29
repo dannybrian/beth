@@ -29,6 +29,7 @@ import { originAllowed } from './origin.ts';
 import { EarHost } from './earHost.ts';
 import { ScribeEngine } from './ear/scribeEngine.ts';
 import { blobUrl, hasWeb } from './repoWeb.ts';
+import { resolveImage } from './showImage.ts';
 import { listPersonas } from './personas.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
@@ -203,6 +204,15 @@ export function createServer(deps: {
       // Everything broadcasts except the instruction to make a noise.
       const unsub = bus.subscribe((m) => {
         if (m.type === 'speak' && streamId !== speakerId) return;
+        // The attention half of a `show` follows the mouth for the same reason
+        // `speak` does: the elected speaker is the tab Danny is looking at, and
+        // "look at this" belongs on that screen, not on every monitor. The
+        // figure itself still broadcasts — every transcript gets it, sans pop —
+        // and a surface show is nothing BUT attention, so the others get nothing.
+        if (m.type === 'show' && streamId !== speakerId) {
+          if (!m.image) return;
+          if (m.pop) return send({ ...m, pop: false });
+        }
         send(m);
       });
       // The keepalive is also how a half-open socket gets noticed at all: without
@@ -592,6 +602,28 @@ export function createServer(deps: {
         // list needs a network call to ElevenLabs, and nothing about opening a
         // conversation should wait on one. Empty is a legitimate answer.
         return json(200, { voices: await deps.speakOut.voices(), current: deps.speakOut.currentVoice() });
+      }
+      if (url.pathname === '/api/image') {
+        // Bytes for a shown image. Same discipline as /api/github: a response
+        // built from a query parameter answers only what it can PROVE — here, a
+        // real image file inside the repo (showImage.ts). The CSP header is for
+        // the SVG case: inside an <img> its scripts never run, but this URL can
+        // be opened directly, and it is same-origin with every POST endpoint
+        // above — `sandbox` makes a hostile SVG inert there too.
+        const img = resolveImage(cfg.repo, url.searchParams.get('path') ?? '');
+        if (!img.ok) return json(404, { error: img.reason });
+        res.writeHead(200, {
+          'content-type': img.mime,
+          'content-security-policy': 'sandbox',
+          'x-content-type-options': 'nosniff',
+          // The file can change under a running session — a re-render should
+          // show what the repo holds now, not what it held this morning.
+          'cache-control': 'no-store',
+        });
+        const file = fs.createReadStream(img.abs);
+        file.on('error', () => res.destroy());
+        req.on('close', () => file.destroy());
+        return void file.pipe(res);
       }
       if (url.pathname === '/api/github') {
         // A REDIRECT rather than a URL served with the page: the ref is read at
