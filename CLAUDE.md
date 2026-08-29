@@ -195,9 +195,16 @@ These cost hours. Don't rediscover them.
   one arriving — the task dying, an interrupt, `/clear` replacing the session it ran in —
   left it running forever, so the panel showed work in flight that was not and the
   activity dot stayed lit behind it. Nothing reconciled it because nothing could: that
-  notification is the only signal and it is not coming. Now `/clear` orphans the roster
-  (⚠ the DECISIONS still survive a clear — a question is durable, a task inside a
-  replaced session is not), and both Danny and Beth can drop one by hand (`× ` in the
+  notification was the only signal. ⚠ No longer true (2026-08-28): the SDK grew
+  `background_tasks_changed` — the full LIVE set on every membership change, a level
+  where the bookends are edges — and `reconcileWorkers` (`state.ts`) closes any running
+  worker absent from it. The grace window there is load-bearing: level/edge ordering is
+  unspecified, and closing a worker off a start-adjacent level would kill it seconds
+  after birth — the inverted bug, looking exactly like the feature working. Unknown ids
+  are ignored (additions keep coming from `task_started`), and an old CLI that never
+  emits the level degrades to exactly the old behaviour. `/clear` still orphans the
+  roster (⚠ the DECISIONS still survive a clear — a question is durable, a task inside a
+  replaced session is not), and the by-hand drops stay as the escape hatch (`× ` in the
   panel, `close_worker` for her). Same reasoning gives her `close_decision`: a queue with
   settled items in it is a queue you learn to ignore.
 - **The Web Speech API grew keyterms, and `docs/voice-plane.md` predates it.** That

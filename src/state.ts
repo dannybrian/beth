@@ -46,8 +46,10 @@ export class PendingStore {
    * replaced — left it in the roster forever. The panel then shows work in flight
    * that is not, the activity dot stays lit because something is "running", and
    * the one surface that is supposed to answer "is anything happening" answers
-   * wrong. Nothing reconciled it because nothing could: the notification is the
-   * only signal, and it is not coming.
+   * wrong. Nothing reconciled it because nothing could: the notification was the
+   * only signal. No longer true — see reconcileWorkers below — but the manual
+   * close stays: it is the escape hatch for whatever the level signal misses,
+   * and for a CLI old enough not to emit one.
    */
   closeWorker(taskId: string, note?: string): WorkerRecord | undefined {
     const w = this.workers.find((x) => x.taskId === taskId && x.status === 'running');
@@ -56,6 +58,40 @@ export class PendingStore {
     w.endedAt = new Date().toISOString();
     w.summary = note ?? w.summary;
     return w;
+  }
+
+  /**
+   * Reconcile the roster against the SDK's own list of live tasks.
+   *
+   * The doc above closeWorker says nothing could reconcile a missed
+   * `task_notification`. That stopped being true (noticed 2026-08-28): the SDK
+   * now emits `background_tasks_changed`, the full set of live tasks on every
+   * membership change — a LEVEL, exactly so a missed edge cannot wedge a stale
+   * running indicator. Any running worker absent from the level is done or
+   * dead, whatever bookend failed to arrive.
+   *
+   * ⚠️ The grace window is load-bearing: the SDK leaves ordering between the
+   * level and the edges UNSPECIFIED, so a level emitted around a task's start
+   * may reach us after `task_started` yet without the new task in it. Closing
+   * on that would kill a worker seconds after it was born — the inverted bug,
+   * and it would look exactly like the feature working. Ids the roster does
+   * not know are ignored for the same reason; additions keep coming from
+   * `task_started`, which is not the broken direction.
+   *
+   * A late `task_notification` for a worker closed here still lands: it finds
+   * the record by id and upgrades it with the real status and tokens.
+   */
+  reconcileWorkers(liveIds: Set<string>, now = Date.now(), graceMs = 10_000): WorkerRecord[] {
+    const closed: WorkerRecord[] = [];
+    for (const w of this.workers) {
+      if (w.status !== 'running' || liveIds.has(w.taskId)) continue;
+      if (now - Date.parse(w.startedAt) < graceMs) continue;
+      w.status = 'stopped';
+      w.endedAt = new Date(now).toISOString();
+      w.summary = 'ended without a notification — reconciled from the live task list';
+      closed.push(w);
+    }
+    return closed;
   }
 
   /**

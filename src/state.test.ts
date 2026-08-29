@@ -48,6 +48,62 @@ test('clearing the conversation orphans the workers but keeps the questions', ()
   assert.match(s.allWorkers()[0].summary ?? '', /cleared/i, 'and the roster says what became of them');
 });
 
+// Reconciliation against the SDK's level signal. Both wrong answers are quiet:
+// too eager and a worker dies seconds after starting (the SDK leaves level/edge
+// ordering unspecified, so a start-adjacent level may not carry the new task);
+// too timid and the roster goes back to lying until Danny dismisses by hand.
+
+test('a worker absent from the live set is closed once past the grace window', () => {
+  const s = new PendingStore();
+  const w = worker(s, 't1');
+  const born = Date.parse(w.startedAt);
+
+  // Inside the grace window nothing happens, however absent the id is.
+  assert.deepEqual(s.reconcileWorkers(new Set(), born + 1_000), []);
+  assert.equal(s.runningWorkers().length, 1, 'a just-started worker is not killed by a stale level');
+
+  const closed = s.reconcileWorkers(new Set(), born + 60_000);
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].status, 'stopped');
+  assert.match(closed[0].summary ?? '', /without a notification/, 'the roster says what became of it');
+  assert.deepEqual(s.runningWorkers(), []);
+});
+
+test('a worker present in the live set stays, whatever its age', () => {
+  const s = new PendingStore();
+  const born = Date.parse(worker(s, 't1').startedAt);
+  assert.deepEqual(s.reconcileWorkers(new Set(['t1']), born + 3_600_000), []);
+  assert.equal(s.runningWorkers().length, 1);
+});
+
+test('ids the roster does not know are ignored, not adopted', () => {
+  const s = new PendingStore();
+  const born = Date.parse(worker(s, 't1').startedAt);
+  s.reconcileWorkers(new Set(['t1', 'stranger']), born + 60_000);
+  assert.equal(s.allWorkers().length, 1, 'additions come from task_started, the direction that is not broken');
+});
+
+test('a late notification still upgrades a reconciled worker with the truth', () => {
+  const s = new PendingStore();
+  const born = Date.parse(worker(s, 't1').startedAt);
+  s.reconcileWorkers(new Set(), born + 60_000);
+
+  // The real bookend arrives after all — the SDK's ordering caveat in the
+  // other direction. The record it finds must take the genuine outcome.
+  const w = s.workerFinished('t1', 'completed', 4200, 'the real summary');
+  assert.equal(w?.status, 'completed');
+  assert.equal(w?.tokens, 4200);
+  assert.equal(w?.summary, 'the real summary');
+});
+
+test('reconciling never touches what already finished', () => {
+  const s = new PendingStore();
+  const born = Date.parse(worker(s, 't1').startedAt);
+  s.workerFinished('t1', 'failed', 7, 'its own account');
+  assert.deepEqual(s.reconcileWorkers(new Set(), born + 60_000), []);
+  assert.equal(s.allWorkers()[0].summary, 'its own account');
+});
+
 test('orphaning does not resurrect or re-close what already finished', () => {
   const s = new PendingStore();
   worker(s, 't1');

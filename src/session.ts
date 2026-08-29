@@ -604,6 +604,27 @@ export class SessionManager {
       this.publishPending();
       return;
     }
+    if (m.subtype === 'background_tasks_changed') {
+      // The level signal: every live background task, REPLACE semantics. This
+      // is what unwedges a worker whose task_notification never came — the
+      // task died, an interrupt ate it — without enumerating the causes. See
+      // reconcileWorkers for the grace window and why unknown ids are ignored.
+      // A CLI that predates the message simply never sends it, and the roster
+      // behaves as it always did: manual dismissal.
+      const live = new Set((m.tasks ?? []).map((t: any) => String(t.task_id)));
+      const closed = this.pending.reconcileWorkers(live);
+      for (const w of closed) {
+        this.events.append({
+          source: 'harness',
+          session: this.sessionIdValue,
+          kind: 'worker_done',
+          text: `${w.description} ended without a notification — dropped on reconcile`,
+          ref: w.taskId,
+        });
+      }
+      if (closed.length) this.publishPending();
+      return;
+    }
     if (m.subtype === 'task_notification') {
       // Per-worker TOKENS are attributable here; per-worker dollars are not.
       const w = this.pending.workerFinished(m.task_id, m.status, m.usage?.total_tokens, m.summary);
