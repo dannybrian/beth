@@ -97,7 +97,11 @@ leaving the roster when nothing will ever report it), `keyterms`, `greeting`, an
 `sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `repoWeb`
 (the scp-style remote `new URL()` parses confidently wrong), `showImage` (the
 /api/image allowlist — a wrong refusal is a broken figure, a wrong acceptance is a
-query string reading files off the machine), `bus` (the `show` replay split — a pop
+query string reading files off the machine), `workbench` (the bench-url vetting —
+the page hands it straight to an `<a href>` in every open tab, so a `javascript:`
+url pinned by a confused tool call would be an executable link in the boldest spot
+on the page; and `localhost:3000` parses with scheme `localhost:`, so the most
+natural input of all was refused until the retry-as-http), `bus` (the `show` replay split — a pop
 that replayed would re-open the lightbox on every reconnect, which looks exactly
 like the feature working until the first mid-conversation reload), and the greeting's
 onboarding offer (a nag if it repeats, silently absent if it never fires). The Scribe

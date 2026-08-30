@@ -504,6 +504,47 @@ function renderShow(m) {
   if (m.pop) openLightbox(path, caption);
 }
 
+// --- the workbench ---------------------------------------------------------
+//
+// THE url being iterated on, centre of the header strip. The server owns the
+// state (workbench.ts) and vets the url; this only paints what arrives.
+
+/** undefined = nothing painted yet, so the connect-time message lands silently. */
+let benchUrl;
+
+function renderBench(m) {
+  // Only a genuine change earns a transcript line — the server re-sends the
+  // bench on every (re)connect, and "📌 working on…" at each reload is a nag.
+  const changed = benchUrl !== undefined && benchUrl !== m.url;
+  benchUrl = m.url;
+  const box = $('bench');
+  if (!m.url) {
+    box.hidden = true;
+    if (changed) entry('activity', (n) => (n.textContent = '📌 bench cleared'));
+    return;
+  }
+  // The scheme is never the news, so the readable form drops it; the full url
+  // stays in the title for when the ellipsis has eaten the interesting half.
+  const short = m.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const a = $('bench-link');
+  a.href = m.url;
+  a.title = `${m.url} — opens in a new tab`;
+  const label = $('bench-label');
+  label.textContent = m.label ?? '';
+  label.hidden = !m.label;
+  // With a label the url steps back to a quiet mono aside; without one it IS
+  // the bold half.
+  const urlEl = $('bench-url');
+  urlEl.textContent = short;
+  urlEl.className = m.label ? 'quiet' : '';
+  box.hidden = false;
+  if (changed) entry('activity', (n) => (n.textContent = `📌 working on ${m.label ?? short}`));
+}
+
+// The × is Danny's hand on the same state her `workbench` tool sets — the
+// broadcast that comes back is what actually hides the pill, in every tab.
+$('bench-clear').onclick = () => post('/api/workbench', {});
+
 /**
  * The queue, full size. The side panel's cards squeezed into 34vh are fine to
  * glance at and miserable to WORK: context clipped, options below the fold,
@@ -976,6 +1017,7 @@ const handlers = {
     feedEvent({ ts: new Date().toISOString(), kind: `say/${m.kind}`, text: m.text });
   },
   show: renderShow,
+  workbench: renderBench,
   // Tool calls are the conversation still moving. Without this, a long stretch
   // of work emits nothing the idle timer recognises, the paid session closes
   // mid-job, and the result Danny actually wanted to hear arrives to a shut

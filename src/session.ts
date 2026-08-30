@@ -22,6 +22,7 @@ import { assessRole, roleInstruction, type RoleAssessment } from './directorRole
 import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
 import { WireTap } from './wireTap.ts';
+import type { Workbench } from './workbench.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -130,6 +131,7 @@ export class SessionManager {
   private gate: AskGate;
   private work: WorkIndex;
   private speech: SpeechControl;
+  private bench: Workbench;
 
   constructor(
     cfg: HarnessConfig,
@@ -138,7 +140,8 @@ export class SessionManager {
     pending: PendingStore,
     gate: AskGate,
     work: WorkIndex,
-    speech: SpeechControl
+    speech: SpeechControl,
+    bench: Workbench
   ) {
     this.cfg = cfg;
     this.bus = bus;
@@ -147,6 +150,7 @@ export class SessionManager {
     this.gate = gate;
     this.work = work;
     this.speech = speech;
+    this.bench = bench;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
     this.personaChoice = new PersonaChoice(cfg.stateDir);
     const persona = this.personaChoice.current();
@@ -275,6 +279,7 @@ export class SessionManager {
             repo: this.cfg.repo,
             personal: this.personal.enabled ? this.personal : null,
             speech: this.speech,
+            bench: this.bench,
           }),
         },
         canUseTool: this.gate.canUseTool,

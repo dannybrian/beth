@@ -17,6 +17,7 @@ import { repairArgs } from './toolInput.ts';
 import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
 import { resolveImage } from './showImage.ts';
+import type { Workbench } from './workbench.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -57,6 +58,8 @@ export function createHarnessTools(deps: {
    * tools have no business knowing about voice ids, held lines or ElevenLabs.
    */
   speech: SpeechControl;
+  /** The one-url bench at the top of the page. See workbench.ts. */
+  bench: Workbench;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -135,6 +138,50 @@ export function createHarnessTools(deps: {
         ref: image,
       });
       return ok({ shown: true, popped: Boolean(pop) });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * The bench holds ONE url — what the two of them are iterating on — and the
+   * page wears it dead centre in the header. A tool rather than a convention
+   * ("just tell him the port") because a url said aloud is gone by the next
+   * turn, and the whole point is a standing, clickable answer to "where is it?"
+   */
+  const workbench = tool(
+    'workbench',
+    'Pin THE url you and Danny are iterating on — a dev server, a staging deploy, a PR — to the top of his page, bold and centre, where it stays until replaced or cleared. One slot: pinning replaces what was there. Pin it whenever iteration converges on somewhere openable ("it\'s running on 3000" is a workbench moment); clear it when that work is done. `label` is a short human name shown beside the url. Pass `clear: true` (no url) to empty the bench. Nothing is spoken — say where it is yourself.',
+    {
+      url: z.string().optional().describe('Full http(s) url, e.g. http://localhost:3000/board — a bare host:port is taken as http. Omit only when clearing.'),
+      label: z.string().optional().describe('Short name for what this is, e.g. "the lobby rework". A few words.'),
+      clear: z.boolean().optional().describe('Empty the bench. Ignores url/label.'),
+    },
+    async (raw) => {
+      const { url, label, clear } = repaired('workbench', raw);
+      if (clear) {
+        const was = deps.bench.clear();
+        deps.bus.publish(deps.bench.message());
+        if (was) {
+          deps.events.append({
+            source: 'harness',
+            session: deps.sessionId(),
+            kind: 'workbench',
+            text: `bench cleared — was ${was.url}`,
+          });
+        }
+        return ok({ cleared: true, was: was?.url ?? null });
+      }
+      if (!url) return ok({ pinned: false, reason: 'pass a url, or clear: true' });
+      const result = deps.bench.set(url, label);
+      if (!result.ok) return ok({ pinned: false, reason: result.reason });
+      deps.bus.publish(deps.bench.message());
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'workbench',
+        text: result.state.label ? `bench → ${result.state.url} (${result.state.label})` : `bench → ${result.state.url}`,
+      });
+      return ok({ pinned: true, url: result.state.url });
     },
     { alwaysLoad: true }
   );
@@ -383,6 +430,7 @@ export function createHarnessTools(deps: {
     tools: [
       say,
       show,
+      workbench,
       queueDecision,
       closeDecision,
       closeWorker,

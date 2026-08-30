@@ -139,6 +139,13 @@ export type UIMessage =
    * the tab Danny is looking at, not on every monitor.
    */
   | { type: 'show'; image?: { path: string; caption?: string }; surface?: 'pending'; pop?: boolean }
+  /**
+   * The workbench — the ONE url naming what is being iterated on right now
+   * (workbench.ts). Current state, not transcript: it is not replayed here
+   * because the server sends the live bench on every connect, the same way it
+   * sends `pending` and `tests`.
+   */
+  | { type: 'workbench'; url: string | null; label?: string }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
@@ -191,6 +198,7 @@ export class ConversationBus {
       m.type !== 'pointing' &&
       m.type !== 'speak' &&
       m.type !== 'tests' &&
+      m.type !== 'workbench' &&
       // A partial transcript is a moment; replaying an hour of them into a
       // reconnecting tab would render someone's morning into the composer.
       m.type !== 'ear'

@@ -24,6 +24,7 @@ import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
+import type { Workbench } from './workbench.ts';
 import { setPlanName } from './planName.ts';
 import { originAllowed } from './origin.ts';
 import { EarHost } from './earHost.ts';
@@ -65,6 +66,7 @@ export function createServer(deps: {
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
   pins: Pins;
+  bench: Workbench;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
@@ -197,6 +199,9 @@ export function createServer(deps: {
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
       send({ type: 'tests', state: deps.tests.state() });
+      // Current state, not transcript — same species as `pending` and `tests`,
+      // so a reconnecting page gets the bench without it riding the replay.
+      send(deps.bench.message());
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       // Plus the shelf, which is not in-flight by definition.
@@ -490,6 +495,32 @@ export function createServer(deps: {
             const pinned = deps.pins.set(target, Boolean(body.pinned));
             bus.publish(workMessage(work, deps.pins));
             return json(200, { ok: true, pinned });
+          }
+          case '/api/workbench': {
+            // The × on the bench, and a hand for setting it without asking her.
+            // Same vetting as her tool — the page renders whatever lands here.
+            if (body.url) {
+              const result = deps.bench.set(String(body.url), body.label ? String(body.label) : undefined);
+              if (!result.ok) return json(400, { ok: false, reason: result.reason });
+              events.append({
+                source: 'harness',
+                session: session.sessionId(),
+                kind: 'workbench',
+                text: `bench → ${result.state.url}`,
+              });
+            } else {
+              const was = deps.bench.clear();
+              if (was) {
+                events.append({
+                  source: 'harness',
+                  session: session.sessionId(),
+                  kind: 'workbench',
+                  text: `bench cleared — was ${was.url}`,
+                });
+              }
+            }
+            bus.publish(deps.bench.message());
+            return json(200, { ok: true, bench: deps.bench.current() });
           }
           case '/api/rename': {
             // ⚠️ THE ONE WRITE. See planName.ts for why this is the exception to

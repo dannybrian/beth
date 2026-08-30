@@ -129,6 +129,55 @@ body {
 #perm-select[data-mode="acceptEdits"],
 #perm-select[data-mode="auto"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 
+/* --- the workbench ---
+   THE url being iterated on, centre of the top strip — deliberately the boldest
+   thing in a row that otherwise whispers. In flex flow with auto margins rather
+   than absolutely centred: tried absolute first, and on a narrow window the
+   pill sat ON the dials, translucent, both illegible. Auto margins centre it in
+   the free space and min-width lets it squeeze to ellipsis instead of overlap. */
+.bench {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 38vw;
+  margin: 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.bench[hidden] { display: none; }
+.bench a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 3px 4px 3px 10px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.bench a:hover { color: var(--text); }
+.bench-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+/* The label is the name; the url rides beside it, quieter and in mono. When
+   there is no label the url IS the bold half — app.js swaps the classes. */
+#bench-label,
+#bench-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bench-label { flex: none; }
+.bench .quiet { color: color-mix(in srgb, var(--accent) 60%, var(--muted)); font-family: var(--mono); font-size: 11.5px; font-weight: 400; }
+/* The × is Danny's hand — present but not competing with the link. */
+#bench-clear {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 8px 4px 4px;
+  cursor: pointer;
+  flex: none;
+}
+#bench-clear:hover { color: var(--err); }
+
 /* --- in-progress indicator ---
    Sits between the input and the buttons, visible only while a turn is in flight
    or a worker is running. A turn with no outward sign reads as a hang, and the

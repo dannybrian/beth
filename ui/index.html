@@ -29,6 +29,20 @@
         </select>
         <span class="mode" id="mode-label"></span>
       </div>
+      <!-- The workbench: THE url being iterated on right now, dead centre in
+           the most glanceable strip on the page — where an editor puts the
+           document title. Absent entirely when nothing is pinned. She pins it
+           (the `workbench` tool); the × is Danny's. In flex flow between the
+           clusters so a narrow window squeezes it to ellipsis — absolute
+           centring put it ON the dials (see the .bench comment in app.css). -->
+      <div class="bench" id="bench" hidden>
+        <a id="bench-link" target="_blank" rel="noopener noreferrer" title="What we're working on — opens in a new tab">
+          <span class="bench-dot" aria-hidden="true"></span>
+          <span id="bench-label"></span>
+          <span id="bench-url"></span>
+        </a>
+        <button id="bench-clear" title="Clear — the work moved on">×</button>
+      </div>
       <div class="strip-right">
         <select id="model-select" title="Model for this conversation — switches live, context is kept">
           <option value="claude-opus-5">Opus 5</option>
