@@ -952,13 +952,15 @@ const handlers = {
     repoOnWeb = Boolean(m.repoOnWeb);
     setPersonas(m.personas ?? [], m.persona ?? '');
     void loadVoices();
-    const project = m.repo.split('/').pop();
-    $('repo-label').textContent = project;
+    projectName = m.repo.split('/').pop();
+    $('repo-label').textContent = projectName;
     // Several instances run side by side, one per repo — the tab title is the
     // only way to tell them apart from the window switcher. The name comes from
     // the bound repo, so a different project's director is called what it calls
-    // her rather than what this harness assumes.
-    document.title = `${m.director ?? 'Director'}: ${project}`;
+    // her rather than what this harness assumes. Status rides in front of it —
+    // see paintTitle.
+    titleBase = `${m.director ?? 'Director'}: ${projectName}`;
+    paintTitle();
     setDirectorName(m.director);
     const mode = $('mode-label');
     mode.textContent = m.mode;
@@ -1002,6 +1004,12 @@ const handlers = {
     // to and what a permission card says. It arrives with the switch so the page
     // never has to guess it from a slug.
     setDirectorName(m.name);
+    // The tab is named after her too, and it used to keep yesterday's director
+    // until a reload — the one surface setDirectorName didn't reach.
+    if (projectName) {
+      titleBase = `${m.name}: ${projectName}`;
+      paintTitle();
+    }
     entry('activity', (n) => (n.textContent = `🎭 director → ${m.name}`));
   },
   // The turn was sent — the preview has become a real message in the transcript.
@@ -1160,6 +1168,9 @@ let workersRunning = 0;
 let decisionsWaiting = 0;
 /** The server's own view: idle | thinking | error. Only 'error' outranks ours. */
 let statusState = 'idle';
+/** What the tab is called with no status on it. 'beth' until `hello` names it. */
+let titleBase = document.title;
+let projectName = '';
 let dotTitle = '';
 let busySince = 0;
 let busyTick = null;
@@ -1179,6 +1190,29 @@ function paintDot() {
   const err = statusState === 'error';
   dot.className = `dot ${err ? 'error' : reasons.length ? 'busy' : 'idle'}`;
   dot.title = (err ? dotTitle : reasons.join(' · ') || 'idle') + ' — click for the wire';
+  // Every state the dot paints funnels through here, so the tab follows for free.
+  paintTitle();
+}
+
+/**
+ * The tab strip is the page when the page is hidden — and with one instance per
+ * repo it is also the switchboard, so each tab answers "is anything waiting on
+ * me over there" without being visited. The same state as the dot, front-loaded
+ * because truncation eats the back: decisions waiting on Danny first (the
+ * browser-tab convention for "unread, yours"), then the running dot, ⚠ instead
+ * when the server reports an error.
+ *
+ * The mic is deliberately NOT here: Chrome paints its own recording badge on
+ * any tab holding the mic, hidden or not, and a title glyph would be a copy of
+ * an indicator the page cannot fake — trust the browser's.
+ */
+function paintTitle() {
+  const badge =
+    (decisionsWaiting ? `(${decisionsWaiting}) ` : '') +
+    (statusState === 'error' ? '⚠ ' : turnInFlight || workersRunning ? '● ' : '');
+  const t = badge + titleBase;
+  // paintDot runs on the busy clock's every tick — only touch the tab on change.
+  if (document.title !== t) document.title = t;
 }
 
 // --- the wire panel ----------------------------------------------------------
