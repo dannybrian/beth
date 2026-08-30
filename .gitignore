@@ -12,3 +12,7 @@ logs/
 
 # Claude Code scratch worktrees — session-local, never history.
 .claude/worktrees/
+
+# The director's event log, written when a harness binds THIS repo (Wren) —
+# config.ts already calls it "gitignored"; this makes that true here too.
+.claude/events.jsonl
