@@ -138,36 +138,13 @@ export class Mouth {
   }
 
   /**
-   * The voices on this account, for a picker.
+   * What is actually speaking right now.
    *
-   * Memoised for the life of the process: the list changes when a voice is
-   * added on elevenlabs.io, which is not something a page load should pay a
-   * network round trip to notice. A failure is an EMPTY LIST rather than a
-   * throw — no key, no permission, no network all mean the same thing here (no
-   * picker), and none of them should turn into an error card on a page that is
-   * otherwise working.
+   * There was a `voices()` beside this — the account's list, for a picker in
+   * the page. Both are gone (2026-08-31): a voice belongs to a persona, named
+   * by the `voice:` line in her file, so a picker could only ever audition one
+   * and then forget it. `setVoice` stays because the PERSONA switch calls it.
    */
-  private voiceList: { id: string; name: string }[] | null = null;
-
-  async voices(): Promise<{ id: string; name: string }[]> {
-    if (this.voiceList) return this.voiceList;
-    if (!this.cfg.apiKey) return [];
-    try {
-      const res: any = await (await this.getClient()).voices.search({ pageSize: 100 });
-      this.voiceList = (res?.voices ?? [])
-        .map((v: any) => ({ id: v.voiceId ?? v.voice_id, name: v.name ?? '(unnamed)' }))
-        .filter((v: any) => v.id)
-        .sort((a: any, b: any) => a.name.localeCompare(b.name));
-      return this.voiceList!;
-    } catch (e) {
-      // Worth saying once — a picker that is silently empty looks like a bug in
-      // the picker rather than a key without the right permission.
-      console.log(`  voices: could not list (${e instanceof Error ? e.message : e})`);
-      return [];
-    }
-  }
-
-  /** What is actually speaking right now, so a picker can show it. */
   currentVoice = () => this.personaVoice || this.cfg.voiceId || this.resolved?.voiceId || '';
 
   /** The text behind an id, without consuming it — a reload may re-request it. */

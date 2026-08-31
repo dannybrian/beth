@@ -361,18 +361,6 @@ export function createServer(deps: {
             await session.setModel(model);
             return json(200, { ok: true, model });
           }
-          case '/api/voice': {
-            // AUDITIONING, not choosing. Nothing is written down: the durable
-            // answer to "who does she sound like" is the `voice:` line in a
-            // persona file, and a picker that quietly rewrote it would edit a
-            // hand-written file from a dropdown. A restart, or a persona switch,
-            // puts her back to what that file says — which is the point. When he
-            // likes one, the id goes in the file by hand.
-            const id = String(body.voiceId ?? '');
-            deps.speakOut.setVoice(id || session.persona()?.voiceId || null);
-            bus.publish({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
-            return json(200, { ok: true, voiceId: deps.speakOut.currentVoice() });
-          }
           case '/api/persona': {
             // ⚠️ This CLEARS the conversation — the system prompt is fixed when
             // the query is built, so becoming someone else means a new session.
@@ -696,12 +684,6 @@ export function createServer(deps: {
         // whether or not anyone ever opens the panel. See wireTap.ts.
         const since = Number(url.searchParams.get('since')) || 0;
         return json(200, session.wire.read(since));
-      }
-      if (url.pathname === '/api/voices') {
-        // Fetched by the page after `hello` rather than shipped with it: the
-        // list needs a network call to ElevenLabs, and nothing about opening a
-        // conversation should wait on one. Empty is a legitimate answer.
-        return json(200, { voices: await deps.speakOut.voices(), current: deps.speakOut.currentVoice() });
       }
       if (url.pathname === '/api/image') {
         // Bytes for a shown image. Same discipline as /api/github: a response

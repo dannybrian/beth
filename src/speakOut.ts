@@ -269,10 +269,6 @@ export class SpeakOut {
     return this.mouth.stream(id);
   }
 
-  voices() {
-    return this.mouth.voices();
-  }
-
   setVoice = (voiceId: string | null) => this.mouth.setVoice(voiceId);
 
   currentVoice = () => this.mouth.currentVoice();

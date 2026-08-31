@@ -532,11 +532,13 @@ function renderBench(m) {
   const label = $('bench-label');
   label.textContent = m.label ?? '';
   label.hidden = !m.label;
-  // With a label the url steps back to a quiet mono aside; without one it IS
-  // the bold half.
+  // ONE of the two, cropped (see .bench in app.css). This is a clickable that
+  // persists, not a readout: the whole url is in the title above and at the end
+  // of the click, and a bench wide enough to hold one was crowding the dials it
+  // sits between.
   const urlEl = $('bench-url');
   urlEl.textContent = short;
-  urlEl.className = m.label ? 'quiet' : '';
+  urlEl.hidden = Boolean(m.label);
   box.hidden = false;
   if (changed) entry('activity', (n) => (n.textContent = `📌 working on ${m.label ?? short}`));
 }
@@ -951,7 +953,6 @@ const handlers = {
     repoPath = m.repo;
     repoOnWeb = Boolean(m.repoOnWeb);
     setPersonas(m.personas ?? [], m.persona ?? '');
-    void loadVoices();
     projectName = m.repo.split('/').pop();
     $('repo-label').textContent = projectName;
     // Several instances run side by side, one per repo — the tab title is the
@@ -966,6 +967,12 @@ const handlers = {
     mode.textContent = m.mode;
     mode.className = `mode ${m.mode}`;
     mode.title = m.modeReason;
+    // Only ONE director runs at a time, so "director" is every session saying
+    // the ordinary thing, in the busiest strip on the page. SHADOW is the one
+    // worth the space: it means a terminal session holds the role and she can
+    // claim nothing, which you would otherwise discover by wondering why she
+    // will not take work.
+    mode.hidden = m.mode === 'director';
     if (m.model) $('model-select').value = m.model;
     if (m.permissionMode) setPermissionMode(m.permissionMode);
     if (m.speechLevel) setSpeechLevel(m.speechLevel);
@@ -1232,11 +1239,25 @@ function paintDot() {
  * any tab holding the mic, hidden or not, and a title glyph would be a copy of
  * an indicator the page cannot fake — trust the browser's.
  */
+/**
+ * The test light, in the tab.
+ *
+ * A tab title cannot be COLOURED — it is plain text in the browser's own chrome
+ * — so a coloured emoji is the only coloured thing a title can carry. Grey is
+ * NOTHING rather than ⚪: a repo with no runner, or one where the watch is off,
+ * has nothing to say, and a permanent grey circle in every tab would train the
+ * eye to stop reading the ones that do.
+ */
+const TITLE_LIGHT = { green: ' 🟢', yellow: ' 🟡', red: ' 🔴' };
+
 function paintTitle() {
   const badge =
     (decisionsWaiting ? `(${decisionsWaiting}) ` : '') +
     (statusState === 'error' ? '⚠ ' : turnInFlight || workersRunning ? '● ' : '');
-  const t = badge + titleBase;
+  // What is waiting on YOU goes in front, where the truncation cannot reach it;
+  // the tree's state goes after the name, which is what he asked for and also
+  // the right way round — one is a summons, the other is a status.
+  const t = badge + titleBase + (TITLE_LIGHT[testState?.light] ?? '');
   // paintDot runs on the busy clock's every tick — only touch the tab on change.
   if (document.title !== t) document.title = t;
 }
@@ -1313,6 +1334,9 @@ function renderTests(state) {
                 : 'Green';
   if (testPanelOpen) renderTestPanel();
   if (gearOpen) renderGear();
+  // The tab carries the light too — it is the only part of this page visible
+  // while you are looking at something else.
+  paintTitle();
 }
 
 function renderTestPanel() {
@@ -2474,38 +2498,10 @@ $('persona-select').onchange = async (e) => {
 /** What the page believes is in force, so a cancelled switch can put it back. */
 const current = { persona: '' };
 
-/**
- * The voices on the account, for auditioning.
- *
- * Fetched after `hello` rather than shipped with it: the list costs a call to
- * ElevenLabs, and opening a conversation must not wait on one. An empty list —
- * no key, no permission, no network — draws no control at all, the same rule the
- * persona select follows.
- */
-async function loadVoices() {
-  const sel = $('voice-select');
-  const r = await fetch('/api/voices').then((x) => x.json()).catch(() => null);
-  const voices = r?.voices ?? [];
-  // The heading and its note go with the select — a "Voice" section with nothing
-  // under it reads as a control that failed to load.
-  $('gear-voice').hidden = voices.length === 0;
-  if ($('gear-voice').hidden) return;
-  sel.replaceChildren();
-  for (const v of voices) {
-    const opt = el('option', '', v.name);
-    opt.value = v.id;
-    sel.append(opt);
-  }
-  // Only if the voice in force is one of hers — a persona can name an id that is
-  // not on this account, and a select silently showing the wrong name would be
-  // worse than one showing none.
-  sel.value = voices.some((v) => v.id === r.current) ? r.current : '';
-}
-
-// ⚠️ No confirm and no persistence, unlike the persona switch. Trying a voice
-// costs nothing and undoes itself: a reload, or picking a persona, puts her back
-// to whatever her file says.
-$('voice-select').onchange = (e) => post('/api/voice', { voiceId: e.target.value });
+// A voice PICKER used to live here — the account's voices, auditioned live so an
+// id could be found by ear. It is gone (2026-08-31): a voice is part of a
+// persona, named by the `voice:` line in her file, and a second way to choose
+// one was a control that only ever undid itself on the next reload.
 
 /** Same contract as the permission mode: the SERVER's level, not the click's. */
 function setSpeechLevel(level) {

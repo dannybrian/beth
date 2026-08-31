@@ -302,11 +302,12 @@ These cost hours. Don't rediscover them.
   only when the persona's name matches the repo's own director — otherwise picking "Beth"
   in a repo that already made her Beth would make her forget him, which would look exactly
   like the feature working.
-  The voice picker in the strip AUDITIONS and never writes: it lists the account's voices
-  so an id can be found by ear instead of by hunting, and a reload or a persona switch
-  puts her back to whatever her file says. The durable answer stays the `voice:` line in
-  that file, because a dropdown that quietly rewrote a hand-written file would be a second
-  writer nobody asked for.
+  ⚠ There is NO voice picker any more (removed 2026-08-31, with `/api/voice`,
+  `/api/voices`, `speakOut.voices` and `mouth.voices`). It auditioned without writing, so
+  a reload or a persona switch undid every choice made in it — which is correct behaviour
+  for a control that should not exist: a voice belongs to a persona, and the `voice:` line
+  in her file is the only answer. Do not add one back. `setVoice` stays because the
+  persona switch is what calls it.
 - **Reasoning effort has two owners.** The strip picks a level that stands until it is
   changed; the mic DUCKS it to `voiceEffort` for as long as it is open, because spoken
   conversation trades depth for latency. So the choice is kept separately from what is in

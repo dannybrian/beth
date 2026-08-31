@@ -76,7 +76,6 @@ body {
 #effort-select,
 #perm-select,
 #speech-select,
-#voice-select,
 #persona-select {
   background: #1b1f26;
   border: 1px solid var(--line);
@@ -106,13 +105,7 @@ body {
 #model-select:focus,
 #effort-select:focus,
 #perm-select:focus,
-#speech-select:focus,
-#voice-select:focus { outline: none; border-color: var(--accent); }
-/* Hers, so it takes her colour. The 96px truncation that used to be here left
-   with the strip: it was there because a voice name can be anything the account
-   calls it and four other controls had to fit beside it. In the panel the column
-   is the width, and a truncated name is just a name you cannot read. */
-#voice-select { color: var(--say); }
+#speech-select:focus { outline: none; border-color: var(--accent); }
 /* Unset reads as the field's own name and stays quiet. Any explicit level is a
    standing decision about what every turn costs, so it says so from across the
    room — warm at the top end, where it is a deliberate expense. */
@@ -167,7 +160,6 @@ body {
   display: flex;
   align-items: center;
   min-width: 0;
-  max-width: 38vw;
   margin: 0 auto;
   border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 6px;
@@ -187,12 +179,20 @@ body {
 }
 .bench a:hover { color: var(--text); }
 .bench-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
-/* The label is the name; the url rides beside it, quieter and in mono. When
-   there is no label the url IS the bold half — app.js swaps the classes. */
+/* The label if she gave one, else the url — and CROPPED, because this is a
+   clickable that persists rather than something you read. It sits between the
+   two dial clusters, so every character it takes is width they lose; the whole
+   url lives in the title and at the end of the click. 16ch is about the width
+   of a name. */
 #bench-label,
-#bench-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#bench-label { flex: none; }
-.bench .quiet { color: color-mix(in srgb, var(--accent) 60%, var(--muted)); font-family: var(--mono); font-size: 11.5px; font-weight: 400; }
+#bench-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16ch;
+  min-width: 0;
+}
+#bench-url[hidden] { display: none; }
 /* The × is Danny's hand — present but not competing with the link. */
 #bench-clear {
   border: none;
