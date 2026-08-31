@@ -33,6 +33,7 @@ import { blobUrl, hasWeb } from './repoWeb.ts';
 import { resolveImage } from './showImage.ts';
 import { listPersonas } from './personas.ts';
 import type { VoiceRoom } from './voiceRoom.ts';
+import type { CreditMeter } from './creditMeter.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -70,6 +71,8 @@ export function createServer(deps: {
   bench: Workbench;
   /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
   room: VoiceRoom;
+  /** The usage-credit countdown. See creditMeter.ts. */
+  credits: CreditMeter;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
@@ -640,6 +643,9 @@ export function createServer(deps: {
           // And the ear's half: seconds exact, dollars an estimate with the
           // assumed rate alongside. Zero for the browser ear, which is free.
           stt: earHost.spend(),
+          // The credit countdown — absent unless HARNESS_CREDITS_MONTHLY is
+          // set, an estimate wearing its assumptions when it is.
+          credits: deps.credits.state(),
         });
       }
       if (url.pathname === '/api/context') {

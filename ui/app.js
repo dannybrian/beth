@@ -1414,7 +1414,11 @@ function untilWhen(iso) {
   const h = ms / 3_600_000;
   if (h < 1) return `${Math.round(ms / 60_000)}m`;
   if (h < 24) return `${Math.round(h)}h`;
-  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short' });
+  // A weekday name is only an answer inside one week — the plan windows never
+  // exceed that, but the credit cycle resets monthly and "Tue" three weeks out
+  // is a guess dressed as a fact.
+  if (h < 24 * 7) return new Date(iso).toLocaleDateString(undefined, { weekday: 'short' });
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function bar(pct) {
@@ -1495,6 +1499,22 @@ function renderStats() {
     box.append(statRow('audio', `${stt.seconds}s`));
     box.append(statRow('cost', `≈$${stt.usd.toFixed(4)}`));
     box.append(el('div', 'snote', `scribe_v2_realtime · $${stt.usdPerHour}/hr assumed`));
+  }
+
+  // The credit countdown. Absent entirely unless a budget is configured —
+  // nothing can read the real balance, so the number is Danny's and every
+  // figure here is an estimate wearing its assumptions. The mode line matters
+  // most: a zero must read as "not drawing credits", never as "not working".
+  const cr = planLimits?.credits;
+  if (cr?.available) {
+    box.append(el('h3', null, 'Credits'));
+    box.append(statRow('spent', `≈$${cr.spentUsd.toFixed(2)}`, (cr.spentUsd / cr.monthlyUsd) * 100));
+    box.append(statRow('left', `≈$${Math.max(0, cr.remainingUsd).toFixed(2)} of $${cr.monthlyUsd}`));
+    box.append(statRow('resets', untilWhen(cr.resetsAt)));
+    box.append(
+      el('div', 'snote', cr.armed ? 'metering — a plan window is at 100%' : 'not drawing credits — plan windows still open')
+    );
+    box.append(el('div', 'snote', "list price, this machine's beths only, counted while a window is exhausted"));
   }
 
   // Additive and server-driven: render the windows that are actually present

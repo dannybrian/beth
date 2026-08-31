@@ -114,6 +114,8 @@ tabs would be two paid sessions; spend counted on parked audio), and `remoteEar`
 room half of `speakOut` follow: a stick nobody can break is a beth who went quiet for no
 reason, a wrong steal cuts a live sentence, and a page ending a line without reporting it
 (`speaker`'s report tests) holds every other harness mute with no symptom here.
+`creditMeter` too: cycle math that drifts a day reads as a refund, and a meter counting
+plan-covered turns bills money never drawn.
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -417,6 +419,16 @@ the conversation that produced it. Where things stand:
   twice. Characters are exact; the DOLLARS are an estimate, since credits-per-character
   comes from the model but dollars-per-credit comes from the plan and no API hands us
   that — so the assumed rate is printed beside the number rather than hidden behind it.
+  The USAGE-CREDIT countdown (`src/creditMeter.ts`, 2026-08-30) is the same contract at
+  its limit: NOTHING can read the real balance (no SDK field, no CLI surface, no consumer
+  API — researched, not assumed), so the budget is Danny's (`HARNESS_CREDITS_MONTHLY`,
+  machine .env — one account per Mac), the ledger is machine-wide JSONL keyed by billing
+  cycle (per-cycle files because three beths append concurrently and a prune-rewrite
+  could eat a neighbour's append), and turns are counted ONLY while a plan window reports
+  100% — Danny's explicit choice, because credits drain only after the plan is spent, and
+  counting covered turns would bill money never drawn. ⚠ The panel's mode line is
+  load-bearing: an unarmed meter's zero must read "not drawing credits", never "broken".
+  The exhaustion verdict is cached a minute; a failed read means NOT armed.
 - **`personal-context.md`** — BUILT (`src/personal.ts`). She remembers the person and
   follows things up. Read it for the failure mode, which is the whole design: she may only
   ask about something she ACTUALLY RECORDED, at most once a day, only at a moment already

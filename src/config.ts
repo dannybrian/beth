@@ -153,6 +153,18 @@ export type HarnessConfig = {
    */
   sttUsdPerHour: number;
   /**
+   * The monthly usage-credit budget, in dollars, for the countdown in the
+   * stats panel. Zero (the default) means no meter at all. Machine-level by
+   * nature — one account per Mac, every beth draws it — so it belongs in
+   * ~/.director-harness/.env beside the other account facts. Nothing can read
+   * the real balance (no SDK field, no CLI surface, no consumer API — checked
+   * 2026-08-30), so this number is Danny's, and the meter is honest about
+   * being an estimate against it. See creditMeter.ts.
+   */
+  creditsMonthlyUsd: number;
+  /** Day of month the credit grant resets (billing anchor). Clamped into short months. */
+  creditsResetDay: number;
+  /**
    * Reasoning effort applied while the MIC IS OPEN, then restored.
    *
    * Spoken conversation trades depth for latency; typed work keeps full effort.
@@ -304,6 +316,8 @@ export function loadConfig(): HarnessConfig {
     ear: conf('HARNESS_EAR') === 'browser' ? 'browser' : 'scribe',
     earVadSilenceSecs: Number(conf('HARNESS_EAR_VAD_SECS')) || undefined,
     sttUsdPerHour: Number(conf('HARNESS_STT_USD_PER_HOUR')) || 0.39,
+    creditsMonthlyUsd: Number(conf('HARNESS_CREDITS_MONTHLY')) || 0,
+    creditsResetDay: Math.min(31, Math.max(1, Number(conf('HARNESS_CREDITS_RESET_DAY')) || 1)),
     personal: conf('HARNESS_PERSONAL') !== 'off',
     testCmd: conf('HARNESS_TEST_CMD'),
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),

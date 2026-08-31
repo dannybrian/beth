@@ -18,6 +18,7 @@ import { Pins, workMessage } from './pins.ts';
 import { Workbench } from './workbench.ts';
 import { ensurePersonasDir } from './personas.ts';
 import { VoiceRoom } from './voiceRoom.ts';
+import { CreditMeter, anyWindowExhausted } from './creditMeter.ts';
 
 // The harness runs ON node, but the PATH it inherited may not carry one — beth
 // launched outside an interactive shell (nvm lives in .zshrc) hands us a PATH
@@ -147,12 +148,25 @@ if (kickoff) {
   });
 }
 
+// The credit countdown — armed only while a plan window is exhausted, because
+// that is when usage credits actually drain. Rides the same usage snapshots
+// the page renders, so a turn is counted exactly once, where its cost lands.
+const credits = new CreditMeter({
+  monthlyUsd: cfg.creditsMonthlyUsd,
+  resetDay: cfg.creditsResetDay,
+  repo: path.basename(cfg.repo),
+  exhausted: async () => anyWindowExhausted(await session.planUsage()),
+});
+bus.subscribe((m) => {
+  if (m.type === 'usage' && m.usage.turnCost > 0) void credits.noteTurn(m.usage.turnCost);
+});
+
 const tests = new TestMonitor(cfg, bus);
 // The repo's own nouns, walked ONCE — the page gets this plus whatever is live on
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins, bench, room });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins, bench, room, credits });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
