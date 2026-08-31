@@ -1690,10 +1690,24 @@ function clearInterim() {
   // publishing something would otherwise reach across and delete a sentence
   // sitting here unsent. Sending from here already empties the box itself.
   if (!autosend) return;
-  speechOwnsInput = false;
+  releaseComposer();
   input.value = '';
   input.classList.remove('interim');
   input.style.height = 'auto';
+}
+
+/**
+ * Speech has let go of the composer, so the readiness cue has to be repainted.
+ *
+ * ⚠️ Every release, not just this one. `paintPlaceholder` declines to touch the
+ * cue while speech owns the box — nothing is visible to fix there, the box is
+ * not empty — so a mic switched off MID-HOLD paints nothing, and the "Listening
+ * — Enter sends" left behind reappears the moment the box next empties, with the
+ * ear long since off. Which reads as a mic that will not turn off.
+ */
+function releaseComposer() {
+  speechOwnsInput = false;
+  paintPlaceholder();
 }
 
 function renderVoice(status, detail) {
@@ -2046,7 +2060,7 @@ const send = () => {
   if (!text && !refs.length) return;
   input.value = '';
   input.style.height = 'auto';
-  speechOwnsInput = false;
+  releaseComposer();
   heldBase = null;
   input.classList.remove('interim');
   // Muscle memory from Claude Code — these never reach the model.
@@ -2070,7 +2084,7 @@ function clearComposer() {
     input.select();
     if (!document.execCommand?.('delete')) input.value = '';
   }
-  speechOwnsInput = false;
+  releaseComposer();
   heldBase = null;
   input.classList.remove('interim');
   input.style.height = 'auto';
@@ -2227,7 +2241,7 @@ $('mute-toggle').onclick = () => post('/api/voice/room', { muted: !roomState.mut
 input.addEventListener('input', () => {
   // Typing takes the box back from the speech preview.
   if (speechOwnsInput) {
-    speechOwnsInput = false;
+    releaseComposer();
     input.classList.remove('interim');
   }
   input.style.height = 'auto';
