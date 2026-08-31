@@ -10,6 +10,7 @@ import { SessionManager } from './session.ts';
 import { SpeakOut } from './speakOut.ts';
 import { TestMonitor } from './testRunner.ts';
 import { BuildRunner } from './buildRunner.ts';
+import { Settings } from './settings.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
@@ -162,13 +163,16 @@ bus.subscribe((m) => {
   if (m.type === 'usage' && m.usage.turnCost > 0) void credits.noteTurn(m.usage.turnCost);
 });
 
-const tests = new TestMonitor(cfg, bus);
-const build = new BuildRunner(cfg, bus);
+// Set from the page and kept in the state dir, winning over the env layers —
+// see settings.ts for why that way round.
+const settings = new Settings(cfg);
+const tests = new TestMonitor(cfg, bus, settings);
+const build = new BuildRunner(cfg, bus, { settings });
 // The repo's own nouns, walked ONCE — the page gets this plus whatever is live on
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, work, mined, pins, bench, room, credits });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, bench, room, credits });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.

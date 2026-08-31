@@ -17,6 +17,7 @@ import type { SessionManager } from './session.ts';
 import type { SpeakOut } from './speakOut.ts';
 import type { TestMonitor } from './testRunner.ts';
 import type { BuildRunner } from './buildRunner.ts';
+import type { Settings } from './settings.ts';
 import { EFFORT_LEVELS, type EffortLevel, type HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
@@ -66,6 +67,7 @@ export function createServer(deps: {
   speakOut: SpeakOut;
   tests: TestMonitor;
   build: BuildRunner;
+  settings: Settings;
   work: WorkIndex;
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
@@ -439,6 +441,15 @@ export function createServer(deps: {
             void deps.build.run();
             return json(200, { ok: true, state: deps.build.state() });
           }
+          // The gear. One key at a time, and an empty value CLEARS — that is how
+          // a command is handed back to the env layer or to detection, so it has
+          // to be expressible. Both runners re-detect on the spot and drop the
+          // result they earned under the old command.
+          case '/api/settings': {
+            if (typeof body.testCmd === 'string') deps.tests.setCommand(body.testCmd);
+            if (typeof body.buildCmd === 'string') deps.build.setCommand(body.buildCmd);
+            return json(200, { ok: true, settings: deps.settings.all() });
+          }
           case '/api/build/stop': {
             deps.build.cancel();
             return json(200, { ok: true, state: deps.build.state() });
@@ -641,6 +652,11 @@ export function createServer(deps: {
           bus.publish({ type: 'voice', state: 'unspoken', detail: msg, status: deps.speakOut.status() });
           return json(502, { error: msg });
         }
+      }
+      if (url.pathname === '/api/settings') {
+        // The RAW overrides, which is what the boxes hold. Where the live command
+        // came from is already on the `tests` and `build` states, as `why`.
+        return json(200, deps.settings.all());
       }
       if (url.pathname === '/api/usage') {
         // Read defensively and hand the page whatever survived. `null` here is

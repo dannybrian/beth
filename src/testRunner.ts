@@ -15,6 +15,7 @@ import path from 'node:path';
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
 import { MAX_OUTPUT, runCommand, treeFingerprint, type CommandResult } from './runCommand.ts';
+import type { Settings } from './settings.ts';
 
 export type TestFailure = {
   /** What Beth should call it — the test's own name, said aloud. */
@@ -47,11 +48,16 @@ export type TestState = {
  * First hit wins, and the order is deliberate: a repo with both a package.json
  * and a Makefile means the package.json.
  */
-export function detectRunner(repo: string, override?: string): { command: string[]; why: string } | null {
+export function detectRunner(
+  repo: string,
+  override?: string,
+  /** Where the override came from, for the panel — the page says which layer won. */
+  overrideWhy = 'HARNESS_TEST_CMD'
+): { command: string[]; why: string } | null {
   if (override?.trim()) {
     // Split on whitespace rather than handing it to a shell. A command that
     // genuinely needs shell syntax should be a script the project already has.
-    return { command: override.trim().split(/\s+/), why: 'HARNESS_TEST_CMD' };
+    return { command: override.trim().split(/\s+/), why: overrideWhy };
   }
   const has = (f: string) => fs.existsSync(path.join(repo, f));
   const read = (f: string) => {
@@ -276,12 +282,14 @@ export class TestMonitor {
   private changedAt = 0;
   private directorBusy = false;
   private timer: NodeJS.Timeout | null = null;
+  private settings?: Settings;
 
-  constructor(cfg: HarnessConfig, bus: ConversationBus) {
+  constructor(cfg: HarnessConfig, bus: ConversationBus, settings?: Settings) {
     this.cfg = cfg;
     this.bus = bus;
+    this.settings = settings;
     this.stateFile = path.join(cfg.stateDir, 'tests.json');
-    this.detected = detectRunner(cfg.repo, cfg.testCmd);
+    this.detected = this.detect();
     try {
       this.enabled = JSON.parse(fs.readFileSync(this.stateFile, 'utf8'))?.enabled === true;
     } catch {
@@ -292,6 +300,28 @@ export class TestMonitor {
     bus.subscribe((m: UIMessage) => {
       if (m.type === 'status') this.directorBusy = m.state === 'thinking';
     });
+  }
+
+  /** What to run and where it came from — the page's setting wins. See settings.ts. */
+  private detect() {
+    const set = this.settings?.get('testCmd');
+    return set ? detectRunner(this.cfg.repo, set, 'set here') : detectRunner(this.cfg.repo, this.cfg.testCmd);
+  }
+
+  /**
+   * A new command, from the page. Empty hands it back to the env layer, or to
+   * detection.
+   *
+   * ⚠️ The last run goes with it, failures and all: those name tests that the
+   * command you just replaced was running, and clicking one would point her at a
+   * failure nothing here can reproduce.
+   */
+  setCommand(value: string | null) {
+    this.settings?.set('testCmd', value);
+    this.detected = this.detect();
+    this.last = null;
+    this.ranFingerprint = '';
+    this.publish();
   }
 
   start() {

@@ -68,6 +68,13 @@ machine, so it lives in the state dir and no plan file learns about it.
   env vars → the BOUND REPO's `.env` → `~/.director-harness/.env`. The ElevenLabs
   credentials belong in that machine file: one account per Mac, so a per-repo copy
   duplicates a secret, and forgetting one makes the new repo silently text-only. See `src/config.ts` and `.env.example`. Nothing in this repo holds a key.
+  ⚠ Since 2026-08-31 there is a FOURTH source and it is the only one that is
+  written: `src/settings.ts`, the gear panel's store, in the per-repo state dir
+  beside `tests.json`. It WINS over all three — deliberately, because a value
+  typed into the page that silently lost to a repo `.env` would be a no-op with
+  no symptom, and the panel says which layer won instead. Only what a page can
+  set belongs there; secrets stay in the `.env` layers, where they are not one
+  click from being rewritten.
 - **Comments explain WHY.** Several of the trickiest bits exist because of a bug that was
   expensive to find; those comments are load-bearing. Don't strip them.
 
@@ -80,7 +87,10 @@ pnpm test        # node --test src/*.test.ts
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `mouth` — the speech-out
 core, billing included — and `speakOut`, its bus adapter (⚠ whose `setVoice`/`speechLevel`
-are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers, `buildRunner` (the other half of
+are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers, `settings` (the write layer: that
+what the page set beats the env layer, that clearing hands the command back, and
+that changing a command drops the light the OLD one earned — a green kept across
+that change reads exactly like the new command having passed), `buildRunner` (the other half of
 that contract: detection that must REFUSE a dev server, a stop that is not a
 failure, and a staleness watch that stops once it fires — a light claiming green
 after an edit is the same lie the test light's yellow exists to avoid),

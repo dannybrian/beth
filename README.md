@@ -244,7 +244,7 @@ want to edit before sending. `docs/ear.md` and `docs/voice-plane.md` have the
 full story, including everything this replaced.
 
 Beth speaks in whatever voice the persona names (`voice:`), falling back to
-`HARNESS_VOICE_ID`; the picker in the strip auditions the account's voices
+`HARNESS_VOICE_ID`; the picker behind the gear auditions the account's voices
 live without writing anything down. The key needs the **Text to Speech**
 permission — without a key the harness runs text-only and the mic button
 explains what is missing.
@@ -292,9 +292,18 @@ commit, what's in flight, the clock, the gap since the harness was last up.
 - **Director-role handoff**: if a terminal session already holds the director
   plan, the harness comes up as a *shadow* — read everything, claim nothing.
   Promotion re-checks at the moment you click it.
-- **The strip**: model, reasoning effort, permission mode, speech level, voice
-  audition, persona — all live, all showing what the *server* believes rather
-  than what was clicked.
+- **The strip**: the plan's five-hour and seven-day windows, model, reasoning
+  effort, speech level, persona — all live, all showing what the *server*
+  believes rather than what was clicked. Two lights on the right: tests, and a
+  build you fire from the strip (keypad 1 and 2). Permission mode, the voice
+  audition and both commands live behind the gear; the gear itself turns amber
+  when permissions are anything but `auto`, because that is the setting which
+  decides how often a spoken conversation can be stopped dead.
+- **Commands are detected, never invented**: the test and build commands come
+  from what the project already declares, and a repo the detectors do not
+  recognise gets nothing rather than a guess. Name one in the gear (it wins over
+  `HARNESS_TEST_CMD`/`HARNESS_BUILD_CMD`, and the panel says which layer is in
+  force) or clear it to hand it back.
 
 ## Running it
 

@@ -88,18 +88,6 @@
           <option value="xhigh">xhigh</option>
           <option value="max">max</option>
         </select>
-        <!-- Permissions. A card cannot be answered by voice, so this is really a
-             control over how often a spoken conversation can be stopped dead. -->
-        <select id="perm-select" title="How tool permissions are resolved — switches live">
-          <option value="auto">auto</option>
-          <option value="default">ask</option>
-          <option value="acceptEdits">edits ok</option>
-          <option value="dontAsk">no asks</option>
-        </select>
-        <!-- Auditioning a voice, not choosing one. Nothing is written down: the
-             durable answer lives in a persona file, and this is how you find out
-             which id to put there. Hidden when the account lists no voices. -->
-        <select id="voice-select" title="Try a voice — not saved. The durable choice is the voice: line in a persona file." hidden></select>
         <!-- Build it. Unlike the test light beside it this is a TRIGGER: the
              click runs the command, because "quickly kick one off" is the whole
              ask, and a build is the one command that is safe to repeat — it is
@@ -114,11 +102,47 @@
         <button id="test-light" class="tlight grey" title="Tests">
           <span class="tdot"></span><span id="test-count"></span>
         </button>
+        <!-- Settings, and the things that turned out to be settings rather than
+             dials: what you change once a week does not earn strip width. -->
+        <button id="gear" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.3" />
+            <path d="M12 2.7v2.5M12 18.8v2.5M2.7 12h2.5M18.8 12h2.5M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8" />
+          </svg>
+        </button>
       </div>
     </header>
 
     <div id="test-panel" class="stats wide" hidden></div>
     <div id="build-panel" class="stats wide" hidden></div>
+
+    <!-- The gear. Two dials that were never worth strip width (you change them
+         about once a week) and the two commands the lights run. -->
+    <div id="gear-panel" class="stats set" hidden>
+      <h3>Permissions</h3>
+      <!-- A card cannot be answered by voice, so this is really a control over
+           how often a spoken conversation can be stopped dead. Which is why the
+           GEAR carries the tell when it is anything but auto: the setting moved
+           in here, the fact that it is loose stays visible from the strip. -->
+      <select id="perm-select" title="How tool permissions are resolved — switches live">
+        <option value="auto">auto</option>
+        <option value="default">ask</option>
+        <option value="acceptEdits">edits ok</option>
+        <option value="dontAsk">no asks</option>
+      </select>
+      <div id="gear-voice" hidden>
+        <h3>Voice</h3>
+        <!-- Auditioning a voice, not choosing one. Nothing is written down: the
+             durable answer lives in a persona file, and this is how you find out
+             which id to put there. Absent when the account lists no voices. -->
+        <select id="voice-select" title="Try a voice — not saved. The durable choice is the voice: line in a persona file."></select>
+        <div class="snote">Not saved — the durable choice is the <code>voice:</code> line in a persona file.</div>
+      </div>
+      <h3>Commands</h3>
+      <div id="gear-commands"></div>
+      <div class="snote">Split on whitespace and run directly — no shell, so a pipeline belongs in a script the project has.</div>
+    </div>
 
     <!-- The wire: what actually happened on the API. Opened from the status
          dot, PULLED while open — nothing here rides the stream or the replay,

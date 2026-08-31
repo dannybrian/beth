@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus } from './bus.ts';
 import { runCommand, treeFingerprint, type CommandResult } from './runCommand.ts';
+import type { Settings } from './settings.ts';
 
 /** A finished build. `cancelled` is a stop you asked for, not a failure. */
 export type BuildRun = CommandResult & { cancelled?: boolean };
@@ -41,11 +42,16 @@ export type BuildState = {
  * button pointed at a dev server is a light stuck on yellow until the timeout
  * kills the server out from under you.
  */
-export function detectBuild(repo: string, override?: string): { command: string[]; why: string } | null {
+export function detectBuild(
+  repo: string,
+  override?: string,
+  /** Where the override came from, for the panel — the page says which layer won. */
+  overrideWhy = 'HARNESS_BUILD_CMD'
+): { command: string[]; why: string } | null {
   if (override?.trim()) {
     // Split on whitespace rather than handing it to a shell, exactly as the test
     // command is. A command that needs shell syntax should be a project script.
-    return { command: override.trim().split(/\s+/), why: 'HARNESS_BUILD_CMD' };
+    return { command: override.trim().split(/\s+/), why: overrideWhy };
   }
   const has = (f: string) => fs.existsSync(path.join(repo, f));
   const read = (f: string) => {
@@ -95,6 +101,7 @@ export class BuildRunner {
   private detected: { command: string[]; why: string } | null;
   private fingerprint: () => string;
   private stalePollMs: number;
+  private settings?: Settings;
   private running = false;
   private cancelling = false;
   private child: ChildProcess | null = null;
@@ -107,13 +114,45 @@ export class BuildRunner {
   constructor(
     cfg: HarnessConfig,
     bus: ConversationBus,
-    opts: { fingerprint?: () => string; stalePollMs?: number } = {}
+    opts: { fingerprint?: () => string; stalePollMs?: number; settings?: Settings } = {}
   ) {
     this.cfg = cfg;
     this.bus = bus;
-    this.detected = detectBuild(cfg.repo, cfg.buildCmd);
+    this.settings = opts.settings;
+    this.detected = this.detect();
     this.fingerprint = opts.fingerprint ?? (() => treeFingerprint(cfg.repo));
     this.stalePollMs = opts.stalePollMs ?? 5000;
+  }
+
+  /**
+   * What to run, and where that came from.
+   *
+   * The page's own setting wins over the env layers and over detection — see
+   * settings.ts for why that way round rather than the other. `why` travels with
+   * it, because the only thing that makes a precedence rule liveable is the panel
+   * saying which layer actually won.
+   */
+  private detect() {
+    const set = this.settings?.get('buildCmd');
+    return set ? detectBuild(this.cfg.repo, set, 'set here') : detectBuild(this.cfg.repo, this.cfg.buildCmd);
+  }
+
+  /**
+   * A new command, from the page. Empty hands it back to the env layer, or to
+   * detection.
+   *
+   * ⚠️ The last result goes with it. A green light earned by the command you just
+   * replaced is a claim about something that no longer runs here, and it would
+   * look exactly like the new command having passed.
+   */
+  setCommand(value: string | null) {
+    this.settings?.set('buildCmd', value);
+    this.detected = this.detect();
+    this.last = null;
+    this.ranFingerprint = '';
+    this.stale = false;
+    this.stopWatch();
+    this.publish();
   }
 
   start() {

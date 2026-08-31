@@ -108,10 +108,11 @@ body {
 #perm-select:focus,
 #speech-select:focus,
 #voice-select:focus { outline: none; border-color: var(--accent); }
-/* A voice name can be anything the account calls it, and the strip has four
-   other controls to fit — so it truncates rather than pushing them around. */
-#voice-select { max-width: 96px; color: var(--say); }
-#voice-select[hidden] { display: none; }
+/* Hers, so it takes her colour. The 96px truncation that used to be here left
+   with the strip: it was there because a voice name can be anything the account
+   calls it and four other controls had to fit beside it. In the panel the column
+   is the width, and a truncated name is just a name you cannot read. */
+#voice-select { color: var(--say); }
 /* Unset reads as the field's own name and stays quiet. Any explicit level is a
    standing decision about what every turn costs, so it says so from across the
    room — warm at the top end, where it is a deliberate expense. */
@@ -319,6 +320,57 @@ button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 .sbar.warm > i { background: var(--warn); }
 .sbar.hot > i { background: var(--err); }
 .snote { color: var(--muted); font-style: italic; }
+
+/* --- the gear ---
+   Borrows the mute's anatomy: a bare glyph, no box, colour carrying the state.
+   The TELL is the whole reason it has one: the permission mode moved into the
+   panel, and a mode looser than "ask" has to stay legible from the strip, or
+   "why has she stopped asking" loses its answer. */
+#gear {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+#gear svg { width: 15px; height: 15px; display: block; }
+#gear:hover, #gear.open { color: var(--text); }
+#gear.loose { color: var(--warn); }
+
+/* The settings panel is narrower than its siblings — a column of controls, not
+   a log. Anchored top-right under the gear that opens it. */
+.stats.set { top: 44px; bottom: auto; width: 290px; }
+.stats.set select {
+  width: 100%;
+  background: #1b1f26;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.setrow { margin-bottom: 9px; }
+.setrow > label { display: block; color: var(--muted); margin-bottom: 3px; }
+.setrow > input {
+  width: 100%;
+  background: #1b1f26;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.setrow > input:focus { outline: none; border-color: var(--accent); }
+/* Where the live value came from. The only thing that makes a precedence rule
+   liveable is being told which layer won. */
+.setwhy { color: var(--muted); font-style: italic; margin-top: 2px; word-break: break-all; }
+.setwhy b { color: var(--text); font-style: normal; font-weight: 400; }
 
 /* --- the plan windows, in the strip ---
    The same species as a panel row (.sbar above), sized down to sit beside the

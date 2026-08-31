@@ -1312,6 +1312,7 @@ function renderTests(state) {
                 ? 'Passed, but the tree has changed since'
                 : 'Green';
   if (testPanelOpen) renderTestPanel();
+  if (gearOpen) renderGear();
 }
 
 function renderTestPanel() {
@@ -1390,6 +1391,79 @@ function toggleTestPanel() {
   if (testPanelOpen) renderTestPanel();
 }
 
+// --- the gear ----------------------------------------------------------------
+//
+// Two dials that were never worth strip width, and the two commands the lights
+// run. The commands are the reason it exists: they are the first thing the page
+// WRITES into config, and config has three read-only layers underneath — so the
+// one rule that makes it liveable is that the panel says which layer won. See
+// src/settings.ts.
+
+let gearOpen = false;
+/** The raw overrides, which is what the boxes hold — not what is in force. */
+let gearSettings = {};
+
+function renderGear() {
+  const box = $('gear-commands');
+  box.replaceChildren();
+  for (const [key, label, state, note] of [
+    ['testCmd', 'test', testState, 'What answers “is the tree green”.'],
+    ['buildCmd', 'build', buildState, 'Must terminate — a dev server here sticks the light on yellow.'],
+  ]) {
+    const row = el('div', 'setrow');
+    row.append(el('label', null, label));
+    const input = el('input');
+    input.type = 'text';
+    input.value = gearSettings[key] ?? '';
+    // The placeholder is the INHERITED answer, so an empty box shows what it is
+    // falling back to rather than looking like nothing is configured.
+    input.placeholder = state?.command?.join(' ') ?? 'nothing detected';
+    input.title = note;
+    const commit = () => {
+      if ((gearSettings[key] ?? '') === input.value.trim()) return;
+      void post('/api/settings', { [key]: input.value.trim() }).then(loadGearSettings);
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') input.blur();
+      // Escape belongs to the panel, not to the box — but not while you are
+      // mid-edit: put the old value back first, and let the next one close.
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        input.value = gearSettings[key] ?? '';
+        input.blur();
+      }
+    };
+    input.onblur = commit;
+    row.append(input);
+    const why = el('div', 'setwhy');
+    if (!state?.command) why.textContent = 'nothing detected here';
+    else {
+      why.append(el('b', null, state.command.join(' ')));
+      why.append(document.createTextNode(` — ${state.why}`));
+    }
+    row.append(why);
+    box.append(row);
+  }
+}
+
+async function loadGearSettings() {
+  gearSettings = await fetch('/api/settings')
+    .then((r) => r.json())
+    .catch(() => gearSettings);
+  if (gearOpen) renderGear();
+}
+
+function toggleGear(open = !gearOpen) {
+  gearOpen = open;
+  $('gear-panel').hidden = !gearOpen;
+  $('gear').classList.toggle('open', gearOpen);
+  if (!gearOpen) return;
+  // Re-read on every open: another tab may have set one, and what is DETECTED
+  // changes with the repo underneath us.
+  renderGear();
+  void loadGearSettings();
+}
+
 // --- the build light ---------------------------------------------------------
 //
 // The test light's colours, and the opposite gesture. That one is a READOUT you
@@ -1424,6 +1498,8 @@ function renderBuild(state) {
                   ? 'Built, but the tree has changed since'
                   : 'Built') + '  (keypad 1)';
   if (buildPanelOpen) renderBuildPanel();
+  // The gear shows what each light RUNS, so it moves when a light does.
+  if (gearOpen) renderGear();
 }
 
 function renderBuildPanel() {
@@ -2080,6 +2156,9 @@ const KEYPAD = {
 document.addEventListener('keydown', (e) => {
   const act = KEYPAD[e.code];
   if (!act || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  // ⚠️ The composer is the deliberate exception; a settings BOX is not. `make
+  // -j4` has a numeral in it, and typing one must not kick off a build instead.
+  if (e.target instanceof HTMLInputElement) return;
   e.preventDefault();
   act();
 });
@@ -2212,6 +2291,8 @@ $('ctx-meter').onclick = toggleStats;
 $('usage-meters').onclick = toggleStats;
 $('test-light').onclick = toggleTestPanel;
 $('build-light').onclick = buildNow;
+$('gear').onclick = () => toggleGear();
+void loadGearSettings();
 // The windows move once a TURN, which is why the usage handler re-reads them;
 // this interval is for the long quiet stretches — another beth on the same
 // account, or a window rolling over while nothing happens here. A hidden tab
@@ -2238,6 +2319,7 @@ document.addEventListener('click', (e) => {
   }
   if (testPanelOpen && !e.target.closest('#test-panel') && !e.target.closest('#test-light')) toggleTestPanel();
   if (buildPanelOpen && !e.target.closest('#build-panel') && !e.target.closest('#build-light')) toggleBuildPanel(false);
+  if (gearOpen && !e.target.closest('#gear-panel') && !e.target.closest('#gear')) toggleGear(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
@@ -2250,10 +2332,11 @@ document.addEventListener('keydown', (e) => {
     if (pendingOverlayOpen) closePendingOverlay();
     return;
   }
-  if (statsOpen || testPanelOpen || buildPanelOpen) {
+  if (statsOpen || testPanelOpen || buildPanelOpen || gearOpen) {
     if (statsOpen) toggleStats();
     if (testPanelOpen) toggleTestPanel();
     if (buildPanelOpen) toggleBuildPanel(false);
+    if (gearOpen) toggleGear(false);
     return;
   }
   stopAll();
@@ -2328,6 +2411,11 @@ function setPermissionMode(mode) {
   const sel = $('perm-select');
   sel.value = mode;
   sel.dataset.mode = mode;
+  // The select lives behind the gear now, so the gear carries the tell: anything
+  // but `auto` changes how often a spoken conversation can be stopped dead, and
+  // that has to be legible without opening a panel to look.
+  $('gear').classList.toggle('loose', mode !== 'auto');
+  $('gear').title = mode === 'auto' ? 'Settings' : `Settings — permissions: ${sel.selectedOptions[0]?.text ?? mode}`;
 }
 $('perm-select').onchange = (e) => post('/api/permission-mode', { mode: e.target.value });
 
@@ -2398,8 +2486,10 @@ async function loadVoices() {
   const sel = $('voice-select');
   const r = await fetch('/api/voices').then((x) => x.json()).catch(() => null);
   const voices = r?.voices ?? [];
-  sel.hidden = voices.length === 0;
-  if (sel.hidden) return;
+  // The heading and its note go with the select — a "Voice" section with nothing
+  // under it reads as a control that failed to load.
+  $('gear-voice').hidden = voices.length === 0;
+  if ($('gear-voice').hidden) return;
   sel.replaceChildren();
   for (const v of voices) {
     const opt = el('option', '', v.name);
