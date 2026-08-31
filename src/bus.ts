@@ -146,6 +146,13 @@ export type UIMessage =
    * sends `pending` and `tests`.
    */
   | { type: 'workbench'; url: string | null; label?: string }
+  /**
+   * The MACHINE's voice room (voiceRoom.ts): the universal mute and the one
+   * shared volume, for every harness on this Mac. Current state, not
+   * transcript — the server sends the live room on every connect, so it does
+   * not replay.
+   */
+  | { type: 'room'; muted: boolean; volume: number }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
@@ -199,6 +206,7 @@ export class ConversationBus {
       m.type !== 'speak' &&
       m.type !== 'tests' &&
       m.type !== 'workbench' &&
+      m.type !== 'room' &&
       // A partial transcript is a moment; replaying an hour of them into a
       // reconnecting tab would render someone's morning into the composer.
       m.type !== 'ear'

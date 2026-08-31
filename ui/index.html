@@ -27,6 +27,24 @@
           <option value="full">speak all</option>
           <option value="headlines">headlines</option>
         </select>
+        <!-- The MACHINE's voice, not this tab's: every harness on this Mac
+             shares one mute and one volume (src/voiceRoom.ts), because three
+             directors on one desk are one soundscape. Mute gates lines before
+             they are announced — nothing plays and nothing is billed. Volume is
+             the knob on every speaker at once; zero still plays (and bills),
+             just silently — the tooltip says which is which. -->
+        <button id="mute-toggle" class="mute" title="Mute every director on this machine — nothing plays, nothing is billed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6.5 8.5H3v7h3.5L11 19z" />
+            <path class="wave" d="M14.5 9.5a4 4 0 0 1 0 5" />
+            <path class="wave" d="M17 7a7.5 7.5 0 0 1 0 10" />
+            <path class="slash cut" d="M4 4.5 19.5 20" />
+            <path class="slash" d="M4 4.5 19.5 20" />
+          </svg>
+        </button>
+        <input type="range" id="volume-slider" min="0" max="100"
+               title="Volume — every director on this machine. Zero still bills; the mute is what stops that." />
         <span class="mode" id="mode-label"></span>
       </div>
       <!-- The workbench: THE url being iterated on right now, dead centre in

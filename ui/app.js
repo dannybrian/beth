@@ -1094,6 +1094,7 @@ const handlers = {
     renderVoice(m.status, m.detail);
   },
   speak: (m) => spk.enqueue(m.id),
+  room: (m) => applyRoom(m),
   // The Scribe ear's frames — partials, commits, a steal, a degrade. RemoteEar
   // filters by owner and translates into the same composer callbacks the
   // browser ear uses; a page running listen.js has no onEar and ignores these.
@@ -1109,30 +1110,51 @@ const handlers = {
 //
 // Playback lives in speaker.js (a module for the same reason listen.js is one:
 // the bookkeeping is testable when node can stub the <audio>). What stays here
-// is what belongs to the PAGE: which tab owns the mouth, and where the volume
-// preference is persisted.
+// is what belongs to the PAGE: which tab owns the mouth, and the mirror of the
+// machine's voice room.
 
 /**
- * How loud she is ON THIS PAGE. A page-side dial, not a server one: each tab
- * has its own <audio> element, and the tab on the quiet monitor being quiet is
- * the point. Persisted like autosend — one person's preference on one machine.
+ * The MACHINE's voice room — one mute and one volume across every harness on
+ * this Mac, because three beths speaking are one soundscape and their voices
+ * are similar in loudness. The store is server-side (~/.director-harness, see
+ * src/voiceRoom.ts); this is only the mirror the controls read, updated by
+ * `room` messages — including ones another beth's tab caused.
  *
- * ⚠️ Zero is mute, not silence: the audio is still requested and still BILLED.
- * "Stop talking" is the speech level's job; this is the knob on the speaker.
+ * ⚠️ Volume zero is mute-by-loudness, not silence: the line still fetches and
+ * still BILLS. The mute button is the one that stops billing, because it gates
+ * lines server-side before they are ever announced.
  */
-const VOLUME_KEY = 'harness.volume';
+let roomState = { muted: false, volume: 1 };
 
 const spk = createSpeaker({
   audio: new Audio(),
   park: () => voice?.park?.(),
   unpark: () => voice?.unpark?.(),
   note: (text) => entry('activity', (n) => (n.textContent = text)),
-  initialVolume: parseFloat(localStorage.getItem(VOLUME_KEY) ?? '1') || 0,
+  // Every way a line ends is reported — the release half of the machine's
+  // talking stick. Fire-and-forget: a lost report is what the backstop is for.
+  report: (ids) => post('/api/voice/done', { ids }),
+  // The real volume arrives in the `room` message, which the server sends
+  // before the replay — and `speak` never replays, so nothing can play first.
+  initialVolume: 1,
 });
 
-function setSpeakerVolume(v) {
-  spk.setVolume(v);
-  localStorage.setItem(VOLUME_KEY, String(spk.volume()));
+function applyRoom(m) {
+  const wasMuted = roomState.muted;
+  roomState = { muted: m.muted, volume: m.volume };
+  spk.setVolume(m.volume);
+  // "Everybody, right now": the server-side gate only stops NEW lines from
+  // being announced, so going muted also cuts the line already playing.
+  if (m.muted && !wasMuted) spk.stop();
+  const mute = $('mute-toggle');
+  mute.classList.toggle('on', m.muted);
+  mute.title = m.muted
+    ? 'Muted — every director on this machine. Click to unmute.'
+    : 'Mute every director on this machine — nothing plays, nothing is billed';
+  const slider = $('volume-slider');
+  // Not while he is dragging it: the echo of his own drag arriving a beat late
+  // would yank the thumb out from under the pointer.
+  if (document.activeElement !== slider) slider.value = String(Math.round(m.volume * 100));
 }
 
 /**
@@ -1440,28 +1462,10 @@ function renderStats() {
   // The other bill. Characters are exact — the harness sent them — but the
   // dollars are an estimate, so the rate behind them is printed rather than
   // hidden: a number you can check beats a number you have to trust.
+  // The volume moved to the strip when it became the MACHINE's dial rather
+  // than this page's — a control was always a stranger in a panel of readouts.
   const s = planLimits?.speech;
   box.append(el('h3', null, 'Speech'));
-  // The volume, first — it is a control, and the only one in a panel of
-  // readouts, so it sits at the top of its section rather than among the bill
-  // rows. Drawn whenever she CAN speak; a text-only harness has nothing to dial.
-  if (s?.available) {
-    const row = el('div', 'srow');
-    row.title = "Playback volume on this page. Zero still bills — characters are requested either way; 'silent' on the speech level is what stops that.";
-    row.append(el('span', 'sk', 'volume'));
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '100';
-    slider.value = String(Math.round(spk.volume() * 100));
-    const pct = el('span', 'sv', `${Math.round(spk.volume() * 100)}%`);
-    slider.oninput = () => {
-      setSpeakerVolume(Number(slider.value) / 100);
-      pct.textContent = `${slider.value}%`;
-    };
-    row.append(slider, pct);
-    box.append(row);
-  }
   if (!planLimits) box.append(el('div', 'snote', 'checking…'));
   else if (!s) box.append(el('div', 'snote', 'not reported'));
   else if (!s.available) box.append(el('div', 'snote', 'text-only — nothing spoken'));
@@ -2177,6 +2181,29 @@ function setSpeechLevel(level) {
   sel.dataset.level = level;
 }
 $('speech-select').onchange = (e) => post('/api/speech', { level: e.target.value });
+
+// The machine's mute and volume. No optimistic paint on the mute: the echo is
+// one loopback SSE hop away, and the button showing the SERVER's state is the
+// same contract every other strip control keeps.
+$('mute-toggle').onclick = () => post('/api/voice/room', { muted: !roomState.muted });
+{
+  const slider = $('volume-slider');
+  let settle = null;
+  slider.addEventListener('input', () => {
+    // This page tracks the thumb live; the room hears about it throttled — a
+    // drag fires dozens of inputs, and each POST fans out to every tab of
+    // every harness on the machine.
+    spk.setVolume(Number(slider.value) / 100);
+    if (settle) return;
+    settle = setTimeout(() => {
+      settle = null;
+      post('/api/voice/room', { volume: Number(slider.value) / 100 });
+    }, 150);
+  });
+  // The release always sends the final value — the throttle above may have
+  // fired mid-drag and stopped short of where the thumb ended up.
+  slider.addEventListener('change', () => post('/api/voice/room', { volume: Number(slider.value) / 100 }));
+}
 input.addEventListener('input', () => {
   // Typing takes the box back from the speech preview.
   if (speechOwnsInput) {

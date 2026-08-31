@@ -123,6 +123,33 @@ body {
    worth seeing without opening the menu. */
 #speech-select[data-level="full"] { color: var(--say); border-color: color-mix(in srgb, var(--say) 45%, transparent); }
 #speech-select[data-level="headlines"] { color: var(--muted); }
+/* The MACHINE's mute and volume — they sit with the speech level because all
+   three are dials on the speaker, but these two reach every beth on the desk.
+   The mute borrows the autosend button's anatomy: a slash drawn over the glyph,
+   with a panel-coloured undercut so it reads as a cut rather than a scribble. */
+#mute-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+#mute-toggle svg { width: 17px; height: 17px; display: block; }
+#mute-toggle .slash { display: none; }
+#mute-toggle.on .slash { display: block; }
+#mute-toggle.on .wave { display: none; }
+#mute-toggle .cut { stroke: var(--panel); stroke-width: 4.5; }
+/* Muted is a standing decision to hear NOTHING from any of them — it should be
+   legible from across the room, like the loose permission modes. */
+#mute-toggle.on { color: var(--warn); }
+#mute-toggle:hover { color: var(--text); }
+#volume-slider {
+  width: 64px;
+  accent-color: var(--muted);
+  cursor: pointer;
+}
+#volume-slider:hover { accent-color: var(--accent); }
 /* Anything looser than "ask" is a standing decision to be interrupted less, so it
    should be legible from across the room rather than hidden in a menu. */
 #perm-select[data-mode="dontAsk"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }

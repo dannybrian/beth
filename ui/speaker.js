@@ -20,9 +20,14 @@
  * @param opts.park   Close the ear — half duplex, she must not hear herself.
  * @param opts.unpark Reopen it, only once she has genuinely finished.
  * @param opts.note   One human-readable line to the activity feed.
+ * @param opts.report Line ids that FINISHED — played, refused, or dropped by a
+ *                    stop. The harness frees the machine's talking stick on
+ *                    this, so every way a line can end must reach it: a line
+ *                    that ends silently and unreported holds every other beth
+ *                    on the machine quiet until the backstop.
  * @param opts.initialVolume 0..1. Persistence is the caller's business.
  */
-export function createSpeaker({ audio, park, unpark, note, initialVolume = 1 }) {
+export function createSpeaker({ audio, park, unpark, note, report, initialVolume = 1 }) {
   const backlog = [];
   let speakingId = null;
   audio.volume = clamp(initialVolume);
@@ -55,6 +60,7 @@ export function createSpeaker({ audio, park, unpark, note, initialVolume = 1 }) 
   function done(id) {
     if (speakingId !== id) return;
     speakingId = null;
+    if (id != null) report?.([id]);
     if (backlog.length) return void playNext();
     // Only reopen when she has genuinely finished — between two queued lines
     // the ear would otherwise open into the gap and hear the second one.
@@ -78,9 +84,13 @@ export function createSpeaker({ audio, park, unpark, note, initialVolume = 1 }) 
      */
     stop() {
       audio.pause();
+      // Dropped lines are FINISHED as far as the machine is concerned — the
+      // talking stick must not stay held for words nobody will hear.
+      const finished = speakingId != null ? [speakingId, ...backlog] : [...backlog];
       const dropped = backlog.length;
       backlog.length = 0;
       speakingId = null;
+      if (finished.length) report?.(finished);
       if (dropped) note?.(`⏹ stopped speaking — ${dropped} line${dropped > 1 ? 's' : ''} not read aloud`);
       unpark?.();
     },

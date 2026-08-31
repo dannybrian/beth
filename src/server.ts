@@ -32,6 +32,7 @@ import { ScribeEngine } from './ear/scribeEngine.ts';
 import { blobUrl, hasWeb } from './repoWeb.ts';
 import { resolveImage } from './showImage.ts';
 import { listPersonas } from './personas.ts';
+import type { VoiceRoom } from './voiceRoom.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -67,6 +68,8 @@ export function createServer(deps: {
   mined: string[];
   pins: Pins;
   bench: Workbench;
+  /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
+  room: VoiceRoom;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
@@ -109,6 +112,11 @@ export function createServer(deps: {
   let nextStreamId = 1;
   const streams = new Set<number>();
   let speakerId = 0;
+
+  // The talking stick is only worth holding when a page exists to play the
+  // line — with no tabs, the greeting would otherwise silence every other
+  // beth on the machine for the length of the backstop.
+  deps.speakOut.setAudience(() => streams.size > 0);
 
   /**
    * The Scribe ear (docs/ear.md): the page streams PCM here, the harness holds
@@ -194,6 +202,10 @@ export function createServer(deps: {
         streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
+      // The machine's mute and volume — current state, like `pending` below,
+      // and sent BEFORE the replay so the page's dials are honest by the time
+      // anything could conceivably play.
+      send({ type: 'room', ...deps.room.state() });
       for (const m of bus.replay()) send(m);
       // Re-render anything still waiting on a human.
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
@@ -418,6 +430,27 @@ export function createServer(deps: {
             // Deliberate, so it ignores settle, interval and idleness. It still
             // refuses to overlap itself.
             void deps.tests.run();
+            return json(200, { ok: true });
+          }
+          case '/api/voice/room': {
+            // The whole MACHINE's mute and volume, from any tab of any beth.
+            // Other harnesses hear the file change (voiceRoom.ts watches) and
+            // tell their own pages; this one tells its pages right here. Mute
+            // gates lines before they are announced — never fetched, never
+            // billed — where volume zero still plays (and bills), quietly.
+            if ('muted' in body) deps.room.setMuted(Boolean(body.muted));
+            if ('volume' in body) deps.room.setVolume(Number(body.volume));
+            const state = deps.room.state();
+            bus.publish({ type: 'room', ...state });
+            return json(200, { ok: true, ...state });
+          }
+          case '/api/voice/done': {
+            // The page reporting playback finished — the release half of the
+            // talking stick. Covers the drop paths too: a stop, a refused
+            // autoplay, an element error all report, so a cut-off thought
+            // frees the machine instead of holding it to the backstop.
+            const ids = Array.isArray(body.ids) ? body.ids.map(String) : [];
+            deps.speakOut.playbackDone(ids);
             return json(200, { ok: true });
           }
           case '/api/voice/claim': {

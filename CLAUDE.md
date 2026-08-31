@@ -110,7 +110,10 @@ warbles at chunk seams doesn't error — she just mishears him), `ear/scribeEngi
 (driven by REAL captured frames from `src/ear/fixtures/`, including a live
 `auth_error` and the fatal oversized-keyterm `invalid_request`), `earHost` (two armed
 tabs would be two paid sessions; spend counted on parked audio), and `remoteEar`
-(off() sending what it held, a steal leaving a mic that looks live).
+(off() sending what it held, a steal leaving a mic that looks live). `voiceRoom` and the
+room half of `speakOut` follow: a stick nobody can break is a beth who went quiet for no
+reason, a wrong steal cuts a live sentence, and a page ending a line without reporting it
+(`speaker`'s report tests) holds every other harness mute with no symptom here.
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -313,6 +316,32 @@ These cost hours. Don't rediscover them.
   Two tabs is legitimate (two monitors), so `server.ts` ELECTS a speaker — newest
   connection by default, and a page claims it on focus — and `speak` is the one message
   that does not broadcast. Anything added that makes noise needs the same treatment.
+- **One machine, several beths — the voice ROOM.** Three harnesses each elect their own
+  speaker and know nothing of each other, so three voices could land at once — and three
+  browser origins share no channel, so the coordination is FILES in `~/.director-harness/`
+  (`src/voiceRoom.ts`): a talking STICK taken where a `speak` is published (`speakOut.ts`
+  queues; held for the whole thought, released when the page reports playback done via
+  `/api/voice/done` — then only after a LINGER, long while her turn is in flight and cut
+  short when it ends, because a list is short lines with generation gaps and releasing
+  into a gap is how a beth sneaks in mid-list; backstops for a tab that never reports are
+  sized to the whole unplayed queue, not the line — a tail line sized to itself expired
+  while still waiting its turn on the page — restarted by page reports and never by each
+  other), a
+  universal MUTE, and one machine-wide VOLUME (the strip's slider — it left the stats
+  panel when it stopped being this page's dial). ⚠ The mute gates at the bus subscription,
+  so a muted line is never held, fetched, or BILLED — volume zero still bills, and the two
+  tooltips say which is which. The reread click bypasses the mute on purpose (a click is
+  an explicit request — the same rule that lets it speak at level `off`), and unmute
+  replays nothing (news that has passed). Three degradations are load-bearing: a broken
+  room speaks UNCOORDINATED (overlap is the old behaviour; silence would be a new bug
+  with no symptom), a boot with no tab connected skips the stick (nothing will play, and
+  holding it would let a headless greeting silence the other two for the backstop), and a
+  stale stick is stolen only when provably dead — past TTL or dead pid, cleared by
+  RENAME so two stealers cannot unlink each other's fresh stick — because a wrong steal
+  cuts into a live sentence, the inverted bug that sounds like the feature working.
+  Every way a line ends on the page (played, refused, errored, stopped) must reach
+  `report` in `speaker.js`; an unreported ending holds every other beth quiet with no
+  symptom on the page that caused it.
 - **The director's NAME comes from the bound repo** (`directorName.ts` reads "You are
   **X**" out of `.claude/DIRECTOR.md`). It is not decoration: a card reading "Claude
   wants to use Bash" is a stranger interrupting a conversation with someone else.

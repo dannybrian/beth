@@ -15,19 +15,75 @@
 // rest. Behaviour changes here are a bug.
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
+import type { VoiceRoom } from './voiceRoom.ts';
 import { Mouth } from './mouth/mouth.ts';
 import { spokenFor, type SpeechLevel } from './spoken.ts';
 
 export type { HeldLine } from './mouth/mouth.ts';
+
+/**
+ * How long a published line may go unreported before the stick stops waiting
+ * for it. The page reports playback (`/api/voice/done`) and this almost never
+ * fires; it exists for the tab that accepted a line and then closed, or never
+ * existed. Generous on purpose — firing early releases the stick INTO a live
+ * sentence, which is the inverted bug and inaudible as a bug.
+ *
+ * ⚠️ `chars` is the whole UNPLAYED queue, not one line: a line's clock starts
+ * at publish but it plays at the back of the page's queue, and a tail line
+ * sized only to itself expired while still waiting its turn — early release,
+ * another beth over the top of live audio. Found by ear, reading lists.
+ */
+const backstopMs = (chars: number) => Math.min(120_000, 10_000 + chars * 70);
+
+/**
+ * How long the stick lingers once nothing is queued and nothing is playing.
+ *
+ * A thought is not over the moment a line ends: reading a list is short lines
+ * with GENERATION gaps between them, and releasing into such a gap is how
+ * another beth sneaks in mid-list (also found by ear). While her turn is in
+ * flight more lines are plausibly coming, so the linger is long; once the turn
+ * is over it is only the beat that covers the closing excerpt — and the turn
+ * ending cuts a pending long linger down to the short one.
+ */
+const LINGER_BUSY_MS = 15_000;
+const LINGER_IDLE_MS = 2_000;
 
 export class SpeakOut {
   private mouth: Mouth;
   private bus: ConversationBus;
   /** How much of what she writes is read aloud. See spoken.ts. */
   private verbosity: SpeechLevel;
+  /** The machine's shared voice room. Absent means uncoordinated — today's old behaviour. */
+  private room: VoiceRoom | null;
+  /**
+   * Whether any page is connected — the server supplies the real answer. True
+   * by default so a line published before the server wires this up still
+   * coordinates rather than slipping past the stick.
+   */
+  private audience: () => boolean = () => true;
+  /** Lines waiting on the stick, in the order she said them. */
+  private queue: { id: string; chars: number }[] = [];
+  /** Published lines the page has not yet reported played, with backstops. */
+  private awaiting = new Map<string, { timer: ReturnType<typeof setTimeout> | null; chars: number }>();
+  private holding = false;
+  private waiting = false;
+  /** Whether her turn is in flight — the signal that more lines are coming. */
+  private turnBusy = false;
+  private releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Injectable so the backstop and linger paths are testable in milliseconds. */
+  private backstop: (chars: number) => number;
+  private linger: (turnBusy: boolean) => number;
 
-  constructor(cfg: HarnessConfig, bus: ConversationBus) {
+  constructor(
+    cfg: HarnessConfig,
+    bus: ConversationBus,
+    room?: VoiceRoom,
+    opts?: { backstopMs?: (chars: number) => number; lingerMs?: (turnBusy: boolean) => number }
+  ) {
     this.bus = bus;
+    this.room = room ?? null;
+    this.backstop = opts?.backstopMs ?? backstopMs;
+    this.linger = opts?.lingerMs ?? ((busy) => (busy ? LINGER_BUSY_MS : LINGER_IDLE_MS));
     this.verbosity = cfg.speechLevel;
     this.mouth = new Mouth(
       {
@@ -39,18 +95,144 @@ export class SpeakOut {
       },
       // The page only needs the id; `chars` lets it show progress without
       // shipping the line twice, since the transcript already carries the words.
-      ({ id, chars }) => bus.publish({ type: 'speak', id, chars })
+      // Between the mouth and the bus sits the ROOM: the publish is what makes
+      // a tab play, so the machine's talking stick is taken there.
+      (line) => this.onLine(line)
     );
 
     // The whole speech plane is this subscription. There is no turn to correlate
     // with, no session to be inside, and no in-flight response to avoid racing:
     // she says a line because she wrote one.
     bus.subscribe((m: UIMessage) => {
+      // The turn state feeds the linger: mid-turn, a drained stick is a pause;
+      // after it, only the closing excerpt can still be coming.
+      if (m.type === 'status') {
+        this.turnBusy = m.state === 'thinking';
+        if (!this.turnBusy && this.releaseTimer) {
+          clearTimeout(this.releaseTimer);
+          this.releaseTimer = null;
+          this.maybeRelease();
+        }
+        return;
+      }
       if (m.type !== 'assistant' && m.type !== 'say') return;
+      // The universal mute gates HERE, before the line is even held: never
+      // announced, never fetched, never billed — consistent with counting the
+      // bill at stream(). Direct speak() bypasses it on purpose: the reread
+      // click is an explicit request, the same rule that lets it speak at
+      // level 'off'. Nothing suppressed here replays on unmute — news that has
+      // passed, the same reasoning as the mouth's own hold window.
+      if (this.room?.muted()) return;
       this.mouth.speak(
         spokenFor({ type: m.type, kind: m.type === 'say' ? m.kind : undefined, text: m.voiceText ?? m.text }, this.verbosity)
       );
     });
+  }
+
+  /** The server's live answer to "is any page connected". */
+  setAudience(fn: () => boolean) {
+    this.audience = fn;
+  }
+
+  private onLine(line: { id: string; chars: number }) {
+    // No room, or no page connected: publish straight through. With no
+    // audience nothing will play, and taking the stick would let a boot with
+    // no tab yet (the greeting races the browser opening) silence every other
+    // beth for the length of the backstop.
+    if (!this.room || !this.audience()) {
+      this.bus.publish({ type: 'speak', id: line.id, chars: line.chars });
+      return;
+    }
+    this.queue.push(line);
+    this.pump();
+  }
+
+  private pump() {
+    if (!this.queue.length || this.waiting) return;
+    // A new line lands inside the linger: the thought continues on the same hold.
+    if (this.releaseTimer) {
+      clearTimeout(this.releaseTimer);
+      this.releaseTimer = null;
+    }
+    if (!this.holding) {
+      if (!this.room!.tryAcquire()) {
+        this.waiting = true;
+        void this.room!.acquire().then(() => {
+          this.waiting = false;
+          this.holding = true;
+          this.pump();
+        });
+        return;
+      }
+      this.holding = true;
+    }
+    while (this.queue.length) {
+      const line = this.queue.shift()!;
+      this.bus.publish({ type: 'speak', id: line.id, chars: line.chars });
+      // Sized to everything unplayed AHEAD of it plus itself — see backstopMs.
+      let unplayed = line.chars;
+      for (const a of this.awaiting.values()) unplayed += a.chars;
+      const entry = { timer: null as ReturnType<typeof setTimeout> | null, chars: line.chars };
+      entry.timer = this.startBackstop(line.id, unplayed);
+      this.awaiting.set(line.id, entry);
+    }
+  }
+
+  private startBackstop(id: string, chars: number) {
+    const t = setTimeout(() => this.playbackDone([id], { fromBackstop: true }), this.backstop(chars));
+    t.unref?.();
+    return t;
+  }
+
+  /**
+   * The page (or the backstop) reports lines finished — played, refused, or
+   * dropped by a stop. Unknown ids are harmless: a reloaded page may report a
+   * line whose backstop already cleared it.
+   *
+   * A PAGE report is also proof of liveness, so the remaining backstops restart
+   * — the page is playing, just not up to those lines yet. A backstop firing
+   * proves nothing and restarts nothing: on a dead tab the timers must burn
+   * down once each, not feed each other.
+   */
+  playbackDone(ids: string[], opts?: { fromBackstop?: boolean }) {
+    for (const id of ids) {
+      const a = this.awaiting.get(id);
+      if (a?.timer) clearTimeout(a.timer);
+      this.awaiting.delete(id);
+    }
+    if (!opts?.fromBackstop && this.awaiting.size) {
+      let unplayed = 0;
+      for (const [id, a] of this.awaiting) {
+        unplayed += a.chars;
+        if (a.timer) clearTimeout(a.timer);
+        a.timer = this.startBackstop(id, unplayed);
+      }
+    }
+    this.maybeRelease();
+  }
+
+  /**
+   * The stick is held for the whole THOUGHT — released only when nothing is
+   * queued, nothing published is still playing, and the linger has passed.
+   * Per-line release would interleave three beths paragraph by paragraph, and
+   * releasing at the instant of drain lost the floor in the writing gaps
+   * between a list's short lines — both worse than the overlap this fixes.
+   */
+  private maybeRelease() {
+    if (!this.holding || this.queue.length || this.awaiting.size) return;
+    const ms = this.linger(this.turnBusy);
+    if (ms <= 0) return this.releaseNow();
+    if (this.releaseTimer) return;
+    this.releaseTimer = setTimeout(() => {
+      this.releaseTimer = null;
+      if (this.holding && !this.queue.length && !this.awaiting.size) this.releaseNow();
+    }, ms);
+    this.releaseTimer.unref?.();
+  }
+
+  private releaseNow() {
+    this.holding = false;
+    this.room?.release();
   }
 
   speechLevel = () => this.verbosity;

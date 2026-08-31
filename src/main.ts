@@ -17,6 +17,7 @@ import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { Workbench } from './workbench.ts';
 import { ensurePersonasDir } from './personas.ts';
+import { VoiceRoom } from './voiceRoom.ts';
 
 // The harness runs ON node, but the PATH it inherited may not carry one — beth
 // launched outside an interactive shell (nvm lives in .zshrc) hands us a PATH
@@ -58,11 +59,18 @@ work.subscribe(() => bus.publish(workMessage(work, pins)));
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
 
+// The MACHINE's voice room — several beths on one Mac take turns (the talking
+// stick), and share one mute and one volume. See voiceRoom.ts.
+const room = new VoiceRoom();
+// Another harness flipping the mute or the volume arrives as a file change;
+// the pages learn about it like any other state.
+room.watch((s) => bus.publish({ type: 'room', ...s }));
+
 // The speech plane, entire. No Speech Engine, no tunnel, no public port, no
 // session and no mic required to speak — she says a line because she wrote one.
 // Built BEFORE the session because the session hands her the dial: "stop talking"
 // is said out loud, to her, and she needs a way to actually do it.
-const speakOut = new SpeakOut(cfg, bus);
+const speakOut = new SpeakOut(cfg, bus, room);
 
 let session: SessionManager;
 const gate = new AskGate(bus, events, () => session.sessionId(), () => session.directorName());
@@ -144,7 +152,7 @@ const tests = new TestMonitor(cfg, bus);
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins, bench });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins, bench, room });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -196,6 +204,9 @@ const shutdown = () => {
   work.stop();
   tests.stop();
   session.stop();
+  // Frees a held talking stick on the way out — the other beths should not
+  // have to wait out the TTL because this one exited cleanly.
+  room.close();
   server.close();
   process.exit(0);
 };

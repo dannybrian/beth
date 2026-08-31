@@ -39,14 +39,16 @@ function rig(over: any = {}) {
   const audio = fakeAudio();
   const notes: string[] = [];
   const ear: string[] = [];
+  const reports: string[][] = [];
   const s = createSpeaker({
     audio,
     note: (t: string) => notes.push(t),
     park: () => ear.push('park'),
     unpark: () => ear.push('unpark'),
+    report: (ids: string[]) => reports.push(ids),
     ...over,
   });
-  return { audio, notes, ear, s };
+  return { audio, notes, ear, reports, s };
 }
 
 const flush = () => new Promise((r) => setImmediate(r));
@@ -100,6 +102,43 @@ test('an element error advances instead of wedging', () => {
   audio.fire('error');
   assert.equal(s.isSpeaking(), false);
   assert.equal(ear.filter((e) => e === 'unpark').length, 1);
+});
+
+// --- the playback report ------------------------------------------------------
+//
+// The harness holds the MACHINE's talking stick while its published lines are
+// unplayed (src/speakOut.ts). Every way a line can end must therefore reach
+// `report`, because an unreported ending holds every other beth on the machine
+// quiet until the backstop — a failure with no symptom on THIS page at all.
+
+test('every ending reports: played, refused, and errored lines all reach report', async () => {
+  const { audio, reports, s } = rig();
+  s.enqueue('s1');
+  audio.fire('ended');
+  assert.deepEqual(reports, [['s1']]);
+  audio.nextPlay = 'blocked';
+  s.enqueue('s2');
+  await flush();
+  audio.nextPlay = 'play';
+  s.enqueue('s3');
+  audio.fire('error');
+  assert.deepEqual(reports, [['s1'], ['s2'], ['s3']]);
+});
+
+test('stop reports the cut line AND the dropped backlog in one call', async () => {
+  const { audio, reports, s } = rig();
+  s.enqueue('s1');
+  s.enqueue('s2');
+  s.enqueue('s3');
+  audio.nextPlay = 'abort';
+  s.stop();
+  await flush();
+  // The whole abandoned thought at once — the stick must not stay held for
+  // words nobody will hear.
+  assert.deepEqual(reports, [['s1', 's2', 's3']]);
+  // And a stop with nothing in flight reports nothing at all.
+  s.stop();
+  assert.deepEqual(reports, [['s1', 's2', 's3']]);
 });
 
 test('volume clamps at both ends and zero still plays', () => {
