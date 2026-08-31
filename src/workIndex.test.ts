@@ -7,19 +7,29 @@ import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
 
 /**
- * Poll rather than sleep a fixed amount. Filesystem events have no guaranteed
- * latency, and a fixed wait is exactly how a watcher test becomes flaky.
+ * Write, poll, and REWRITE on a slow cadence until the index shows it. Poll
+ * rather than sleep a fixed amount — filesystem events have no guaranteed
+ * latency — and rewrite because polling alone was not enough: fs.watch arms
+ * asynchronously on macOS, so a write landing right after start() can precede
+ * the watcher, and then no event fires NOW and none is ever coming. That was
+ * this file's residual flake (red about once a dozen full-suite runs even at
+ * a 20s deadline: a generous wait cannot help when the event already didn't
+ * happen). Rewriting produces a fresh event once the watcher IS armed.
  *
- * The DEADLINE is generous for the same reason. `node --test` runs the files in
- * parallel, so a watcher can be waiting on an event while the machine is busy;
- * 4s was enough to go red about once in a dozen full-suite runs while passing
- * every time in isolation. Waiting longer costs nothing when the test passes —
- * this returns the moment the condition holds — and only lengthens real failures.
+ * ⚠️ The cadence must stay LONGER than the index's 150ms debounce, which
+ * RESETS on every event — rewriting faster would hold refresh off forever,
+ * turning the fix into a permanent version of the bug.
  */
-async function waitFor(fn: () => boolean, ms = 20_000): Promise<boolean> {
+async function writeUntil(file: string, content: string, fn: () => boolean, ms = 20_000): Promise<boolean> {
   const deadline = Date.now() + ms;
+  fs.writeFileSync(file, content);
+  let wrote = Date.now();
   while (Date.now() < deadline) {
     if (fn()) return true;
+    if (Date.now() - wrote > 500) {
+      fs.writeFileSync(file, content);
+      wrote = Date.now();
+    }
     await new Promise((r) => setTimeout(r, 25));
   }
   return false;
@@ -48,8 +58,14 @@ const withIndex = async (fn: (idx: WorkIndex, repo: string) => Promise<void>) =>
 test('a checkbox ticked on disk reaches the index', async () => {
   await withIndex(async (idx, repo) => {
     assert.equal(idx.byPath('plans/2026-01-01-alpha.md')?.tasks[0].done, false);
-    fs.writeFileSync(path.join(repo, 'plans', '2026-01-01-alpha.md'), '---\nstatus: active\n---\n\n# Alpha\n\n- [x] one\n');
-    assert.ok(await waitFor(() => idx.byPath('plans/2026-01-01-alpha.md')?.tasks[0].done === true), 'tick not seen');
+    assert.ok(
+      await writeUntil(
+        path.join(repo, 'plans', '2026-01-01-alpha.md'),
+        '---\nstatus: active\n---\n\n# Alpha\n\n- [x] one\n',
+        () => idx.byPath('plans/2026-01-01-alpha.md')?.tasks[0].done === true
+      ),
+      'tick not seen'
+    );
   });
 });
 
@@ -57,8 +73,14 @@ test('a new plan in a nested directory is picked up', async () => {
   // Watching has to be recursive: plans live several levels down, not just at
   // the root of a plans directory.
   await withIndex(async (idx, repo) => {
-    fs.writeFileSync(path.join(repo, 'plans', 'deep', '2026-01-02-beta.md'), '---\nstatus: blocked\n---\n\n# Beta\n');
-    assert.ok(await waitFor(() => Boolean(idx.byPath('plans/deep/2026-01-02-beta.md'))), 'nested plan not seen');
+    assert.ok(
+      await writeUntil(
+        path.join(repo, 'plans', 'deep', '2026-01-02-beta.md'),
+        '---\nstatus: blocked\n---\n\n# Beta\n',
+        () => Boolean(idx.byPath('plans/deep/2026-01-02-beta.md'))
+      ),
+      'nested plan not seen'
+    );
   });
 });
 
@@ -66,18 +88,23 @@ test('a claim landing changes the index without any plan file changing', async (
   // The sessions directory is watched for exactly this: `/plans claim` writes a
   // session record, and the panel has to reflect it.
   await withIndex(async (idx, repo) => {
-    fs.writeFileSync(
-      path.join(repo, 'plans', '2026-01-01-alpha.md'),
-      '---\nstatus: active\nowner: claude-x\n---\n\n# Alpha\n\n- [ ] one\n'
+    assert.ok(
+      await writeUntil(
+        path.join(repo, 'plans', '2026-01-01-alpha.md'),
+        '---\nstatus: active\nowner: claude-x\n---\n\n# Alpha\n\n- [ ] one\n',
+        () => idx.byPath('plans/2026-01-01-alpha.md')?.claim?.owner === 'claude-x'
+      )
     );
-    assert.ok(await waitFor(() => idx.byPath('plans/2026-01-01-alpha.md')?.claim?.owner === 'claude-x'));
     assert.equal(idx.byPath('plans/2026-01-01-alpha.md')?.claim?.live, false, 'no session record yet');
 
-    fs.writeFileSync(
-      path.join(repo, '.claude', 'sessions', 'claude-x.json'),
-      JSON.stringify({ session_id: 'claude-x', plan_path: 'plans/2026-01-01-alpha.md', last_heartbeat: new Date().toISOString() })
+    assert.ok(
+      await writeUntil(
+        path.join(repo, '.claude', 'sessions', 'claude-x.json'),
+        JSON.stringify({ session_id: 'claude-x', plan_path: 'plans/2026-01-01-alpha.md', last_heartbeat: new Date().toISOString() }),
+        () => idx.byPath('plans/2026-01-01-alpha.md')?.claim?.live === true
+      ),
+      'claim not seen'
     );
-    assert.ok(await waitFor(() => idx.byPath('plans/2026-01-01-alpha.md')?.claim?.live === true), 'claim not seen');
   });
 });
 
@@ -106,8 +133,13 @@ test('preamble names what was pointed at, and says what to call it', async () =>
 
 test('preamble reports a plan with no checkboxes as "no tasks"', async () => {
   await withIndex(async (idx, repo) => {
-    fs.writeFileSync(path.join(repo, 'plans', 'deep', '2026-01-03-prose.md'), '---\nstatus: active\n---\n\n# Prose only\n\nWords.\n');
-    assert.ok(await waitFor(() => Boolean(idx.byPath('plans/deep/2026-01-03-prose.md'))));
+    assert.ok(
+      await writeUntil(
+        path.join(repo, 'plans', 'deep', '2026-01-03-prose.md'),
+        '---\nstatus: active\n---\n\n# Prose only\n\nWords.\n',
+        () => Boolean(idx.byPath('plans/deep/2026-01-03-prose.md'))
+      )
+    );
     const text = idx.preamble([{ kind: 'item', path: 'plans/deep/2026-01-03-prose.md', spoken: 'Prose only' }]);
     assert.match(text, /no tasks/);
     assert.doesNotMatch(text, /0 of 0|0%/, 'a prose plan is not zero-percent complete');
