@@ -1314,7 +1314,8 @@ let testPanelOpen = false;
 function renderTests(state) {
   testState = state;
   const btn = $('test-light');
-  btn.className = `tlight ${state.light}`;
+  // `running` carries the PULSE, not `yellow` — see the .tlight rules in app.css.
+  btn.className = `tlight ${state.light}${state.running ? ' running' : ''}`;
   const n = state.last?.failures.length ?? 0;
   $('test-count').textContent = state.light === 'red' ? (n || '!') : '';
   btn.title = !state.command
@@ -1503,7 +1504,8 @@ let buildPanelOpen = false;
 function renderBuild(state) {
   buildState = state;
   const btn = $('build-light');
-  btn.className = `tlight ${state.light}`;
+  // `running` carries the PULSE, not `yellow` — see the .tlight rules in app.css.
+  btn.className = `tlight ${state.light}${state.running ? ' running' : ''}`;
   const r = state.last;
   btn.title =
     (!state.command

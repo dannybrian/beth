@@ -1185,10 +1185,18 @@ button.tlight .tdot { width: 9px; height: 9px; border-radius: 50%; background: v
    same box, so matching the NUMBER would read as the smaller of the two. */
 button.tlight .ticon { width: 12px; height: 12px; fill: var(--muted); display: block; }
 button.tlight.green .tdot { background: var(--ok); }
-button.tlight.yellow .tdot { background: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+button.tlight.yellow .tdot { background: var(--warn); }
 button.tlight.red .tdot { background: var(--err); }
 button.tlight.green .ticon { fill: var(--ok); }
-button.tlight.yellow .ticon { fill: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+button.tlight.yellow .ticon { fill: var(--warn); }
+/* ⚠️ The pulse means RUNNING, and only that — the page's own grammar, the same
+   as the status dot. It used to hang off `yellow`, which covers two states: a
+   run in flight, and a result the tree has moved out from under. The first
+   resolves in seconds; the second is where a BUILD rests, because nothing here
+   re-runs one on its own — so the light blinked forever at a repo where nothing
+   whatever was happening, which is the one thing a blink must never mean. */
+button.tlight.running .tdot,
+button.tlight.running .ticon { animation: pulse 1.4s ease-in-out infinite; }
 button.tlight.red .ticon { fill: var(--err); }
 button.tlight.red { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
 
