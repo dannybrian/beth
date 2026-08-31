@@ -6,6 +6,7 @@ import type { WorkItem, WorkRef } from './workItems.ts';
 import type { TextLink } from './links.ts';
 import type { TextSpan } from './markdown.ts';
 import type { TestState } from './testRunner.ts';
+import type { BuildState } from './buildRunner.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -169,6 +170,9 @@ export type UIMessage =
   // The health light. Republished whenever the tree moves, not only after a run:
   // "it passed, and that was before your last edit" is a different answer.
   | { type: 'tests'; state: TestState }
+  // The other light. Published only when a build starts, ends, or goes stale —
+  // nothing here runs on a schedule, so there is nothing else to report.
+  | { type: 'build'; state: BuildState }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {
@@ -205,6 +209,7 @@ export class ConversationBus {
       m.type !== 'pointing' &&
       m.type !== 'speak' &&
       m.type !== 'tests' &&
+      m.type !== 'build' &&
       m.type !== 'workbench' &&
       m.type !== 'room' &&
       // A partial transcript is a moment; replaying an hour of them into a

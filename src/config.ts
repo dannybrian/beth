@@ -198,6 +198,16 @@ export type HarnessConfig = {
    */
   personal: boolean;
   testCmd?: string;
+  /**
+   * What to run when the build light is pressed. Empty means DETECT it — see
+   * buildRunner.ts, which reads what the project already declares and answers
+   * NOTHING when it recognises none of it.
+   *
+   * ⚠️ Split on whitespace and spawned directly, like testCmd: no shell, and no
+   * dev server either. This runs to completion and is killed at the timeout, so
+   * a command that never exits is the one thing that does not belong here.
+   */
+  buildCmd?: string;
   /** How still the tree must be first — a suite run against a half-finished edit
    * is a red light that means nothing. */
   testSettleMs: number;
@@ -205,6 +215,8 @@ export type HarnessConfig = {
   testMinIntervalMs: number;
   /** After this the run is killed and REPORTED as timed out, not left hanging. */
   testTimeoutMs: number;
+  /** Same for a build, and longer by default: a cold build is not a test run. */
+  buildTimeoutMs: number;
 };
 
 // The director session runs all day and every turn carries full repo context, so
@@ -320,6 +332,8 @@ export function loadConfig(): HarnessConfig {
     creditsResetDay: Math.min(31, Math.max(1, Number(conf('HARNESS_CREDITS_RESET_DAY')) || 1)),
     personal: conf('HARNESS_PERSONAL') !== 'off',
     testCmd: conf('HARNESS_TEST_CMD'),
+    buildCmd: conf('HARNESS_BUILD_CMD'),
+    buildTimeoutMs: Number(conf('HARNESS_BUILD_TIMEOUT_MS') ?? 600_000),
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),
     testMinIntervalMs: Number(conf('HARNESS_TEST_MIN_INTERVAL_MS') ?? 120_000),
     testTimeoutMs: Number(conf('HARNESS_TEST_TIMEOUT_MS') ?? 300_000),

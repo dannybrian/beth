@@ -344,6 +344,7 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 | `HARNESS_KEYTERMS` | — | Nouns no file mentions. ⚠ Accumulates across layers |
 | `HARNESS_KEYTERM_BOOST` | `2` | How hard to push, 0–10 |
 | `HARNESS_TEST_CMD` | detected | Test command override |
+| `HARNESS_BUILD_CMD` | detected | Build command override. ⚠ Must terminate — not a dev server |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
 ## What's here

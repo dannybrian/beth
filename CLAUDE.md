@@ -80,7 +80,10 @@ pnpm test        # node --test src/*.test.ts
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `mouth` — the speech-out
 core, billing included — and `speakOut`, its bus adapter (⚠ whose `setVoice`/`speechLevel`
-are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers,
+are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers, `buildRunner` (the other half of
+that contract: detection that must REFUSE a dev server, a stop that is not a
+failure, and a staleness watch that stops once it fires — a light claiming green
+after an edit is the same lie the test light's yellow exists to avoid),
 and `listen`, which drives a STUBBED `SpeechRecognition` so the seams Chrome creates can be
 tested at all; `speaker` (the playback queue against a stubbed `<audio>` — a wedged queue
 looks like her going quiet, a deliberate stop reported as an error looks like a bug) and

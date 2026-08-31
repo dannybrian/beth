@@ -9,12 +9,12 @@
 // real hazard — a suite that touches the network, spins a container, or costs
 // money must not start because you happened to save a file. So it is OFF until
 // enabled once per repo, and the detected command is shown before you enable it.
-import { spawn, execFileSync } from 'node:child_process';
-import crypto from 'node:crypto';
+import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
+import { MAX_OUTPUT, runCommand, treeFingerprint, type CommandResult } from './runCommand.ts';
 
 export type TestFailure = {
   /** What Beth should call it — the test's own name, said aloud. */
@@ -26,14 +26,7 @@ export type TestFailure = {
   detail?: string;
 };
 
-export type TestRun = {
-  at: number;
-  ms: number;
-  exitCode: number | null;
-  timedOut: boolean;
-  output: string;
-  failures: TestFailure[];
-};
+export type TestRun = CommandResult & { failures: TestFailure[] };
 
 export type TestState = {
   enabled: boolean;
@@ -47,9 +40,6 @@ export type TestState = {
   stale: boolean;
   last: TestRun | null;
 };
-
-/** Output beyond this is the tail of something that has already gone wrong. */
-const MAX_OUTPUT = 256 * 1024;
 
 // --- detection ---------------------------------------------------------------
 
@@ -277,7 +267,7 @@ export class TestMonitor {
   private detected: { command: string[]; why: string } | null;
   private enabled = false;
   private running = false;
-  private child: ReturnType<typeof spawn> | null = null;
+  private child: ChildProcess | null = null;
   private last: TestRun | null = null;
   /** Fingerprint of the tree at the last run, so "unchanged" is a real answer. */
   private ranAt = 0;
@@ -305,7 +295,7 @@ export class TestMonitor {
   }
 
   start() {
-    this.fingerprint = this.treeFingerprint();
+    this.fingerprint = treeFingerprint(this.cfg.repo);
     this.changedAt = Date.now();
     // Polling rather than watching: `git status` already knows what changed, and
     // a recursive watch over a whole repo fires on every build artefact.
@@ -364,42 +354,10 @@ export class TestMonitor {
     this.bus.publish({ type: 'tests', state: this.state() });
   }
 
-  /**
-   * What the tree looks like right now.
-   *
-   * `git status --short` alone is not enough: editing an already-modified file a
-   * second time does not change its output. So the mtimes of the changed files
-   * come along, and HEAD too, so a commit or a checkout counts as a change.
-   */
-  private treeFingerprint(): string {
-    try {
-      const git = (args: string[]) =>
-        execFileSync('git', args, { cwd: this.cfg.repo, encoding: 'utf8', timeout: 4000 });
-      const status = git(['status', '--porcelain']);
-      const head = git(['rev-parse', 'HEAD']).trim();
-      const mtimes = status
-        .split('\n')
-        .map((l) => l.slice(3).trim().split(' -> ').pop())
-        .filter(Boolean)
-        .map((f) => {
-          try {
-            return String(fs.statSync(path.join(this.cfg.repo, f!)).mtimeMs);
-          } catch {
-            return 'x';
-          }
-        });
-      return crypto.createHash('sha1').update(`${head}\n${status}\n${mtimes.join(',')}`).digest('hex');
-    } catch {
-      // Not a git repo, or git is unhappy. Without a fingerprint there is no
-      // "changed", and running on a timer alone is exactly what this avoids.
-      return '';
-    }
-  }
-
   /** Changed, settled, and idle — all three, or nothing happens. */
   private tick() {
     if (!this.enabled || !this.detected || this.running) return;
-    const fp = this.treeFingerprint();
+    const fp = treeFingerprint(this.cfg.repo);
     if (!fp) return;
     if (fp !== this.fingerprint) {
       this.fingerprint = fp;
@@ -418,60 +376,26 @@ export class TestMonitor {
   async run(): Promise<void> {
     if (this.running || !this.detected) return;
     this.running = true;
-    const startedFingerprint = this.fingerprint || this.treeFingerprint();
-    const t0 = Date.now();
+    const startedFingerprint = this.fingerprint || treeFingerprint(this.cfg.repo);
     this.publish();
 
-    const [cmd, ...args] = this.detected.command;
-    let out = '';
-    let timedOut = false;
-
-    const code = await new Promise<number | null>((resolve) => {
-      let child: ReturnType<typeof spawn>;
-      try {
-        child = spawn(cmd, args, { cwd: this.cfg.repo, env: { ...process.env, CI: '1', FORCE_COLOR: '0' } });
-      } catch {
-        out = `could not start ${cmd}`;
-        return resolve(null);
-      }
-      this.child = child;
-      const take = (b: Buffer) => {
-        // Keep the TAIL: a suite that fails late buries the reason otherwise.
-        out = (out + b.toString()).slice(-MAX_OUTPUT);
-      };
-      child.stdout?.on('data', take);
-      child.stderr?.on('data', take);
-      child.on('error', (e) => {
-        out += `\n${String(e)}`;
-        resolve(null);
-      });
-      const kill = setTimeout(() => {
-        timedOut = true;
-        child.kill('SIGTERM');
-        // A suite that ignores SIGTERM must not become a process that outlives
-        // the harness. Reported as timed out rather than left hanging.
-        setTimeout(() => child.kill('SIGKILL'), 3000).unref?.();
-      }, this.cfg.testTimeoutMs);
-      kill.unref?.();
-      child.on('close', (c) => {
-        clearTimeout(kill);
-        resolve(c);
-      });
+    const result = await runCommand({
+      command: this.detected.command,
+      cwd: this.cfg.repo,
+      timeoutMs: this.cfg.testTimeoutMs,
+      maxOutput: MAX_OUTPUT,
+      onStart: (child) => (this.child = child),
     });
 
     this.child = null;
     this.running = false;
-    this.ranAt = Date.now();
+    this.ranAt = result.at;
     this.ranFingerprint = startedFingerprint;
     this.last = {
-      at: this.ranAt,
-      ms: this.ranAt - t0,
-      exitCode: code,
-      timedOut,
-      output: out,
+      ...result,
       // Only bother when something failed — a green run's output has no failures
       // to find and the parsers would be reading it for nothing.
-      failures: code === 0 && !timedOut ? [] : parseFailures(out, this.cfg.repo),
+      failures: result.exitCode === 0 && !result.timedOut ? [] : parseFailures(result.output, this.cfg.repo),
     };
     this.publish();
   }

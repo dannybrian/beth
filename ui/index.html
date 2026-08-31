@@ -62,6 +62,17 @@
         <button id="bench-clear" title="Clear — the work moved on">×</button>
       </div>
       <div class="strip-right">
+        <!-- The plan windows, in the strip rather than behind the meter, because
+             the five-hour reaching 100% is the exact moment usage credits start
+             to drain (creditMeter.ts arms there) — a number worth having already
+             seen rather than one you go looking for. Only these two: the
+             model-scoped windows are a panel-sized answer. Absent entirely on a
+             session with no plan, because an unfillable gauge is worse than
+             none; the panel behind them holds everything else. -->
+        <button id="usage-meters" class="umeters" hidden>
+          <span class="um" id="um-5h"><b>5h</b><span class="sbar"><i></i></span></span>
+          <span class="um" id="um-7d"><b>7d</b><span class="sbar"><i></i></span></span>
+        </button>
         <select id="model-select" title="Model for this conversation — switches live, context is kept">
           <option value="claude-opus-5">Opus 5</option>
           <option value="claude-fable-5">Fable 5</option>
@@ -89,6 +100,15 @@
              durable answer lives in a persona file, and this is how you find out
              which id to put there. Hidden when the account lists no voices. -->
         <select id="voice-select" title="Try a voice — not saved. The durable choice is the voice: line in a persona file." hidden></select>
+        <!-- Build it. Unlike the test light beside it this is a TRIGGER: the
+             click runs the command, because "quickly kick one off" is the whole
+             ask, and a build is the one command that is safe to repeat — it is
+             idempotent by definition and a no-op when nothing changed. The panel
+             opens with it so you see what happened; while a build is in flight
+             the click only opens the panel, so a second press cannot pile on. -->
+        <button id="build-light" class="tlight grey" title="Build">
+          <svg class="ticon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.2 20.5 12 6 20.8z" /></svg>
+        </button>
         <!-- "Is the tree green" — the question asked twenty times a day, which
              the page could not answer until the numbers moved out of here. -->
         <button id="test-light" class="tlight grey" title="Tests">
@@ -98,6 +118,7 @@
     </header>
 
     <div id="test-panel" class="stats wide" hidden></div>
+    <div id="build-panel" class="stats wide" hidden></div>
 
     <!-- The wire: what actually happened on the API. Opened from the status
          dot, PULLED while open — nothing here rides the stream or the replay,

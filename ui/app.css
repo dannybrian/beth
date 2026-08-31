@@ -320,6 +320,34 @@ button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 .sbar.hot > i { background: var(--err); }
 .snote { color: var(--muted); font-style: italic; }
 
+/* --- the plan windows, in the strip ---
+   The same species as a panel row (.sbar above), sized down to sit beside the
+   selects. ONE button, because the two tracks are a handle for the numbers
+   behind the context meter rather than two controls. `[hidden]` needs saying:
+   the display below would otherwise beat the UA default, the same way it does
+   for #persona-select. */
+button.umeters {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+button.umeters[hidden] { display: none; }
+.um { display: flex; align-items: center; gap: 4px; }
+.um[hidden] { display: none; }
+.um > b { font-weight: 400; }
+/* Fixed, not flexible: in a panel row the bar takes the slack, and in the strip
+   a bar that grew with the window would make the dials move. */
+.um .sbar { width: 34px; min-width: 0; flex: none; }
+button.umeters:hover, button.umeters.open { color: var(--text); }
+
 /* --- the wire panel ---
    Anchored LEFT, under the dot that opens it; everything inside is mono and
    small because it is an instrument, not a reading surface. */
@@ -1100,10 +1128,16 @@ button.tlight {
   color: var(--muted);
 }
 button.tlight:hover, button.tlight.open { border-color: var(--muted); color: var(--text); }
-button.tlight .tdot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+button.tlight .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+/* Bigger than the dot on purpose: a triangle carries less ink than a disc of the
+   same box, so matching the NUMBER would read as the smaller of the two. */
+button.tlight .ticon { width: 12px; height: 12px; fill: var(--muted); display: block; }
 button.tlight.green .tdot { background: var(--ok); }
 button.tlight.yellow .tdot { background: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
 button.tlight.red .tdot { background: var(--err); }
+button.tlight.green .ticon { fill: var(--ok); }
+button.tlight.yellow .ticon { fill: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+button.tlight.red .ticon { fill: var(--err); }
 button.tlight.red { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
 
 .stats.wide { width: 400px; top: 44px; bottom: auto; }

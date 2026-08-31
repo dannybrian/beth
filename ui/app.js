@@ -1037,10 +1037,14 @@ const handlers = {
   ask_resolved: (m) => askCards.get(m.id)?.settle(m.answers ?? {}),
   approval: renderApproval,
   approval_resolved: (m) => resolveApprovalCard(m.id, m.allowed, m.always),
+  build: (m) => renderBuild(m.state),
   usage: (m) => {
     renderUsage(m.usage);
     ctxPct = m.usage.contextPct;
     paintProgress();
+    // A turn just landed, so the plan windows just moved. This is the only
+    // moment they do, which is what makes the interval above a backstop.
+    void loadPlanUsage();
   },
   status: (m) => {
     turnInFlight = m.state === 'thinking';
@@ -1386,6 +1390,106 @@ function toggleTestPanel() {
   if (testPanelOpen) renderTestPanel();
 }
 
+// --- the build light ---------------------------------------------------------
+//
+// The test light's colours, and the opposite gesture. That one is a READOUT you
+// click to inspect; this one is a TRIGGER — clicking runs the build, because
+// kicking one off quickly is the whole point of it being in the strip. The panel
+// opens with the run so the output is where you are already looking, and while a
+// build is in flight the click is only the panel: a second press must not pile
+// another build on top of the first.
+
+let buildState = null;
+let buildPanelOpen = false;
+
+function renderBuild(state) {
+  buildState = state;
+  const btn = $('build-light');
+  btn.className = `tlight ${state.light}`;
+  const r = state.last;
+  btn.title =
+    (!state.command
+      ? 'No build detected — set HARNESS_BUILD_CMD'
+      : state.running
+        ? 'Building…'
+        : !r
+          ? `Build — ${state.command.join(' ')}`
+          : r.cancelled
+            ? 'Stopped'
+            : r.timedOut
+              ? 'Timed out'
+              : (r.exitCode ?? 1) !== 0
+                ? `Failed (exit ${r.exitCode})${state.stale ? ' — and the tree has changed since' : ''}`
+                : state.stale
+                  ? 'Built, but the tree has changed since'
+                  : 'Built') + '  (keypad 1)';
+  if (buildPanelOpen) renderBuildPanel();
+}
+
+function renderBuildPanel() {
+  const box = $('build-panel');
+  box.replaceChildren();
+  const s = buildState;
+  if (!s) return;
+
+  box.append(el('h3', null, 'Build'));
+  if (!s.command) {
+    box.append(
+      el('div', 'snote', 'Nothing detected here. Set HARNESS_BUILD_CMD in the repo’s .env to name one — it runs to completion, so not a dev server.')
+    );
+    return;
+  }
+
+  const cmd = el('div', 'tcmd', s.command.join(' '));
+  cmd.title = `detected from ${s.why}`;
+  box.append(cmd);
+
+  if (s.running) {
+    const stop = el('button', 'topt ghost', 'Stop');
+    stop.onclick = () => post('/api/build/stop');
+    box.append(stop);
+  } else {
+    const again = el('button', 'topt', s.last ? 'Build again' : 'Build now');
+    again.onclick = () => post('/api/build/run');
+    box.append(again);
+  }
+
+  const r = s.last;
+  if (!r) return void (s.running || box.append(el('div', 'snote', 'no build yet')));
+
+  box.append(el('h3', null, 'Last build'));
+  const when = new Date(r.at).toLocaleTimeString();
+  const how = r.cancelled ? 'stopped' : r.timedOut ? 'TIMED OUT' : `exit ${r.exitCode}`;
+  box.append(
+    el('div', 'snote', `${when} · ${(r.ms / 1000).toFixed(1)}s · ${how}${s.stale ? ' · tree changed since' : ''}`)
+  );
+
+  if (r.output.trim()) {
+    box.append(el('h3', null, 'Output'));
+    // No parser here yet, deliberately: a compiler-error parser written against
+    // output nobody has seen fail is worth very little (see CLAUDE.md). The TAIL
+    // is what matters when a build dies late.
+    box.append(el('pre', 'tlog', r.output.slice(-8000)));
+  }
+}
+
+function toggleBuildPanel(open = !buildPanelOpen) {
+  buildPanelOpen = open;
+  $('build-panel').hidden = !buildPanelOpen;
+  $('build-light').classList.toggle('open', buildPanelOpen);
+  if (buildPanelOpen) renderBuildPanel();
+}
+
+/**
+ * The click, and the key. Runs unless one is already running — in which case
+ * this is just a way to look at it, which is the only reading of a second press
+ * that cannot cost anything.
+ */
+function buildNow() {
+  if (buildState?.command && !buildState.running) post('/api/build/run');
+  toggleBuildPanel(true);
+}
+
 // --- the numbers, behind the meter ------------------------------------------
 //
 // Two sources, and they fail independently on purpose. The LOCAL numbers (context,
@@ -1427,6 +1531,24 @@ function bar(pct) {
   fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
   wrap.append(fill);
   return wrap;
+}
+
+/**
+ * The windows actually present, in the order they matter.
+ *
+ * Server-driven: render what came back rather than what the shape says might be
+ * there — the plan tiers differ and the field names have moved once already.
+ * The panel draws all of them; the strip draws the first two.
+ */
+function planWindows(lim) {
+  if (!lim) return [];
+  return [
+    ['5-hour', lim.five_hour],
+    ['7-day', lim.seven_day],
+    ['7-day opus', lim.seven_day_opus],
+    ['7-day sonnet', lim.seven_day_sonnet],
+    ...(lim.model_scoped ?? []).map((m) => [m.display_name, m]),
+  ].filter(([, w]) => w && typeof w.utilization === 'number');
 }
 
 function statRow(label, value, pct) {
@@ -1520,16 +1642,7 @@ function renderStats() {
   // Additive and server-driven: render the windows that are actually present
   // rather than the ones the shape says might be.
   box.append(el('h3', null, `Plan${planLimits?.subscription ? ` · ${planLimits.subscription}` : ''}`));
-  const lim = planLimits?.limits;
-  const windows = lim
-    ? [
-        ['5-hour', lim.five_hour],
-        ['7-day', lim.seven_day],
-        ['7-day opus', lim.seven_day_opus],
-        ['7-day sonnet', lim.seven_day_sonnet],
-        ...(lim.model_scoped ?? []).map((m) => [m.display_name, m]),
-      ].filter(([, w]) => w && typeof w.utilization === 'number')
-    : [];
+  const windows = planWindows(planLimits?.limits);
 
   if (!planLimits) box.append(el('div', 'snote', 'checking…'));
   // Covers both honest absences: an API-key/Bedrock/Vertex session has no plan,
@@ -1542,13 +1655,72 @@ function renderStats() {
   }
 }
 
+/**
+ * The two windows that matter, in the strip.
+ *
+ * Only two: the model-scoped ones are a panel-sized answer and the strip is for
+ * the glance. Each track is hidden on its own, because a plan that reports one
+ * window and not the other should draw the one it has rather than nothing.
+ */
+function renderUsageMeters() {
+  const btn = $('usage-meters');
+  const lim = planLimits?.limits;
+  const said = [];
+  for (const [id, label, w] of [
+    ['um-5h', '5-hour', lim?.five_hour],
+    ['um-7d', '7-day', lim?.seven_day],
+  ]) {
+    const um = $(id);
+    const has = w && typeof w.utilization === 'number';
+    um.hidden = !has;
+    if (!has) continue;
+    const pct = Math.max(0, Math.min(100, w.utilization));
+    const track = um.querySelector('.sbar');
+    track.className = `sbar${pct >= 85 ? ' hot' : pct >= 60 ? ' warm' : ''}`;
+    track.firstElementChild.style.width = `${pct}%`;
+    // `untilWhen` answers with a duration inside a day and a DATE beyond one,
+    // so the preposition cannot be fixed: "resets in 3h", but "resets Wed".
+    const when = w.resets_at ? untilWhen(w.resets_at) : '';
+    said.push(`${label} ${Math.round(w.utilization)}%${when ? ` · resets ${/^\d/.test(when) ? 'in ' : ''}${when}` : ''}`);
+  }
+  // Absent entirely rather than drawn empty: an API-key, Bedrock or Vertex
+  // session has no plan, and an unfillable gauge is worse than no gauge.
+  btn.hidden = !said.length;
+  if (!said.length) return;
+  // The tie-in worth having at exactly this glance: a window at 100% is when
+  // usage credits begin to drain, and `armed` is the server's own verdict on
+  // that — it counts the model-scoped windows the strip does not draw.
+  const cr = planLimits?.credits;
+  btn.title =
+    said.join('\n') +
+    (cr?.available && cr.armed ? `\ndrawing credits — ≈$${Math.max(0, cr.remainingUsd).toFixed(2)} left` : '') +
+    '\n\nclick for the numbers';
+}
+
 async function loadPlanUsage() {
+  let next;
   try {
-    planLimits = await (await fetch('/api/usage')).json();
+    next = await (await fetch('/api/usage')).json();
   } catch {
     // A failed fetch must not empty the panel — the local numbers are the point.
-    planLimits = { available: false };
+    next = { available: false };
   }
+  // ⚠️ Keep the last windows we actually saw. `planUsage()` needs a LIVE query,
+  // so the moment after a /clear — and every moment before the first turn —
+  // honestly reports no plan at all. In a panel you open deliberately that is
+  // fine; in the strip it is a gauge that blanks mid-session, which reads as
+  // broken rather than as asked-at-a-bad-time. The windows only move on a turn
+  // anyway, so the kept ones are not stale in any way that matters.
+  if (!planWindows(next.limits).length && planWindows(planLimits?.limits).length) {
+    next = {
+      ...next,
+      available: planLimits.available,
+      subscription: planLimits.subscription,
+      limits: planLimits.limits,
+    };
+  }
+  planLimits = next;
+  renderUsageMeters();
   if (statsOpen) renderStats();
 }
 
@@ -1556,6 +1728,7 @@ function toggleStats() {
   statsOpen = !statsOpen;
   $('stats').hidden = !statsOpen;
   $('ctx-meter').classList.toggle('open', statsOpen);
+  $('usage-meters').classList.toggle('open', statsOpen);
   if (!statsOpen) return;
   renderStats();
   // Re-read on every open: a window that reset while the panel was shut is
@@ -1890,13 +2063,25 @@ autosendBtn.onclick = () => {
 };
 paintAutosend();
 
-// Keypad 0 toggles voice from anywhere, INCLUDING while the composer has focus —
-// the composer is autofocused, so a hotkey that deferred to it would never fire
-// when it is actually wanted. Only Numpad0 is taken; the top-row 0 still types.
+// The keypad, from anywhere INCLUDING while the composer has focus — it is
+// autofocused, so a hotkey that deferred to it would never fire when it is
+// actually wanted. Only the Numpad codes are taken; the top row still types.
+//   0 — the mic        1 — build        2 — run the tests
+// Both of the run keys open their panel too: firing something off and then
+// having to go and find where it went would be a worse gesture than the click.
+const KEYPAD = {
+  Numpad0: () => void toggleVoice(),
+  Numpad1: buildNow,
+  Numpad2: () => {
+    if (testState?.command) post('/api/tests/run');
+    if (!testPanelOpen) toggleTestPanel();
+  },
+};
 document.addEventListener('keydown', (e) => {
-  if (e.code !== 'Numpad0' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  const act = KEYPAD[e.code];
+  if (!act || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
   e.preventDefault();
-  void toggleVoice();
+  act();
 });
 
 // --- collapsible side sections ----------------------------------------------
@@ -2024,12 +2209,35 @@ function openStream() {
 openStream();
 
 $('ctx-meter').onclick = toggleStats;
+$('usage-meters').onclick = toggleStats;
 $('test-light').onclick = toggleTestPanel;
+$('build-light').onclick = buildNow;
+// The windows move once a TURN, which is why the usage handler re-reads them;
+// this interval is for the long quiet stretches — another beth on the same
+// account, or a window rolling over while nothing happens here. A hidden tab
+// does not poll: this is an SDK round-trip, and three harnesses with a couple
+// of tabs each is a lot of asking after a number nobody is looking at.
+const USAGE_POLL_MS = 60_000;
+setInterval(() => {
+  if (document.visibilityState === 'visible') void loadPlanUsage();
+}, USAGE_POLL_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void loadPlanUsage();
+});
+void loadPlanUsage();
 // Click-away closes them. These are glances, not modes — anything that makes one
 // feel like a dialog is wrong.
 document.addEventListener('click', (e) => {
-  if (statsOpen && !e.target.closest('#stats') && !e.target.closest('#ctx-meter')) toggleStats();
+  if (
+    statsOpen &&
+    !e.target.closest('#stats') &&
+    !e.target.closest('#ctx-meter') &&
+    !e.target.closest('#usage-meters')
+  ) {
+    toggleStats();
+  }
   if (testPanelOpen && !e.target.closest('#test-panel') && !e.target.closest('#test-light')) toggleTestPanel();
+  if (buildPanelOpen && !e.target.closest('#build-panel') && !e.target.closest('#build-light')) toggleBuildPanel(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
@@ -2042,9 +2250,10 @@ document.addEventListener('keydown', (e) => {
     if (pendingOverlayOpen) closePendingOverlay();
     return;
   }
-  if (statsOpen || testPanelOpen) {
+  if (statsOpen || testPanelOpen || buildPanelOpen) {
     if (statsOpen) toggleStats();
     if (testPanelOpen) toggleTestPanel();
+    if (buildPanelOpen) toggleBuildPanel(false);
     return;
   }
   stopAll();

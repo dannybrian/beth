@@ -16,6 +16,7 @@ import type { AskGate } from './askgate.ts';
 import type { SessionManager } from './session.ts';
 import type { SpeakOut } from './speakOut.ts';
 import type { TestMonitor } from './testRunner.ts';
+import type { BuildRunner } from './buildRunner.ts';
 import { EFFORT_LEVELS, type EffortLevel, type HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
@@ -64,6 +65,7 @@ export function createServer(deps: {
   session: SessionManager;
   speakOut: SpeakOut;
   tests: TestMonitor;
+  build: BuildRunner;
   work: WorkIndex;
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
@@ -214,6 +216,7 @@ export function createServer(deps: {
       for (const a of gate.outstanding().asks) send({ type: 'ask', id: a.id, questions: a.questions });
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
       send({ type: 'tests', state: deps.tests.state() });
+      send({ type: 'build', state: deps.build.state() });
       // Current state, not transcript — same species as `pending` and `tests`,
       // so a reconnecting page gets the bench without it riding the replay.
       send(deps.bench.message());
@@ -428,6 +431,17 @@ export function createServer(deps: {
             // money must not start because someone saved a file.
             deps.tests.setEnabled(Boolean(body.on));
             return json(200, { ok: true, state: deps.tests.state() });
+          }
+          // The build light. No enable gate and no schedule: nothing here runs
+          // unless someone pressed something, which is what makes the press the
+          // authorisation. See buildRunner.ts.
+          case '/api/build/run': {
+            void deps.build.run();
+            return json(200, { ok: true, state: deps.build.state() });
+          }
+          case '/api/build/stop': {
+            deps.build.cancel();
+            return json(200, { ok: true, state: deps.build.state() });
           }
           case '/api/tests/run': {
             // Deliberate, so it ignores settle, interval and idleness. It still

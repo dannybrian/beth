@@ -9,6 +9,7 @@ import { AskGate } from './askgate.ts';
 import { SessionManager } from './session.ts';
 import { SpeakOut } from './speakOut.ts';
 import { TestMonitor } from './testRunner.ts';
+import { BuildRunner } from './buildRunner.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
@@ -162,11 +163,12 @@ bus.subscribe((m) => {
 });
 
 const tests = new TestMonitor(cfg, bus);
+const build = new BuildRunner(cfg, bus);
 // The repo's own nouns, walked ONCE — the page gets this plus whatever is live on
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, work, mined, pins, bench, room, credits });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, work, mined, pins, bench, room, credits });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -199,6 +201,7 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  who:   ${session.directorName()} · permissions ${session.chosenPermissionMode()}`);
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
   tests.start();
+  build.start();
   console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);
   // No silent caps: say how many terms are in play and how many fell off the end,
   // because a list that is quietly empty looks exactly like biasing that does not
@@ -217,6 +220,7 @@ const shutdown = () => {
   events.stop();
   work.stop();
   tests.stop();
+  build.stop();
   session.stop();
   // Frees a held talking stick on the way out — the other beths should not
   // have to wait out the TTL because this one exited cleanly.
