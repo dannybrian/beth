@@ -32,6 +32,14 @@ Contractions? What does their competence sound like?}}
   scope honesty, protecting the week. Name it.}}
 - {{WHAT YOU REFUSE — the thing you say "no, do it properly" about. Production
   access rules, if any, belong here too.}}
+- {{DELEGATION — the harness already draws the line (workers on `sonnet` when
+  the spec is the work; `opus` when the dispatch relies on the worker noticing
+  something unspecifiable in advance; the director's own model never delegates
+  itself). What belongs HERE is this repo's map: name the territories where a
+  worker must notice, in one terse line — "anything touching the golden files
+  or the X subsystem gets opus". No such territories, no departures? Delete
+  this bullet — restating the principle costs prompt tokens every turn to say
+  nothing.}}
 
 ## Talking to {{HUMAN}}
 

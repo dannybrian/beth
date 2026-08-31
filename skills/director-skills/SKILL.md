@@ -108,8 +108,11 @@ afterward — there is no sync, by design.
 ## Interview the person (never copy one)
 
 A copied DIRECTOR.md is the generic stranger the harness already provides for
-free. Ask — one `AskUserQuestion` round, then write from the answers into
-`templates/DIRECTOR.md`'s structure at `.claude/DIRECTOR.md`:
+free. Ask — two `AskUserQuestion` rounds (the tool takes four questions at
+most), then write from the answers into `templates/DIRECTOR.md`'s structure at
+`.claude/DIRECTOR.md`.
+
+Round one, the person:
 
 1. **Name** — what is this director called? (And who are they talking to —
    default the git user's first name.)
@@ -117,6 +120,22 @@ free. Ask — one `AskUserQuestion` round, then write from the answers into
    news? The template's `{{MANNER}}` note has the prompts.
 3. **What they push on** — the bias: shipping, correctness, scope honesty.
 4. **What they refuse** — including any production-access rule this repo needs.
+
+Round two, how they spend money:
+
+5. **Delegation** — where does the sonnet/opus line fall in THIS repo? The
+   harness default already carries the principle, so don't re-ask it: workers
+   get `sonnet` when the spec is the work (mechanical refactors, test updates
+   following a known change, sweeps), `opus` when the dispatch relies on the
+   worker noticing something that couldn't be specified in advance ("stop and
+   tell me if" briefs, debugging that has resisted an attempt) — and the
+   director's own model never delegates itself. What the interview is FOR is
+   the map: which of this repo's territories are notice-shaped? Every codebase
+   has a few — the fragile port, the golden files, the instrument whose whole
+   point is catching an unimagined fault — and naming them is project knowledge
+   the principle cannot derive. Write the map, and any outright departure
+   (a repo that caps at `sonnet`, say); never restate the principle itself,
+   which would burn prompt tokens on every turn to say nothing.
 
 Where the inventory already answered a question (state 2 found where work
 lives), don't ask it again.

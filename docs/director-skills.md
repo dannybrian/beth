@@ -71,7 +71,19 @@ The split that resolves "walkthrough or templates or both":
   (state 2 answers this from the inventory before asking); what is she called;
   her manner, and how she delivers bad news; what she pushes on; what she
   refuses. The last three are the same questions the persona stub asks, because
-  they are the same questions.
+  they are the same questions. A second round (2026-08-30) asks how she spends
+  money: where the sonnet/opus line falls for workers in this repo. The harness
+  role prompt carries the principle — `sonnet` when the spec is the work,
+  `opus` when the dispatch relies on the worker NOTICING something that could
+  not be specified in advance, the director's own model never delegated — added
+  after three beths were found running every worker on Fable, because workers
+  inherit the dispatching model when no one names one. ("Architecture vs
+  mechanical" was the first cut; the notice/spec line replaced it the same day
+  as the actual rule the categories were shadowing.) The interview's product is
+  the repo's MAP of its notice-shaped territories — the fragile port, the
+  goldens — which is project knowledge the principle cannot derive; that map,
+  and outright departures, are all DIRECTOR.md records. A bullet restating the
+  principle would spend prompt tokens on every turn to say nothing.
 
 ## Delivery: skills load from the repo you are standing in
 
