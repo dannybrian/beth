@@ -179,8 +179,9 @@ free when not, and no reason to ever hang up.
 
    Two things worth carrying forward: the voice id is INHERITED from the engine so both
    paths sound like the same person, and the model deliberately is not — which means audio
-   tags are stripped on this path (`eleven_flash_v2_5` predates them). `HARNESS_SPEAK_OUT=0`
-   goes back to waiting.
+   tags are stripped on this path (`eleven_flash_v2_5` predates them). ~~`HARNESS_SPEAK_OUT=0`
+   goes back to waiting.~~ (That flag was the escape hatch back to the dial-in path; it
+   went with the path and exists nowhere in the code.)
 3. **Swap input over**, move the settle window into the page, and delete the queue,
    `speakable`, and the ack with it. BUILT — `ui/listen.js`. The browser recognises,
    the composer shows the words arriving (punctuated as they will be sent), and a

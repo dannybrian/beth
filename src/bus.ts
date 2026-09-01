@@ -70,7 +70,6 @@ export type UIMessage =
       /** Chosen reasoning effort; '' is the model's own default. */
       effort: string;
       /** This repo has a github.com origin, so a plan can be opened there. */
-      repoOnWeb: boolean;
       /** Every director on this machine, and which one is in force ('' = the repo's own). */
       personas: { slug: string; name: string }[];
       persona: string;

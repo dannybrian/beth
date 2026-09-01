@@ -48,12 +48,10 @@ depends_on: []
 
 <End-to-end test plan once all phases ship. Concrete commands. URLs. MCP tools to invoke.
 
-Standing requirements (contract in `game/docs/TESTING.md`):
-- Renderable work: name the on-screen gates as TASKS in the Build Sequence — a mid-plan
-  smoke after the first renderable task, and a pre-ship visual read of the spec's
-  on-screen checklist. Visual read pending ⇒ plan stays `active`.
-- Cross-stack work: the server-assumption test plan (unit + integration) is a separate,
-  earlier plan this one lists in `depends_on`.>
+If this repo has a standing testing contract (a TESTING.md, a validation skill), name it
+here and fold its gates into the Build Sequence as TASKS — a gate that lives only in
+prose is a gate nobody runs. Verification pending ⇒ plan stays `active`, or
+`awaiting-eyes` when only a human read is owed.>
 
 ## Open Questions
 
@@ -63,4 +61,5 @@ Standing requirements (contract in `game/docs/TESTING.md`):
 
 <Filled in at ship time — required if subagents executed this plan. What broke past the
 plan (one line + fixing commit each); CORRECTION: entries for conclusions that turned out
-wrong; where each lesson landed durably (doc/test/skill). See plans/README.md § Lessons.>
+wrong; where each lesson landed durably (doc/test/skill). See the authoring standard in
+plans/README.md.>

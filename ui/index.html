@@ -21,11 +21,12 @@
         <!-- How much of what she writes is read ALOUD, beside WHO is talking —
              the dial belongs to the speaker, not to the settings pile on the
              right. The transcript always has all of it either way. -->
-        <select id="speech-select" title="How much of what she writes is spoken aloud — the transcript always has all of it">
-          <option value="brief">say + last ¶</option>
-          <option value="off">silent</option>
+        <select id="speech-select" title="How much of what she writes is spoken aloud — the transcript always has all of it. headings only = the shape of a structured reply; announcements = findings and events. A decision landing in your queue is spoken at every level but silent.">
           <option value="full">speak all</option>
-          <option value="headlines">headlines</option>
+          <option value="brief">say + last ¶</option>
+          <option value="headings">headings only</option>
+          <option value="headlines">announcements</option>
+          <option value="off">silent</option>
         </select>
         <!-- The MACHINE's voice, not this tab's: every harness on this Mac
              shares one mute and one volume (src/voiceRoom.ts), because three
@@ -39,6 +40,17 @@
             <path d="M11 5 6.5 8.5H3v7h3.5L11 19z" />
             <path class="wave" d="M14.5 9.5a4 4 0 0 1 0 5" />
             <path class="wave" d="M17 7a7.5 7.5 0 0 1 0 10" />
+            <path class="slash cut" d="M4 4.5 19.5 20" />
+            <path class="slash" d="M4 4.5 19.5 20" />
+          </svg>
+        </button>
+        <!-- The end-of-turn bell. Sits with the other audio controls because that
+             is what it is; a page preference, so localStorage, not the gear. -->
+        <button id="bell-toggle" class="bell" title="Soft tone when a turn finishes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8.5a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" />
+            <path d="M13.7 20a2 2 0 0 1-3.4 0" />
             <path class="slash cut" d="M4 4.5 19.5 20" />
             <path class="slash" d="M4 4.5 19.5 20" />
           </svg>
@@ -72,6 +84,11 @@
         <button id="usage-meters" class="umeters" hidden>
           <span class="um" id="um-5h"><b>5h</b><span class="sbar"><i></i></span></span>
           <span class="um" id="um-7d"><b>7d</b><span class="sbar"><i></i></span></span>
+          <!-- Session context, third and last: the two plan windows are about
+               the account and this one is about the conversation, so it reads
+               as the near thing after the far ones. Unlike them it is never
+               absent — every session has a context, plan or no plan. -->
+          <span class="um" id="um-ctx"><b>ctx</b><span class="sbar"><i></i></span></span>
         </button>
         <select id="model-select" title="Model for this conversation — switches live, context is kept">
           <option value="claude-opus-5">Opus 5</option>
@@ -237,6 +254,24 @@
          by clicking a figure, or by the "open" button on Pending. -->
     <div id="lightbox" class="shade" hidden>
       <figure><img alt="" /><figcaption></figcaption></figure>
+    </div>
+    <!-- Reading a plan without leaving the room. Read-only by construction: the
+         harness does not write plan files, so the checkboxes in here are
+         disabled and the body is never editable. The header carries the same
+         four controls the panel row does, because this is where you are when
+         you decide to act on one. -->
+    <div id="plan-overlay" class="shade" hidden>
+      <div class="sheet plan-sheet">
+        <div class="plan-head">
+          <div class="plan-titles">
+            <div id="plan-title"></div>
+            <div id="plan-path"></div>
+          </div>
+          <div id="plan-actions"></div>
+          <button id="plan-close" title="Close (Esc)">×</button>
+        </div>
+        <div id="plan-body" class="md"></div>
+      </div>
     </div>
     <div id="pending-overlay" class="shade" hidden>
       <div class="sheet" id="pending-sheet"></div>

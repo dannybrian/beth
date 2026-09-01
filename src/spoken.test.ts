@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spokenFor, lastParagraph, lastSentence } from './spoken.ts';
+import { spokenFor, lastParagraph, lastSentence, headingsOf, spokenForDecision } from './spoken.ts';
 
 const reply = (text: string) => ({ type: 'assistant' as const, text });
 const say = (kind: string, text: string) => ({ type: 'say' as const, kind, text });
@@ -68,4 +68,58 @@ test('off speaks nothing at all — the page carries every word', () => {
   for (const kind of ['status', 'finding', 'event', 'answer']) {
     assert.equal(spokenFor(say(kind, 'shipped'), 'off'), '', `${kind} is silent too`);
   }
+});
+
+// --- headings only: the SHAPE of what she did ------------------------------
+
+const STRUCTURED = [
+  '## What I found', '', 'A long paragraph about the thing that goes on and on.', '',
+  '## What I did', '', '- one', '- two', '', '### The catch', '', 'More prose here.',
+].join('\n');
+
+test('headings only speaks the skeleton, not the prose', () => {
+  assert.deepEqual(headingsOf(STRUCTURED), ['What I found', 'What I did', 'The catch']);
+  const spoken = spokenFor({ type: 'assistant', text: STRUCTURED }, 'headings');
+  assert.equal(spoken, 'What I found. What I did. The catch');
+  assert.ok(!spoken.includes('long paragraph'), 'the prose stays on the page');
+});
+
+test('prose with no headings is SILENT at headings only', () => {
+  // The silence is the feature: nothing with no skeleton had a shape worth hearing.
+  assert.equal(spokenFor({ type: 'assistant', text: 'Just a chatty reply, no structure.' }, 'headings'), '');
+});
+
+test('a # inside a fence is not a heading', () => {
+  // Plans and diffs are full of shell comments; one read aloud as a section
+  // title is worse than saying nothing.
+  const text = '## Real\n\n```bash\n# not a heading\n## also not\n```\n\n## Also real';
+  assert.deepEqual(headingsOf(text), ['Real', 'Also real']);
+});
+
+test('heading markers and emphasis come off — "##" is not a word', () => {
+  assert.deepEqual(headingsOf('### **The** `catch` ###'), ['The catch']);
+});
+
+test('headings only keeps announcements, drops narration', () => {
+  assert.equal(spokenFor(say('finding', 'The builder used the 110m file.'), 'headings'), 'The builder used the 110m file.');
+  assert.equal(spokenFor(say('status', 'Reading the runbook.'), 'headings'), '');
+});
+
+// --- a decision landing is a summons ---------------------------------------
+
+test('a queued decision speaks at every level except off', () => {
+  const d = { title: 'Ship the ribbon now or after the candles?', urgency: 'when-free' };
+  for (const level of ['full', 'brief', 'headings', 'headlines'] as const) {
+    assert.equal(spokenForDecision(d, level), 'A decision for you: Ship the ribbon now or after the candles?', level);
+  }
+  assert.equal(spokenForDecision(d, 'off'), '', 'off means off, here too');
+});
+
+test('only blocking-later earns a different lead', () => {
+  assert.match(spokenForDecision({ title: 'X', urgency: 'blocking-later' }, 'brief'), /^A decision that blocks later: X$/);
+  assert.match(spokenForDecision({ title: 'X', urgency: 'today' }, 'brief'), /^A decision for you: X$/);
+});
+
+test('an empty decision title says nothing rather than a bare lead', () => {
+  assert.equal(spokenForDecision({ title: '   ' }, 'full'), '');
 });

@@ -56,6 +56,14 @@ that runs for a repo the detectors do not recognise. **The harness never invents
 command** — it runs what the project already declares, because a guessed command is a
 shell execution nobody authorised.
 
+⚠ CORRECTION (2026-09-01): `HARNESS_TEST_CMD` no longer overrides *all* of it. The gear
+panel (`settings.ts`, a `settings.json` in the per-repo state dir) is a fourth layer and
+it WINS over the env layers and over detection — deliberately, because a command typed
+into the page that silently lost to a repo `.env` would be a no-op with no symptom. The
+panel says which layer is in force, and clearing the field hands the command back to the
+env layer and then to the detectors. Everything else in this section stands, including
+the never-invents rule.
+
 ### When it runs
 
 Not on a naked timer. A timer alone re-runs an unchanged tree forever, burns battery, and
@@ -77,6 +85,12 @@ a suite that touches the network, spins a container, or costs money must not sta
 you happened to save a file. So it is **off until enabled once per repo**, persisted in
 the harness state dir, with the detected command shown before you enable it.
 
+⚠ Read that gate as belonging to the SCHEDULE, not to the corner of the screen
+(2026-09-01). The build light that now sits beside this one has deliberately the inverse
+contract — no enable gate and no schedule — because a build only ever runs when Danny
+presses it, and the press IS the authorisation. What needs the gate is code running
+because a file was saved.
+
 ### What it shows
 
 Top right, where the numbers used to be: a dot and a count.
@@ -85,6 +99,10 @@ Top right, where the numbers used to be: a dot and a count.
 - **yellow** — running, or passed-but-stale (tree changed, next run pending)
 - **red** — failures, with the count
 - **grey** — not enabled here, or no runner detected
+
+The same light is painted into the TAB TITLE (2026-09-01), which is the only part of the
+page you can read while looking at something else — the whole reason the light is worth
+having when the window is behind your editor.
 
 Clicking opens the log panel: the command, when it ran, how long it took, exit code, and
 the output. Failures are parsed into a list where they exist — `node --test` gives TAP-ish
@@ -137,7 +155,13 @@ the panel fails to open.
    beside it still counts the composite state.
 2. ~~Stats behind the context meter~~ — **done**. The meter left the busy-only
    progress cluster and became a always-visible clickable gauge in the composer; the
-   strip's run-on sentence of numbers is gone entirely, so the top right is free. The
+   strip's run-on sentence of numbers is gone entirely, so the top right is free. ⚠
+   CORRECTION (2026-09-01): the top right is no longer free, and that was a deliberate
+   reversal rather than drift. Two usage METERS came back to the strip (five-hour and
+   seven-day) because 5h at 100% is the moment credits start draining, which is the one
+   number worth answering without a click; the panel still renders every window. The
+   corner now also holds the model, the effort select, a BUILD light beside the test
+   light, and the gear. Anything added there is competing for a full shelf. The
    panel carries context, this turn, this session, the model, and the plan windows —
    `GET /api/usage`, feature-detected and caught, rendering only the windows actually
    present (five-hour, seven-day, and `model_scoped` per-model). Both honest absences —
@@ -159,3 +183,14 @@ the panel fails to open.
    Superseded from the plan below: the old
    four-part ordering. Each part was useful on its own, and the last one is the one that
    turns a status light into a way of talking about the failure.
+
+
+## Dated correction — 2026-09-01
+
+The panel moved to the TOP. This record says the numbers live "behind the context
+meter" at the bottom; they now live behind the top-right meters, and `.stats`
+anchors to `top: 44px`. The bottom gauge stays and opens the same panel in the
+same place — two doors, one room. The strip's meter row grew a third bar for
+session context, which unlike the two plan windows is never hidden: every session
+has a context, so it is what keeps the meter button on screen when there is no
+plan to report.

@@ -37,15 +37,54 @@ const CANDIDATE = /(?<![\w/.\-:])((?:[\w.\-]+\/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0
 /** Never link more than this from one message — a runaway match is a bug, not a feature. */
 const MAX_LINKS = 25;
 
+/**
+ * A plan cited by its series number — "plan 174", "plans 176 and 182", "#186".
+ *
+ * This exists because agents talk in numbers Danny cannot map back to anything:
+ * the panel shows titles, the worker says "Implement plan 176 headless stretch",
+ * and connecting the two was manual. She writes the number already; nobody has to
+ * change how they talk.
+ *
+ * ⚠️ The word `plan` (or a `#`) is REQUIRED. A bare number cannot be linked —
+ * "timeout 180", "79175 tok" and "exit 2" are all in this transcript, and a
+ * four-digit year is one keystroke from a plan id. Same trade as CANDIDATE above:
+ * high precision, so a link is never wrong-but-plausible.
+ */
+const PLAN_REF = /(?<![\w#])(?:plans?\s+#?(\d{1,4})|#(\d{1,4}))\b/gi;
+
 export function detectLinks(
   text: string,
-  deps: { repo: string; lookup: (p: string) => { spoken: string } | undefined }
+  deps: {
+    repo: string;
+    lookup: (p: string) => { spoken: string } | undefined;
+    /** Resolves a cited number, and MUST return nothing when it is ambiguous. */
+    lookupNumber?: (n: number) => { path: string; spoken: string } | undefined;
+  }
 ): TextLink[] {
   const out: TextLink[] = [];
   if (!text) return out;
 
+  // Numbers first, so a message full of them still gets its paths: both loops
+  // share MAX_LINKS, and a path is the more specific reference of the two.
+  const taken: Array<[number, number]> = [];
+  if (deps.lookupNumber) {
+    for (const m of text.matchAll(PLAN_REF)) {
+      const item = deps.lookupNumber(Number(m[1] ?? m[2]));
+      if (!item) continue;
+      out.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        path: item.path,
+        kind: 'plan',
+        spoken: item.spoken,
+      });
+      taken.push([m.index, m.index + m[0].length]);
+    }
+  }
+
   for (const m of text.matchAll(CANDIDATE)) {
     if (out.length >= MAX_LINKS) break;
+    if (taken.some(([a, b]) => m.index < b && m.index + m[0].length > a)) continue;
     const rel = m[1];
     const line = m[2] ? Number(m[2]) : undefined;
 
@@ -67,5 +106,7 @@ export function detectLinks(
     }
     out.push({ start: m.index, end: m.index + m[0].length, path: rel, line, kind: 'file' });
   }
-  return out;
+  // The page splices by offset, so anything out of order renders scrambled.
+  out.sort((a, b) => a.start - b.start);
+  return out.slice(0, MAX_LINKS);
 }

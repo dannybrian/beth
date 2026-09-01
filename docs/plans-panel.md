@@ -142,10 +142,14 @@ the *pair*: the path (so she can resolve and open it) with status and task count
 plus the spoken name and an instruction to use that name aloud and never the path.
 
 **Pointing lives on the server, so voice works too.** Holding the chips only in the page
-meant clicking a plan and then SPEAKING lost the reference — a spoken turn never passes
-through the browser, since ElevenLabs dials the harness directly and the utterance goes
-straight to the director. So the page mirrors its chips to `/api/point`, and both input
-paths converge on `SessionManager.sendPointed()`, which CONSUMES them: a reference is
+meant clicking a plan and then SPEAKING lost the reference — a spoken turn never passed
+through the browser, since ElevenLabs dialled the harness directly and the utterance went
+straight to the director. ⚠ CORRECTION (2026-09-01): that rationale is dead — nothing
+dials in, and a spoken turn now settles in the page and leaves through the same `send()`
+as anything typed. The mirroring STAYS, on its own merits: two tabs share one set of
+chips, and the seq race below is real either way. Do not delete `/api/point` on the
+strength of the dead premise. So the page mirrors its chips to `/api/point`, and both
+input paths converge on `SessionManager.sendPointed()`, which CONSUMES them: a reference is
 spent by the turn that uses it, exactly as the composer chips clear on send. Consumption
 is broadcast so the page drops chips a spoken turn just used.
 
@@ -217,11 +221,17 @@ themselves for *what is true* — so the panel is fresh without becoming a secon
   writer.
   Safe to build now only because the API is loopback-only; an endpoint that spawns a shell
   on a tunnelled server would have been remote code execution.
-- **Umbrella plans.** Still open, and now has a lever: `name:` lets an umbrella plan take
-  a name reflecting what hangs off it. Danny also wants naming from the **UI** — renaming
-  a plan without editing its file. `WorkIndex.nameOverrides` is that seam: consulted
-  before frontmatter, empty today. Landing it is populating the map plus an affordance,
-  not a refactor. Hierarchy itself is still unmodelled.
+- ~~**Umbrella plans.**~~ ⚠ CORRECTION (2026-09-01): both halves of this shipped, by a
+  different route than the one sketched here. **Hierarchy is modelled** — `workItems.ts`
+  carries `parent`/`isUmbrella`, resolved in `workIndex.ts` with a cycle guard, and the
+  panel folds children under their umbrella with an orphan breadcrumb. Parentage comes
+  from the first `depends_on` entry, which is Danny's existing convention measured against
+  the real corpus, not a new key. **Rename shipped too, but NOT through
+  `nameOverrides`** — `planName.ts` writes `name:` into the file, exposed as
+  `/api/rename`. That is the harness's one plan-file writer, and it is narrow on purpose
+  (one key, and it refuses a plan with no frontmatter rather than creating one). Do not
+  populate `nameOverrides` as this entry once instructed; the map is still declared and
+  still empty, used only for draft naming.
 - **Search scope.** Unbuilt. `/api/work?scope=all` exposes the whole index, and bodies are
   deliberately not held in memory yet — 571 plans of body text is the cost to weigh when
   full-text search is actually wanted.

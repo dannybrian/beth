@@ -121,6 +121,26 @@ body {
    three are dials on the speaker, but these two reach every beth on the desk.
    The mute borrows the autosend button's anatomy: a slash drawn over the glyph,
    with a panel-coloured undercut so it reads as a cut rather than a scribble. */
+/* The bell borrows the mute's whole anatomy — same size, same slash-when-off —
+   because they are the same kind of control sitting side by side. Note the
+   inversion: `.on` here means SILENCED, matching the mute it stands next to. */
+#bell-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+#bell-toggle svg { width: 16px; height: 16px; display: block; }
+#bell-toggle .slash { display: none; }
+#bell-toggle.on .slash { display: block; }
+#bell-toggle .cut { stroke: var(--panel); stroke-width: 4.5; }
+/* On, but the machine mute is eating it — dimmed and struck, so the button
+   never claims to be doing something it is not. */
+#bell-toggle.suppressed { color: color-mix(in srgb, var(--warn) 55%, transparent); }
+#bell-toggle.suppressed .slash { display: block; }
+#bell-toggle:hover { color: var(--text); }
 #mute-toggle {
   background: none;
   border: none;
@@ -279,9 +299,13 @@ button.ctx.hot > i::after { background: var(--err); }
 button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 
 /* --- the numbers --- */
+/* Hangs from the STRIP, not from the composer. The meters that open it live up
+   there, and reaching down to the bottom right for the numbers behind a control
+   at the top right was the wrong way round. The bottom gauge stays — it is where
+   your eye already is mid-conversation — but it opens this, in the same place. */
 .stats {
   position: fixed;
-  bottom: 78px;
+  top: 44px;
   right: 14px;
   z-index: 20;
   width: 250px;
@@ -340,7 +364,7 @@ button.ctx:hover > i, button.ctx.open > i { background: var(--muted); }
 
 /* The settings panel is narrower than its siblings — a column of controls, not
    a log. Anchored top-right under the gear that opens it. */
-.stats.set { top: 44px; bottom: auto; width: 290px; }
+.stats.set { width: 290px; }
 .stats.set select {
   width: 100%;
   background: #1b1f26;
@@ -962,7 +986,7 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
    the exception to the exception — once set it stays lit, because the shelf being
    invisible until you hover is how you forget what is on it. */
 .work-item .pin,
-.work-item .gh,
+.work-item .chip-it,
 .work-item .rename {
   flex: none;
   background: none;
@@ -977,14 +1001,11 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
   transition: opacity 0.12s;
 }
 .work-item:hover .pin,
-.work-item:hover .gh,
+.work-item:hover .chip-it,
 .work-item:hover .rename { opacity: 1; }
-/* An <a> so middle-click and ⌘-click do what they do everywhere else — the row's
-   other controls are buttons because they act, and this one navigates. */
-.work-item .gh { text-decoration: none; }
-.work-item .gh:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 .work-item .pin.on { opacity: 1; color: var(--warn); }
 .work-item .pin:hover { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.work-item .chip-it:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 .work-item .rename:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 /* A live claim is a hard no, and it should look like one. */
@@ -1200,7 +1221,7 @@ button.tlight.running .ticon { animation: pulse 1.4s ease-in-out infinite; }
 button.tlight.red .ticon { fill: var(--err); }
 button.tlight.red { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
 
-.stats.wide { width: 400px; top: 44px; bottom: auto; }
+.stats.wide { width: 400px; }
 .tcmd {
   font-family: var(--mono);
   color: var(--text);
@@ -1224,25 +1245,36 @@ button.topt {
   cursor: pointer;
 }
 button.topt.ghost { background: none; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
-/* A failure is a thing you point at, so it looks like the plan rows do. */
-button.tfail {
-  display: block;
-  width: 100%;
-  text-align: left;
+/* A failure is a thing you point at, so it looks like the plan rows do — and the
+   paste sits INSIDE that frame, because it is a second way to use the same row
+   rather than a second row. */
+.tfail {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   background: #1b1f26;
   border: 1px solid var(--line);
   border-left: 2px solid var(--err);
   border-radius: 4px;
-  padding: 6px 8px;
   margin-bottom: 5px;
+  overflow: hidden;
+}
+.tfail:hover { border-color: var(--muted); border-left-color: var(--err); }
+button.tfail-body {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 8px;
   cursor: pointer;
   font: inherit;
   font-size: 11.5px;
 }
-button.tfail:hover { border-color: var(--muted); border-left-color: var(--err); }
-button.tfail .tname { color: var(--text); font-family: -apple-system, sans-serif; }
-button.tfail .tloc { color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
-button.tfail .tdetail {
+.tfail .tname { color: var(--text); font-family: -apple-system, sans-serif; }
+.tfail .tloc { color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.tfail .tdetail {
   color: var(--warn);
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1251,6 +1283,33 @@ button.tfail .tdetail {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The output heading and its paste control share a line — the button belongs to
+   the thing it copies, not to the panel. */
+.thead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.thead h3 { flex: 1; }
+/* Deliberately quiet: pointing is the common gesture and this is the escape
+   hatch beside it, so it reads as available rather than as the thing to press. */
+button.tpaste {
+  flex: none;
+  align-self: center;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  margin: 0 6px 0 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.tpaste:hover { color: var(--text); border-color: var(--muted); }
 .tlog {
   margin: 0;
   padding: 8px;
@@ -1334,3 +1393,194 @@ button.tfail .tdetail {
   margin-right: 6px;
   font-size: 12.5px;
 }
+
+/* A plan she referenced, just revealed. One slow fade and gone: the row has to
+   be findable in a 500-plan list without becoming a permanent decoration, and
+   the eye needs longer than a flash to land on something it just scrolled to. */
+.work-item.revealed {
+  animation: reveal-flash 2.2s ease-out;
+}
+@keyframes reveal-flash {
+  0%, 35% {
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  100% { background: transparent; box-shadow: none; }
+}
+
+/* --- the plan preview -------------------------------------------------------
+   Reading a plan without leaving the room. Same shade species as the lightbox —
+   a bigger glance, not a dialog — but this one is a document, so it gets a
+   readable measure and a scroll of its own. */
+.plan-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 92vw);
+  max-height: 88vh;
+  padding: 0;
+  overflow: hidden;
+  /* ⚠️ Stated here rather than inherited: `.sheet`'s background lives under
+     `#pending-overlay .sheet`, so an unstyled sheet is TRANSPARENT — the plans
+     panel read straight through the prose, which looks like a rendering fault
+     in the markdown rather than a missing background. */
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex: none;
+}
+.plan-titles { flex: 1; min-width: 0; }
+#plan-title { font-size: 15px; font-weight: 600; color: var(--text); }
+#plan-path {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#plan-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+#plan-close {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+#plan-close:hover { color: var(--text); }
+
+/* The body. 18px against the conversation's 15 — Danny asked for the bump, and
+   a plan is read rather than skimmed, so it earns the extra measure. */
+.md {
+  overflow-y: auto;
+  padding: 18px 26px 30px;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+  color: #eef2f8;
+}
+.md > :first-child { margin-top: 0; }
+.md h1 { font-size: 1.35em; }
+.md h2 { font-size: 1.18em; border-bottom: 1px solid var(--line); padding-bottom: 0.25em; }
+.md h3 { font-size: 1.06em; }
+.md h4, .md h5, .md h6 { font-size: 1em; color: var(--muted); }
+.md p { margin: 0.7em 0; }
+.md a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.md a:hover { color: var(--text); }
+.md code { font-family: var(--mono); font-size: 0.82em; background: #1d2128; padding: 1px 5px; border-radius: 3px; }
+.md pre.md-code {
+  margin: 0.9em 0;
+  padding: 10px 12px;
+  background: #0b0d10;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow-x: auto;
+  font-size: 0.78em;
+  line-height: 1.5;
+}
+.md pre.md-code code { background: none; padding: 0; font-size: inherit; }
+/* An unterminated fence is a bug in the PLAN — say so rather than rendering the
+   rest of the file as one mysterious grey slab. */
+.md pre.md-code.unclosed { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.md blockquote {
+  margin: 0.9em 0;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.md ul, .md ol { margin: 0.7em 0; padding-left: 1.4em; }
+.md li { margin: 0.3em 0; }
+/* Checkboxes are the most-read thing in a plan (396 across 40 of them), so they
+   read as STATE: a real box, hanging outside the text, dimmed when done. */
+.md li.task { list-style: none; margin-left: -1.2em; }
+.md li.task input { margin-right: 8px; accent-color: var(--ok); vertical-align: baseline; }
+.md li.task.done { color: var(--muted); }
+.md hr { border: none; border-top: 1px solid var(--line); margin: 1.4em 0; }
+.md table.md-table {
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  font-size: 0.85em;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+.md th { background: #1b1f26; color: #eef2f8; font-weight: 600; }
+/* Frontmatter is where status and depends_on live, so it is kept — folded, so it
+   is never the first thing you read. */
+.md details.md-fm { margin-bottom: 1.2em; }
+.md details.md-fm summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.62em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.md details.md-fm pre {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  background: #0b0d10;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 0.72em;
+  color: var(--muted);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+/* In the preview header the controls ARE the chrome, so none of the row's
+   hover-reveal applies — there is no name for them to bury here. */
+#plan-actions .pin,
+#plan-actions .chip-it,
+#plan-actions .rename,
+#plan-actions .handoff {
+  opacity: 1;
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  margin-left: 2px;
+  cursor: pointer;
+  text-decoration: none;
+}
+#plan-actions .pin:hover, #plan-actions .rename:hover,
+#plan-actions .chip-it:hover, #plan-actions .handoff:hover { color: var(--text); border-color: var(--muted); }
+#plan-actions .pin.on { color: var(--warn); }
+#plan-actions .handoff.blocked { color: var(--err); cursor: not-allowed; }
+/* The row IS the board, so "find on board" is header-only. */
+.work-item .board { display: none; }
+#plan-actions .board {
+  opacity: 1;
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  margin-left: 2px;
+  cursor: pointer;
+}
+#plan-actions .board:hover { color: var(--text); border-color: var(--muted); }

@@ -105,6 +105,8 @@ export type HarnessConfig = {
    * it; this only decides what is pronounced.
    *   'full'      — every line, as it was before this existed
    *   'brief'     — `say` items in full, and the LAST PARAGRAPH of a longer reply
+   *   'headings'  — the markdown headings of what she writes, plus findings
+   *                  and events: the shape of progress, silent on plain prose
    *   'headlines' — findings, events, and short in-progress lines only
    *
    * 'brief' is the default because the two channels have different budgets: six

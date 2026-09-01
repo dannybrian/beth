@@ -5,7 +5,7 @@
 // /api/image builds a response from a query parameter, and the loopback bind is
 // not a reason to let a URL name any file on the machine — the repo boundary
 // plus this extension list is the whole allowlist. (The work index cannot play
-// the allowlist role it plays for /api/github: images are not work items.)
+// that role here: images are not work items.)
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -37,4 +37,32 @@ export function resolveImage(repo: string, rel: string): ImageResolution {
     return { ok: false, reason: `no such file: ${rel}` };
   }
   return { ok: true, abs, mime };
+}
+
+
+/**
+ * The same fence, for markdown the reader is asked to show.
+ *
+ * `/api/plan` started out allowlisted to the work INDEX, which is right for the
+ * actions it offers but wrong as the rule for READING: she links ordinary
+ * markdown too (a spec, a TESTING.md), and those fell through to a `vscode://`
+ * prompt — the one thing the in-harness reader exists to stop. So membership of
+ * the index now decides whether the header carries plan ACTIONS; being a real
+ * `.md` inside the repo is what decides whether it can be read at all.
+ *
+ * Deliberately the same shape as resolveImage: extension allowlist, then resolve
+ * and require the result to still be inside the repo — `..` and absolute paths
+ * die by geometry rather than by pattern-matching the string.
+ */
+export function resolveMarkdown(repo: string, rel: string): { ok: true; abs: string } | { ok: false; reason: string } {
+  if (!rel) return { ok: false, reason: 'no path' };
+  if (!/\.(md|markdown)$/i.test(rel)) return { ok: false, reason: `not markdown: ${rel}` };
+  const abs = path.resolve(repo, rel);
+  if (!abs.startsWith(repo + path.sep)) return { ok: false, reason: 'outside the repo' };
+  try {
+    if (!fs.statSync(abs).isFile()) return { ok: false, reason: `not a file: ${rel}` };
+  } catch {
+    return { ok: false, reason: `no such file: ${rel}` };
+  }
+  return { ok: true, abs };
 }

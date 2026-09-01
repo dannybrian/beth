@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveImage } from './showImage.ts';
+import { resolveImage, resolveMarkdown } from './showImage.ts';
 
 const setup = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-img-'));
@@ -58,4 +58,45 @@ test('a missing file and a directory are both refused', () => {
 test('an empty path is refused', () => {
   const { repo } = setup();
   assert.ok(!resolveImage(repo, '').ok);
+});
+
+// --- markdown, for the in-harness reader ------------------------------------
+//
+// The same fence as an image, and it matters for the same reason: /api/plan
+// builds a response from a query parameter, and loopback is not a licence to
+// name any file on the machine. A wrong refusal is a doc that still throws you
+// into VSCode; a wrong acceptance is a query string reading the disk.
+
+test('markdown inside the repo reads; anything else does not', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'md-'));
+  fs.mkdirSync(path.join(repo, 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'plans/a.md'), '# a');
+  fs.writeFileSync(path.join(repo, 'README.markdown'), '# r');
+  fs.writeFileSync(path.join(repo, '.env'), 'SECRET=1');
+  fs.writeFileSync(path.join(repo, 'notes.txt'), 'x');
+
+  assert.equal(resolveMarkdown(repo, 'plans/a.md').ok, true);
+  assert.equal(resolveMarkdown(repo, 'README.markdown').ok, true);
+  // The whole point of the extension gate: a secret is not markdown.
+  assert.equal(resolveMarkdown(repo, '.env').ok, false);
+  assert.equal(resolveMarkdown(repo, 'notes.txt').ok, false);
+  assert.equal(resolveMarkdown(repo, 'plans/missing.md').ok, false);
+  assert.equal(resolveMarkdown(repo, '').ok, false);
+});
+
+test('traversal and absolute paths die by geometry', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'md-'));
+  fs.writeFileSync(path.join(repo, 'ok.md'), '# ok');
+  const outside = path.join(os.tmpdir(), `escape-${process.pid}.md`);
+  fs.writeFileSync(outside, '# not yours');
+  assert.equal(resolveMarkdown(repo, '../../../../etc/passwd.md').ok, false);
+  assert.equal(resolveMarkdown(repo, outside).ok, false, 'an absolute path is still outside');
+  assert.equal(resolveMarkdown(repo, `../${path.basename(outside)}`).ok, false);
+  fs.rmSync(outside, { force: true });
+});
+
+test('a directory named like markdown is not a file', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'md-'));
+  fs.mkdirSync(path.join(repo, 'weird.md'));
+  assert.equal(resolveMarkdown(repo, 'weird.md').ok, false);
 });

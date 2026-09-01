@@ -37,16 +37,7 @@ A director agent's time/tokens and the tokens its subagents spend are wasted on 
 
 Beth integrates with ElevenLabs for voice, and you can set the chattiness. Multiple personas can be defined, each with its own voice from your ElevenLabs account.
 
-<img src="docs/images/speech-levels.png" width="342" alt="The speech-level menu in the strip, beside the persona: say + last paragraph, silent, speak all, headlines." />
-
-
-Beth tracks token use.
-
-
-<img src="docs/images/stats-panel.png" width="238" alt="The stats popup behind the context meter: context at 9%, this turn&#39;s tokens split into fresh, cached, and output with cost, session cost and model, the speech bill with its volume slider and the assumed rate printed beside the estimate, and the plan&#39;s 5-hour and 7-day windows." />
-
-
-It also provides an under-the-hood visualization of token consumption, cache reads/writes, and thinking, which I find useful mainly for demonstration and education.
+Beth tracks token use — context, per-turn and session cost, the plan's usage windows, and an itemized speech bill — behind the context meter. It also provides an under-the-hood visualization of token consumption, cache reads/writes, and thinking, which I find useful mainly for demonstration and education.
 
 
 <img src="docs/images/wire-panel.png" width="350" alt="The wire panel: one turn as nine API requests — an anatomy strip of thinking, writing, and tools; stacked token bars showing cache writes becoming cache reads; and the raw exchange underneath." />
@@ -59,17 +50,9 @@ The harness can also run the repo's tests automatically, so status is a glance a
 
 Beth puts an emphasis on planning, implementation oversight, and autonomous execution -- *and expects a well-documented, well-tested workflow under that to make it happen*. The harness edits, maintains, updates, indexes, and displays ... well, plans.
 
-
-<img src="docs/images/plan-card.png" width="240" alt="A plan card expanded on the panel: Device Log Capture, P2, 0 of 4 tasks, each task a checkbox with its first line." />
-
-
 Coordinator/director agents like this work best when taught the "lanes" of a project -- where it's probably better to run one subagent at a time, what can and can't be done in parallel, where worktrees are in flight and why, and how to prioritize and queue all of that. And this is largely because they can see all the plans and exercise judgement about them (just as with a DevOps agent platform), but it's also because a director will understand the broader goals or requirements -- for this reason Beth provides a plan hierarchy, for umbrella plans, subplans, and so on.
 
-Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents.
-
-
-<img src="docs/images/queues.png" width="240" alt="The queues: three pending decisions, each carrying the plan it belongs to, and a running worker with its start time and a close control." />
-
+Beth can then surface pending questions or call for your attention, maintaining a queue across many plans and subagents — pending decisions each carry the plan they belong to, and running workers show up beside them with a close control.
 
 One consequence of queuing up issues for you is that Beth's interactions with subagents are more frequent and often narrowly-scoped: *the director pattern incurs token cost, and benefits most from the best reasoning models.* It costs to scale -- and it won't work at all if subagents *can't* have their work narrowly scoped with good repo organization, modularity, testing, and documentation. Exploration is expensive, and the director pattern does little to change that.
 
@@ -117,7 +100,7 @@ Everything Beth says and hears crosses one loopback listener:
 %%{init: {"themeVariables": {"fontSize": "13px"}, "flowchart": {"nodeSpacing": 28, "rankSpacing": 34, "padding": 6}}}%%
 flowchart TB
   subgraph BROWSER["Chrome — the room (loopback only)"]
-    EAR["🎙 the ear<br/>listen.js"]
+    EAR["🎙 the mic<br/>capture.js"]
     UI["the page<br/>transcript · panels"]
     MOUTH["🔊 the mouth<br/>speaker.js"]
     EAR ~~~ UI ~~~ MOUTH
@@ -125,10 +108,12 @@ flowchart TB
 
   subgraph HARNESS["beth — one Node process per repo"]
     SRV["server.ts<br/>the one listener"]
+    STT["earHost.ts<br/>src/ear/ (Scribe)"]
     SES["session.ts<br/>one SDK query"]
     MCP["tools.ts<br/>in-process MCP"]
     TTS["speakOut.ts"]
     TAP["wireTap.ts"]
+    SRV --- STT
     SRV --- SES
     SES --- MCP
     SES --- TAP
@@ -137,9 +122,10 @@ flowchart TB
 
   CC["Claude Code CLI<br/>Agent SDK"]
   ANTH(["Anthropic API"])
-  XI(["ElevenLabs TTS"])
+  XI(["ElevenLabs<br/>STT + TTS"])
 
-  EAR -->|"a spoken turn"| SRV
+  EAR -->|"PCM"| SRV
+  STT <-->|"recognise"| XI
   UI <-->|"SSE + POST"| SRV
   SRV -->|"mp3 stream"| MOUTH
   SES <--> CC
@@ -168,7 +154,7 @@ flowchart TB
 
   subgraph HOME["your machine — ~/.director-harness"]
     PERS["personas/*.md"]
-    MEM["persona-state/<br/>Beth's memory of you"]
+    MEM["Beth's memory of you<br/>persona-state/, or the repo's"]
     PERS ~~~ MEM
   end
 
@@ -179,14 +165,19 @@ flowchart TB
   CC2 -->|"loads"| PROJ
 ```
 
-Every arrow touching your repo is a *read*; the one thing that ever writes
-to a plan file is a rename you click. That is a claim about the harness
+Every arrow touching your repo is a *read*, with two named exceptions: a
+rename you click writes one frontmatter key into that plan file, and the
+harness appends its event log to `.claude/events.jsonl` (keep it
+gitignored — `/director-skills` sets that up) so events survive a restart. Nothing else in the plumbing writes into the
+repo. That is a claim about the harness
 *plumbing*, not the whole system, obviously: the Claude session it hosts dispatches
 workers that write code and commit, exactly as any Claude Code session would —
 through the same permission gates. The safety story is the gate, not
 read-onlyness. The browser and the harness
 speak over one loopback listener — voice included — which is why the
-shell-executing parts are safe by construction rather than by rule.
+shell-executing parts are safe by construction rather than by rule. (Plus an
+Origin check on every API write, because a loopback port is still reachable
+by any page your browser has open.)
 
 ## Getting a repo ready: /director-skills
 
@@ -216,10 +207,11 @@ The reasoning is in `docs/director-skills.md`. This repo's own
 
 Heading was her idea. Text here works like any chat, with three differences:
 
-- **The panel is shared ground.** Clicking a plan (or a failing test) *points at it* — Beth gets the
-  reference, you get a chip, and "what's left on this?" needs no name. Rows
-  carry a pin, a rename, a GitHub link, and one-click handoff to a fresh
-  Claude Code terminal session seeded with the plan.
+- **The panel is shared ground.** Clicking a plan's name opens it to read; the `→`
+  beside it *points at it* — Beth gets the reference, you get a chip, and "what's
+  left on this?" needs no name. Clicking a failing test points the same way. Rows
+  carry a pin, a rename, and one-click handoff to a fresh Claude Code terminal
+  session seeded with the plan.
 - **Decisions queue instead of interrupting.** Anything Beth wants decided but
   isn't blocked on lands in a queue with candidate answers as buttons. Both of
   you can close items; a queue with settled things in it stops being read.
@@ -284,7 +276,17 @@ commit, what's in flight, the clock, the gap since the harness was last up.
 - **Tests**: the top-right light detects the project's test command (never
   invents one), runs it when the tree settles and the session is idle, and is **off
   until you enable it per repo** — this executes project code on a schedule.
-  Clicking a failure drops a chip, not a stack trace.
+  Clicking a failure drops a chip, not a stack trace; beside it a `⇥` button
+  pastes the thing itself — one failure, or the whole run — into the composer,
+  unsent and with the byte count on the button, for when the answer is in the
+  output and nothing short of the output will do. The build panel has the same
+  control, where it matters more: with no parser there, it is the only way a
+  build reaches her with its reasons attached.
+- **Reading a plan**: the ▤ on a row (or clicking a plan Beth mentions) opens it
+  in the harness — the markdown rendered at a size meant for reading, with rename,
+  pin and handoff along the top, plus `→` to point Beth at it and `⌖` to find it
+  on the board. Read-only on purpose: the checkboxes are
+  disabled, because the harness does not write plan files.
 - **Permission cards**: tool calls the session can't settle on its own become cards; a
   card cannot be answered by voice, so the session defaults to the SDK's
   `auto` mode and "Always" scopes its rule to the session — never written to
@@ -292,12 +294,17 @@ commit, what's in flight, the clock, the gap since the harness was last up.
 - **Director-role handoff**: if a terminal session already holds the director
   plan, the harness comes up as a *shadow* — read everything, claim nothing.
   Promotion re-checks at the moment you click it.
-- **The strip**: the plan's five-hour and seven-day windows, model, reasoning
+- **The strip**: the plan's five-hour and seven-day windows and this session's
+  context, model, reasoning
   effort, speech level, persona — all live, all showing what the *server*
   believes rather than what was clicked. Two lights on the right: tests, and a
   build you fire from the strip (keypad 1 and 2), and the same light again in
   the tab title, where it is the only part of the page you can see while
-  looking at something else. Permission mode and both commands live behind the
+  looking at something else. The tab also front-loads what wants *you*: `(N)`
+  for queued decisions, and `❗` when Beth is stopped on a card in the
+  transcript — a permission prompt or a question, neither of which can be
+  answered by voice, and whose only other tell is a silence that reads as a
+  hang. Permission mode and both commands live behind the
   gear; the gear itself turns amber
   when permissions are anything but `auto`, because that is the setting which
   decides how often a spoken conversation can be stopped dead.
@@ -336,27 +343,42 @@ Config layers, most specific first: real env vars → the bound repo's `.env` �
 state lives in `~/.director-harness/<repo-slug>/`; persona state in
 `~/.director-harness/persona-state/<slug>/`. Nothing in this repo holds a key.
 
+There is a fourth layer, and it is the only one that is *written*: what you
+type into the page's gear panel is stored in the per-repo state dir and wins
+over all three — the panel says which layer is in force. Only what a page can
+set lives there (the test and build commands, today); secrets stay in the
+`.env` layers.
+
 | Env | Default | Meaning |
 |---|---|---|
 | `HARNESS_PORT` | `4620` | Run a second instance alongside |
 | `HARNESS_MODEL` | `claude-opus-5` | Director session model — the dominant cost lever |
+| `HARNESS_PERMISSION_MODE` | `auto` | The SDK permission mode the session starts in |
 | `HARNESS_CLAUDE_BIN` | `~/.local/bin/claude` | Native CLI (see gotcha below) |
 | `HARNESS_DIRECTOR_PLAN` | — | The role-lock plan (`/director-skills` creates one) |
-| `HARNESS_PLAN_ROOTS` | `plans` | Where plans live, when not `plans/` |
+| `HARNESS_PLAN_ROOTS` | — | Comma list of plan trees; empty means auto-discovery |
 | `HARNESS_NO_KICKOFF` | — | Boot silently (cheap for testing) |
-| `ELEVENLABS_API_KEY` | — | Voice. Needs the **Text to Speech** permission |
+| `ELEVENLABS_API_KEY` | — | Voice, both directions. Needs the **Text to Speech** permission |
 | `HARNESS_VOICE_ID` | — | The machine's default voice; personas override |
 | `HARNESS_TTS_MODEL` | `eleven_flash_v2_5` | ⚠ Flash predates v3 audio tags — tags stripped |
-| `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud |
+| `HARNESS_SPEECH_LEVEL` | `brief` | How much is read aloud (`full`, `brief`, `headings`, `headlines`, `off`) |
 | `HARNESS_TTS_USD_PER_1K_CREDITS` | `0.22` | Your plan's credit price, for the estimate |
-| `HARNESS_VOICE_SETTLE_MS` | `2500` | How long words must stop changing before a spoken turn sends |
-| `HARNESS_VOICE_EFFORT` | `low` | Effort while the mic is open (`off` disables the duck) |
-| `HARNESS_SPEECH_BIASING` | `off` | Bias the recogniser toward this project's nouns |
+| `HARNESS_EAR` | `scribe` | `browser` opts out of Scribe; keyless harnesses fall back anyway |
+| `HARNESS_EAR_VAD_SECS` | Scribe's own | How much silence ends a spoken utterance |
+| `HARNESS_STT_USD_PER_HOUR` | `0.39` | Your plan's listening rate, for the meter |
 | `HARNESS_KEYTERMS` | — | Nouns no file mentions. ⚠ Accumulates across layers |
-| `HARNESS_KEYTERM_BOOST` | `2` | How hard to push, 0–10 |
-| `HARNESS_TEST_CMD` | detected | Test command override |
-| `HARNESS_BUILD_CMD` | detected | Build command override. ⚠ Must terminate — not a dev server |
+| `HARNESS_VOICE_EFFORT` | `low` | Effort while the mic is open (`off` disables the duck) |
+| `HARNESS_VOICE_SETTLE_MS` | `2500` | *Browser ear only* — quiet time before a spoken turn sends |
+| `HARNESS_SPEECH_BIASING` | `off` | *Browser ear only* — Scribe always biases toward project nouns |
+| `HARNESS_KEYTERM_BOOST` | `2` | *Browser ear only* — how hard to push, 0–10 |
+| `HARNESS_CREDITS_MONTHLY` | — | Arm the usage-credit countdown with your monthly budget |
+| `HARNESS_CREDITS_RESET_DAY` | `1` | Day of month the billing cycle turns over |
+| `HARNESS_TEST_CMD` | detected | Test command override — ⚠ the gear panel wins over it |
+| `HARNESS_BUILD_CMD` | detected | Build command override, same gear caveat. ⚠ Must terminate — not a dev server |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
+
+Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
+`src/config.ts`, which is the authority on all of these.
 
 ## What's here
 
@@ -364,18 +386,25 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turns; model/effort/permission/persona switches |
 | `askgate.ts` | `canUseTool` — questions pend, everything else becomes an approve/deny card |
-| `tools.ts` | In-process MCP: `say`, `show`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
+| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
-| `speakOut.ts` / `spoken.ts` / `audioTags.ts` | The speech plane: what is said, held, streamed, billed |
-| `ui/listen.js` / `ui/speaker.js` / `ui/wire.js` | The ear, the mouth, and the wire panel — native ES modules, each tested from node with a stubbed browser object |
+| `mouth/mouth.ts` / `speakOut.ts` / `spoken.ts` / `audioTags.ts` | Speech out: a liftable core (held lines, TTS, the bill) and its harness adapter; what is said and excerpted |
+| `ear/` / `earHost.ts` | Speech in: the liftable Scribe engine and the harness's one-ear host |
+| `voiceRoom.ts` | Several harnesses, one machine: the talking stick, the mute, the volume |
+| `ui/capture.js` / `ui/remoteEar.js` / `ui/pcm.js` | The page half of the ear — mic capture, PCM, the Listener-shaped remote |
+| `ui/listen.js` / `ui/speaker.js` / `ui/wire.js` | The fallback (browser) ear, the mouth, and the wire panel — native ES modules, each tested from node with a stubbed browser object |
 | `workIndex.ts` / `workItems.ts` / `plansReader.ts` | The work contract and its built-in reader |
 | `planName.ts` | ⚠ The one plan-file writer — `name:` on rename, nothing else |
-| `pins.ts` / `repoWeb.ts` / `handoff.ts` | Shelf, GitHub links resolved at click, terminal handoff |
+| `pins.ts` / `handoff.ts` | Shelf, and terminal handoff |
 | `personal.ts` / `greeting.ts` | Memory of the person; the boot line and the onboarding offer |
-| `testRunner.ts` | Detect, settle, run, parse failures |
+| `testRunner.ts` / `buildRunner.ts` / `runCommand.ts` | The two lights: detect, settle, run, parse failures; the build fired from the strip |
+| `settings.ts` | The gear's store — the one config layer the page writes, and it wins |
+| `creditMeter.ts` | The usage-credit countdown, armed only past the plan windows |
+| `workbench.ts` | The pinned bench URL — what we're working on, bold at centre top |
 | `directorRole.ts` / `directorName.ts` | Shadow vs director; what to call the director |
-| `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` | Transport, replay, events, queues |
+| `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` / `origin.ts` | Transport, replay, events, queues, and the Origin check on API writes |
+| `wireTap.ts` | The compact record of every SDK message the wire panel pulls |
 | `keyterms.ts` / `links.ts` / `markdown.ts` / `activity.ts` | Vocabulary, file links as offsets, span overlays, activity lines |
 | `showImage.ts` | Proving an image path before `/api/image` serves it or `show` renders it |
 

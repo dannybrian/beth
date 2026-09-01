@@ -29,12 +29,21 @@ Inventory the repo and decide which of three states it is in. Report the state
 and the evidence BEFORE proposing changes.
 
 ```bash
+ls -d .claude 2>/dev/null                   # the harness THROWS without this dir — step 3 creates it
 ls .claude/DIRECTOR.md 2>/dev/null          # the person
 ls plans/ 2>/dev/null | head                # the work, default root
 ls .claude/skills/plans 2>/dev/null         # the machinery
-# plans-shaped files outside the default root:
-find . -path ./node_modules -prune -o -name '20*-*.md' -print 2>/dev/null | grep -v '^./plans' | head
+# plans-shaped files outside the default root — prune what the harness's reader prunes
+# (plansReader SKIP_DIRS; `templates` especially, or this diagnostic reports files the
+# harness will never read no matter where it is pointed):
+find . \( -name node_modules -o -name .git -o -name dist -o -name build -o -name tmp \
+  -o -name logs -o -name releases -o -name old -o -name .next -o -name Library \
+  -o -name templates \) -prune -o -name '20*-*.md' -print 2>/dev/null | grep -v '^./plans' | head
 ```
+
+If `.claude/` itself is absent, say so first: the harness refuses to boot against a repo
+with no `.claude/` directory at all, so nothing else on this list can even be observed
+from the harness side until step 3 below creates it.
 
 **State 1 — greenfield.** Nothing plans-shaped anywhere → run every section
 below in order.
@@ -87,10 +96,13 @@ afterward — there is no sync, by design.
    mkdir -p .claude/skills
    cp -R "$SKILL_DIR/templates/skills/plans" .claude/skills/plans
    ```
-   - ⚠️ The CLI finds the repo root by walking up to a `CLAUDE.md`. A repo
-     without one needs at least a stub before `/plans` works.
+   - ⚠️ The CLI finds the repo root by walking up to a directory holding BOTH a
+     `CLAUDE.md` and `.git`. A repo without a `CLAUDE.md` needs at least a stub
+     before `/plans` works; a checkout that is not itself the git root falls
+     back to resolving relative to the script's own location.
    - If plans live outside `plans/`, edit `PLAN_TREES` in
-     `.claude/skills/plans/index.mjs` — one visible line.
+     `.claude/skills/plans/index.mjs` — one visible line; the first tree is
+     where `TEMPLATE.md` and the generated index live.
    - Verify on the spot: `node --test '.claude/skills/plans/**/*.test.mjs'`
      (the suite is location-aware and must pass from the repo), then
      `node .claude/skills/plans/index.mjs` for the empty board.
@@ -153,5 +165,19 @@ The point of the exercise is that the harness's panel lights up:
 2. Restart the harness (`beth`) in the repo. The greeting should name the
    director; the panel should show the plan; the role-lock plan should NOT
    appear on the board.
-3. If anything is missing, that is a diagnosis bug in this skill — report it
+   ⚠ A persona selected in this repo WINS over the interviewed name — the
+   greeting naming someone else is the persona working, not the DIRECTOR.md
+   write failing. Check `~/.director-harness/<repo-slug>/persona.json` before
+   diagnosing.
+3. Voice is machine config, not repo config: `ELEVENLABS_API_KEY` belongs in
+   `~/.director-harness/.env` (one account per Mac — same file as
+   `HARNESS_CREDITS_MONTHLY`). A missing key degrades SILENTLY to text-only,
+   so on a fresh machine say where the key goes rather than letting the quiet
+   read as a bug.
+4. The test and build lights configure themselves from what the repo declares
+   — nothing for this skill to write. ⚠ If a command misbehaves, know that the
+   harness's GEAR panel stores per-repo overrides in the state dir that win
+   over `HARNESS_TEST_CMD`/`HARNESS_BUILD_CMD` in any `.env`; the panel says
+   which layer is in force. Don't debug an env line the gear is overriding.
+5. If anything is missing, that is a diagnosis bug in this skill — report it
    in the harness repo rather than hand-patching silently.

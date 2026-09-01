@@ -10,9 +10,12 @@
 // where the upshot lives in anything she writes ("so the two boxes are stale",
 // "shipped as 407e186f"), a one-line progress note is its own last paragraph, and
 // there is no summarising step to get wrong or to pay for.
-export type SpeechLevel = 'full' | 'brief' | 'headlines' | 'off';
+export type SpeechLevel = 'full' | 'brief' | 'headings' | 'headlines' | 'off';
 
-export const SPEECH_LEVELS: SpeechLevel[] = ['full', 'brief', 'headlines', 'off'];
+// Loudest to quietest, which is the order the dropdown draws them in. `headings`
+// sits where it does because it is a SHAPE rather than a volume: it can be more
+// lines than `headlines` on a structured reply and none at all on a chatty one.
+export const SPEECH_LEVELS: SpeechLevel[] = ['full', 'brief', 'headings', 'headlines', 'off'];
 
 /**
  * The dial, as everything that can turn it sees it — the strip through
@@ -45,6 +48,38 @@ const HEADLINE_KINDS = new Set(['finding', 'event']);
  * are") and against anything that has become an explanation.
  */
 const SHORT_ENOUGH = 240;
+
+/** `# Heading`, at any depth. Bold-only lines are NOT headings — she bolds mid-sentence. */
+const HEADING = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/;
+
+/**
+ * The headings in a reply, in order — the SHAPE of what she just did.
+ *
+ * A different question from every other level, which all ask "how much prose".
+ * This one asks "what were the parts", so a long structured reply reads as four
+ * short phrases and an unstructured one reads as nothing at all. That silence is
+ * the feature: prose with no headings had no skeleton worth hearing.
+ *
+ * ⚠️ Fences are skipped. Plans and diffs are full of `# comment` lines, and a
+ * shell comment read aloud as a section title is worse than saying nothing.
+ */
+export function headingsOf(text: string): string[] {
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const line of String(text).split('\n')) {
+    const f = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const m = HEADING.exec(line);
+    // Markers come off for speech: "##" is not a word.
+    if (m) out.push(m[2].replace(/[*_`]/g, '').trim());
+  }
+  return out.filter(Boolean);
+}
 
 /** Blocks separated by a blank line, empties dropped. */
 const paragraphs = (text: string): string[] =>
@@ -92,7 +127,17 @@ export function spokenFor(m: { type: 'assistant' | 'say'; kind?: string; text: s
   if (level === 'full') return text;
 
   if (m.type === 'say') {
-    return level === 'headlines' && !HEADLINE_KINDS.has(m.kind ?? '') ? '' : text;
+    // At both quiet levels a `say` survives only if it is an ANNOUNCEMENT.
+    // `headings` keeps them for the same reason it keeps headings: a finding is
+    // a beat in the progress model, and status narration is not.
+    const quiet = level === 'headlines' || level === 'headings';
+    return quiet && !HEADLINE_KINDS.has(m.kind ?? '') ? '' : text;
+  }
+
+  if (level === 'headings') {
+    // Joined into one line so the mouth speaks them as a sentence rather than
+    // holding the stick across four separate lines with gaps between them.
+    return headingsOf(text).join('. ');
   }
 
   if (level === 'headlines') {
@@ -100,4 +145,24 @@ export function spokenFor(m: { type: 'assistant' | 'say'; kind?: string; text: s
     return paragraphs(text).length === 1 && text.length <= SHORT_ENOUGH ? text : '';
   }
   return lastParagraph(text);
+}
+
+/**
+ * A decision landing in the queue, as one spoken line.
+ *
+ * This is the gap that made `headlines` feel arbitrary: a queued decision never
+ * reached the speech path at ALL — `speakOut` only ever subscribed to `assistant`
+ * and `say` — so the one thing genuinely waiting on Danny was the one thing never
+ * said out loud. It speaks at every level except `off`, because it is a summons
+ * rather than narration, and a summons you have to go and look for is a queue you
+ * learn to ignore.
+ */
+export function spokenForDecision(d: { title: string; urgency?: string }, level: SpeechLevel): string {
+  if (level === 'off') return '';
+  const title = (d.title ?? '').trim();
+  if (!title) return '';
+  // "blocking-later" is the one urgency worth pronouncing: the other two are
+  // exactly what a queue already means.
+  const lead = d.urgency === 'blocking-later' ? 'A decision that blocks later' : 'A decision for you';
+  return `${lead}: ${title.replace(/\s+/g, ' ')}`;
 }

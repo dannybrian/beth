@@ -246,7 +246,11 @@ export class SessionManager {
 
   /** File references in text she has written, for the page to make clickable. */
   private links(text: string) {
-    return detectLinks(text, { repo: this.cfg.repo, lookup: (p) => this.work.byPath(p) });
+    return detectLinks(text, {
+      repo: this.cfg.repo,
+      lookup: (p) => this.work.byPath(p),
+      lookupNumber: (n) => this.work.byNumber(n),
+    });
   }
 
   publishPending = () => {

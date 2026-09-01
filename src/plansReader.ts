@@ -38,8 +38,9 @@ const KNOWN_STATUS: WorkStatus[] = [
 // TEMPLATE as an active plan on the board.
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'tmp', 'logs', 'releases', 'old', '.next', 'Library', 'templates']);
 
-/** Files inside a plans directory that are not plans. */
-const NOT_A_PLAN = /^(INDEX|README|CONTINUE|EVENTS|ONBOARDING|TEMPLATE)\.md$/i;
+/** Files inside a plans directory that are not plans. Exported so the greeting's
+ * "files you cannot read" count excludes exactly what this reader excludes. */
+export const NOT_A_PLAN = /^(INDEX|README|CONTINUE|EVENTS|ONBOARDING|TEMPLATE)\.md$/i;
 
 /**
  * THE HARNESS IS A READER, NOT AN AUTHORITY.
@@ -167,6 +168,18 @@ const str = (v: string | string[] | undefined): string | undefined =>
  * H1 in the body. Falling back to the filename keeps a malformed plan visible
  * rather than silently absent from the panel.
  */
+/**
+ * The series number in a plan's filename, or undefined.
+ *
+ * Leading zeros are dropped so "plan 7" finds `...-07-...`. Only a run of digits
+ * DIRECTLY after the date counts: tulito writes `2026-07-31-tool-18-...`, where
+ * the 18 belongs to the slug and means something else entirely.
+ */
+export function seriesNumber(relPath: string): number | undefined {
+  const m = /^\d{4}-\d{2}-\d{2}-(\d+)-/.exec(relPath.split('/').pop() ?? '');
+  return m ? parseInt(m[1], 10) : undefined;
+}
+
 export function extractTitle(lines: string[], from: number, relPath: string): string {
   for (let i = from; i < Math.min(lines.length, from + 40); i++) {
     const m = /^#\s+(.+?)\s*$/.exec(lines[i]);
@@ -312,6 +325,10 @@ export function createPlansReader(opts: PlansReaderOptions) {
             // name (see spokenName.ts). Absent on every plan today, which is
             // exactly why derivation has to be good on its own.
             name: str(fm.name),
+            // `YYYY-MM-DD-NN-slug.md`, minted by `/plans new --series`. Parsed
+            // here because it is THIS reader's convention, not the harness's —
+            // a project keeping work in Linear has no such thing.
+            number: seriesNumber(rel),
             status: inferStatus(fm, rel),
             priority: str(fm.priority),
             started: str(fm.started),

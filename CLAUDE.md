@@ -98,7 +98,17 @@ and `listen`, which drives a STUBBED `SpeechRecognition` so the seams Chrome cre
 tested at all; `speaker` (the playback queue against a stubbed `<audio>` — a wedged queue
 looks like her going quiet, a deliberate stop reported as an error looks like a bug) and
 `wire` (the panel's anatomy/token math, which renders plausibly WRONG rather than failing)
-follow the same pattern. Browser code is testable when the hard part is bookkeeping rather
+follow the same pattern — as does `title` (the tab badge: a summons that never appears
+leaves a session stopped at a card looking like a hang, and one that sticks after the
+answer teaches the eye to stop reading the tab. ⚠ Liveness is a FLAG, never
+`askCards.size` — answered asks STAY in that map, because the dedup on render is what
+stops a replay rebuilding a settled card), and `paste` (handing her a failure or a log
+verbatim — a fence its own contents can break spills the log into prose, where a line of
+build output reads as something Danny asked for; the inline-code case is the same bug one
+level up and was found by RUNNING it, not reading it, when a `-e` command quoting a symbol
+ended its own span), and `md` (the plan reader's parse — a mis-parse renders
+confident, well-formed and WRONG: a checklist that loses its boxes, a table read as
+prose, a fenced block whose contents escape into headings. Nothing throws). Browser code is testable when the hard part is bookkeeping rather
 than the browser.
 
 The rest earn their tests by being places a mistake is INVISIBLE: `toolInput` (a malformed
@@ -107,8 +117,7 @@ through the real reader, and that nothing else in the file moves), `pins` (that 
 plan survives a restart and still shows when it is not in flight), `state` (a worker
 leaving the roster when nothing will ever report it), `keyterms`, `greeting`, and
 `stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
-`sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `repoWeb`
-(the scp-style remote `new URL()` parses confidently wrong), `showImage` (the
+`sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `showImage` (the
 /api/image allowlist — a wrong refusal is a broken figure, a wrong acceptance is a
 query string reading files off the machine), `workbench` (the bench-url vetting —
 the page hands it straight to an `<a href>` in every open tab, so a `javascript:`
@@ -278,17 +287,111 @@ These cost hours. Don't rediscover them.
   box holds, spoken or typed. ⚠ And `clearInterim()` returns early while holding: it is
   called when a turn is published, that is broadcast to every tab, and a draft is not a
   preview — the other tab sending something must not reach across and delete it.
-- **A link to GitHub is resolved at the CLICK, not served with the page.** The row's ↗
-  points at `/api/github?path=…`, which 302s (`src/repoWeb.ts`). Two reasons, and the
-  first is the one that bites: Danny switches branches mid-session, so a URL built when
-  the page loaded would quietly point at wherever he was standing that morning — the ref
-  is the current branch, or the SHA on a detached HEAD. The second is that the tab opens
-  on the gesture with no await in front of it, so nothing blocks it as a popup. ⚠ The
-  endpoint takes a path from a query string: only paths the INDEX knows are answered,
-  because loopback is not a reason to let a URL name any file on the machine. github.com
-  only — the remote gives us the host but not that host's URL SHAPE (GitLab wants
-  `/-/blob/`), and a button that opens a plausible 404 is worse than no button, so
-  anything else draws nothing at all.
+- **A queued decision is a SUMMONS, and it used to be the only thing on the bus
+  that was never spoken.** `speakOut` subscribed to `assistant` and `say` only, so
+  the one thing genuinely waiting on Danny was the one thing never said out loud —
+  which is what made `headlines` feel arbitrary from use. It now speaks at every
+  level except `off`. ⚠ `pending` carries the WHOLE list and fires for unrelated
+  reasons (a worker started, a worker finished), so the trigger is an id not seen
+  before, not the message. ⚠ The seen-set is SEEDED from the first `pending`
+  rather than started empty: the store restores decisions across a restart and
+  publishes them, and an empty set reads Danny his whole backlog aloud on every
+  boot.
+
+- **`headings` is a SHAPE, not a volume.** The fifth speech level speaks only the
+  markdown headings of what she writes (plus findings and events) — silence on
+  prose that has none, which is the feature. ⚠ Fences are skipped: plans and diffs
+  are full of `# comment` lines, and a shell comment read aloud as a section title
+  is worse than nothing.
+
+- **The end-of-turn bell is synthesised** (`ui/bell.js`) — two sine partials with
+  an exponential decay, so no asset, no fetch that can 404, no dependency. It obeys
+  the machine mute and volume because it is a noise this desk makes. ⚠ Rung on the
+  turn-end EDGE, never the idle level, which repeats. ⚠ `last` starts at
+  `-Infinity`: `currentTime` also starts at 0, so a zero there means the debounce
+  swallows the very first bell — caught by the test, and it would have looked like
+  a toggle that does nothing. ⚠ Gain is 0.28 BEFORE the machine volume: the first
+  pass used 0.09, which at a 45% volume is a peak of 0.04 and inaudible in a real
+  room. "Punctuation not content" is about the envelope, not about being too quiet
+  to notice. ⚠ The mute silences it, so the button paints `suppressed` and says
+  so — a bell switched on that never rings reads as a broken feature rather than
+  as a muted desk.
+  ⚠ **A page open since before a UI change is running the OLD `ui/*.js`.** Danny
+  had beths up for 19 hours; nothing pushes to them and nothing warns. When a UI
+  change "does not work", check the tab's age FIRST.
+
+- **Plans are READ in the harness now, and `md.js` is not `markdown.ts`.** The
+  preview modal (`/api/plan`, `ui/md.js`, `openPlanPreview` in `app.js`) renders a
+  plan body; `markdown.ts` STRIPS markers off what Beth writes so link offsets stay
+  stable and TTS does not pronounce asterisks. Opposite jobs — sharing them would
+  put a renderer in the path of the speech excerpt. ⚠ The endpoint is allowlisted
+  to real markdown inside the repo (`resolveMarkdown`); "any file under the repo"
+  would serve `.env`.
+  ⚠ READ-ONLY by construction: checkboxes are `disabled`, not merely un-wired,
+  because the harness does not write plan files.
+  ⚠ ANY markdown in the repo opens the reader, not just indexed plans
+  (`resolveMarkdown`, the same geometry fence as `resolveImage`): she links
+  ordinary docs too, and those fell through to a `vscode://` prompt — the exact
+  interruption the reader exists to remove. Index membership grants the ACTIONS;
+  being real `.md` inside the repo grants the read.
+  ⚠ Opening the reader does NOT point Beth at the plan, and since 2026-09-01 the
+  row's NAME opens it too. Reading is the common act, so it gets the biggest
+  target; pointing is the deliberate one and moved to an explicit `→`. The chip
+  is SYNCED to `/api/point`, so attaching one on a look quietly changed what
+  Danny's next turn said.
+  ⚠ `/api/plan` returns the WORK ITEM, because the page cannot look one up:
+  `byPathAll` is the in-flight slice and cited plans are mostly finished, so the
+  reader opened a parked plan with a filename for a title and no actions. Third
+  time this trap has bitten — anything keyed off `byPathAll` must assume a miss. Scope came from the corpus (40
+  unity plans: 1556 bullets, 643 headings, 502 fences, 396 checkboxes, 354 table
+  rows, 310 quotes), and the parse is pure so it is tested in node. ⚠ Two bugs
+  here were only visible ON SCREEN: an unstyled sheet is TRANSPARENT (`.sheet`'s
+  background lives under `#pending-overlay .sheet`), and a wrapped bullet broke
+  out of its list into an unindented paragraph — all the text present, so both
+  read as formatting quirks rather than faults.
+
+- **Agents talk in plan NUMBERS, and nothing mapped them back.** `/plans new
+  --series` mints `YYYY-MM-DD-NN-slug.md`, so workers and Beth say "recorded that
+  in plan 174" while the panel shows titles — 286 of beadgame's 623 plans carry a
+  number, and connecting the two was manual. `links.ts` now resolves a cited
+  number to a link (`plansReader.seriesNumber` parses it, `workIndex.byNumber`
+  looks it up), and clicking one REVEALS the row: `revealPlan` in `ui/app.js`.
+  ⚠ The number is NOT an identity — the counter is per scope directory, so
+  beadgame has two plan 22s and 64 more collisions, all in the low long-shipped
+  range while every number agents actually cite is unique. `byNumber` returns
+  nothing when ambiguous, because a confidently wrong link looks resolved and so
+  nobody checks it. ⚠ A BARE number is never linked ("timeout 180", "79175 tok");
+  the word `plan` or a `#` is required. ⚠ `revealPlan` is async because the
+  default panel holds only in-flight plans and the cited ones are usually
+  finished — it widens scope, re-fetches, opens the status group and every
+  umbrella above the row, then scrolls the PANEL by assignment. Not
+  `scrollIntoView` (it drags the transcript the reference was read in), and not
+  `behavior:'smooth'` (measured: silently does nothing in a hidden pane).
+
+- **The numbers hang from the STRIP** (2026-09-01). `.stats` moved from
+  `bottom: 78px` to `top: 44px`: the controls that open it are the top-right
+  meters, and reaching to the bottom-right for what a top-right control opens was
+  the wrong way round. Both gauges survive and both open the same panel — the
+  composer gauge is where the eye already is mid-conversation, the strip's is
+  where the other meters are. ⚠ The strip's third bar is CONTEXT, and it is the
+  one that is never absent: the plan windows hide entirely on an API-key/Bedrock/
+  Vertex session (an unfillable gauge is worse than none), so `#usage-meters` now
+  stays visible on the ctx bar alone. ⚠ `paintMeter` calls `renderUsageMeters`;
+  `renderUsageMeters` must not call back, and `loadPlanUsage` still calls it
+  directly — dropping that call silently freezes the windows at their first
+  paint.
+
+- **The GitHub link is GONE** (2026-09-01), and with it `/api/github`,
+  `src/repoWeb.ts`, `hasWeb`/`blobUrl`, and the `repoOnWeb` flag on `hello`. The
+  in-harness reader replaced the reason to leave the page, so the button had
+  nothing left to do; deleting the whole path beat leaving a dead endpoint behind
+  it. ⚠ Its LESSON outlives it and now lives on `/api/image` and `/api/plan`: an
+  endpoint that builds a response from a query parameter answers only what it can
+  PROVE, because the loopback bind is not a reason to let a URL name any file on
+  the machine. If a web link ever comes back, re-read this entry in git history —
+  the ref must be resolved at the CLICK (Danny switches branches mid-session) and
+  the host's URL SHAPE cannot be assumed from the remote.
+
 - **Becoming someone else is a NEW SESSION, and that is structural.** Model, permission
   mode and effort all have setters on a running query; the system prompt does not — it is
   fixed when `query()` is constructed, and `reinitialize()` is for transport gaps, not for
@@ -423,7 +526,11 @@ the conversation that produced it. Where things stand:
   keyterms, and keyterms are the whole ballgame).
 - **`status-surface.md`** — DONE. The dot tracks anything running, the spinner tracks the
   prediction, the numbers live behind the context meter (with the SDK plan windows, read
-  defensively), and the test monitor has the top right. Read it for the parser lessons,
+  defensively), and the test monitor SHARES the top right — since 2026-08-31 with the
+  build light, the gear, and the two usage meters that came back to the strip (5h at
+  100% is when credits start draining, the one number worth no click). The doc carries
+  dated corrections for that reversal and for the gear layer winning over
+  `HARNESS_TEST_CMD`. Read it for the parser lessons,
   which are recorded there rather than here because they are about `testRunner.ts`.
   The same panel now carries the SPEECH bill — and note what that is not: the deleted
   cost meter metered a Speech Engine CONNECTION, which is why it went with the dial-in
@@ -448,8 +555,10 @@ the conversation that produced it. Where things stand:
   ask about something she ACTUALLY RECORDED, at most once a day, only at a moment already
   hers. Most days are silence and that is correct.
 - **`plans-panel.md`** — largely BUILT: the panel, deixis (pointing), links and handoff
-  all ship, plus a PINNED shelf and rename (2026-08-02). Read it for why a reference is a
-  pair rather than a string. The shelf is Danny's ordering laid over the index's: pinned
+  all ship, plus a PINNED shelf, rename, and UMBRELLA hierarchy (`parent`/`isUmbrella`
+  off the first `depends_on` entry, folding in the panel) — so do not re-plan any of
+  those off the doc's "still open" list, which now carries dated corrections. Read it
+  for why a reference is a pair rather than a string. The shelf is Danny's ordering laid over the index's: pinned
   rows still appear in their status group, because a plan that vanished from `active`
   because it was pinned would make the board lie about what is active.
 

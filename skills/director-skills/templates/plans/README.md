@@ -17,9 +17,10 @@ tooling knows about:
 - `plans/future/` — deferred ideas (the parking lot). Files there without
   explicit frontmatter surface as `parked` automatically.
 - Subdirectories are fine (`plans/backend/`, `plans/ui/`) — the index walks the
-  whole tree. If plans must live somewhere else entirely, add the tree to
-  `PLAN_TREES` in `.claude/skills/plans/index.mjs` and point the harness at it
-  with `HARNESS_PLAN_ROOTS`.
+  whole tree. If plans must live somewhere else entirely, edit `PLAN_TREES` in
+  `.claude/skills/plans/index.mjs` (the FIRST tree is where `TEMPLATE.md` and
+  the generated `INDEX.*` live) and point the harness at it with
+  `HARNESS_PLAN_ROOTS`.
 
 ## Naming
 
@@ -32,13 +33,14 @@ Every plan carries YAML frontmatter:
 
 ```yaml
 ---
-status: planning            # idea | planning | active | blocked | shipped | parked
+status: planning            # see the closed set below — eight of them
 name: null                  # optional spoken name — what the director calls it aloud
 owner: null                 # session id, "human", or null when unclaimed
 branch: main
 started: null               # YYYY-MM-DD when status first → active
 last_touched: 2026-08-06    # auto-updated by /plans tick
 priority: P2                # P0 | P1 | P2 | null
+worktree: null              # worktree path when the work happens off-branch
 tags: []
 depends_on: []              # plan filenames; FIRST entry = parent when it names an umbrella
 commits: []                 # short shas — derived by /plans, never hand-edited
@@ -46,6 +48,9 @@ commits_exclude: []         # shas whose trailer is wrong
 commits_include: []         # shas that belong here but carry no trailer
 ---
 ```
+
+(`TEMPLATE.md` scaffolds only the hand-edited keys — `name:` is optional and the
+`commits*` keys are derived, so they appear when something first sets them.)
 
 ### Status vocabulary (closed set)
 

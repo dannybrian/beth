@@ -17,7 +17,7 @@ import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
 import type { VoiceRoom } from './voiceRoom.ts';
 import { Mouth } from './mouth/mouth.ts';
-import { spokenFor, type SpeechLevel } from './spoken.ts';
+import { spokenFor, spokenForDecision, type SpeechLevel } from './spoken.ts';
 
 export type { HeldLine } from './mouth/mouth.ts';
 
@@ -115,6 +115,11 @@ export class SpeakOut {
         }
         return;
       }
+      // A decision ARRIVING is a summons, and it used to be the only thing on
+      // this bus that was never spoken. `pending` carries the whole list and
+      // fires for unrelated reasons (a worker started, a worker finished), so
+      // what counts is an id we have not seen — not the message.
+      if (m.type === 'pending') return void this.announceDecisions(m.decisions);
       if (m.type !== 'assistant' && m.type !== 'say') return;
       // The universal mute gates HERE, before the line is even held: never
       // announced, never fetched, never billed — consistent with counting the
@@ -127,6 +132,34 @@ export class SpeakOut {
         spokenFor({ type: m.type, kind: m.type === 'say' ? m.kind : undefined, text: m.voiceText ?? m.text }, this.verbosity)
       );
     });
+  }
+
+  /**
+   * Decision ids already announced.
+   *
+   * ⚠️ SEEDED from the first `pending` rather than started empty: the store
+   * restores decisions across a restart and publishes them, so an empty set
+   * would read Danny his whole backlog aloud every time the harness came up —
+   * which is exactly the noise that teaches you to mute it.
+   */
+  private seenDecisions: Set<string> | null = null;
+
+  private announceDecisions(decisions: Array<{ id: string; title: string; urgency?: string }>) {
+    if (this.seenDecisions === null) {
+      this.seenDecisions = new Set(decisions.map((d) => d.id));
+      return;
+    }
+    if (this.room?.muted()) {
+      // Still mark them seen: unmuting replays nothing here either, same as the
+      // line filter above — news that has passed.
+      for (const d of decisions) this.seenDecisions.add(d.id);
+      return;
+    }
+    for (const d of decisions) {
+      if (this.seenDecisions.has(d.id)) continue;
+      this.seenDecisions.add(d.id);
+      this.mouth.speak(spokenForDecision(d, this.verbosity));
+    }
   }
 
   /** The server's live answer to "is any page connected". */

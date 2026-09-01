@@ -94,3 +94,67 @@ test('a URL is not shredded into file links', () => {
   assert.deepEqual(detectLinks('see https://example.com/README.md for context', deps(repo)), []);
   fs.rmSync(repo, { recursive: true, force: true });
 });
+
+// --- plans cited by number ---------------------------------------------------
+//
+// The reference agents actually use, and the one Danny could not follow: the
+// worker says "Implement plan 176 headless stretch" and the panel says titles.
+
+const numbered = new Map<number, { path: string; spoken: string }>([
+  [174, { path: 'game/plans/unity/2026-07-30-174-menu-fluidity.md', spoken: 'menu fluidity' }],
+  [176, { path: 'game/plans/unity/2026-08-06-176-book-in-world.md', spoken: 'book in world' }],
+]);
+const numDeps = (repo: string) => ({
+  repo,
+  lookup: (p: string) => plans.get(p),
+  // 22 is the ambiguous case: unity and backend both have one.
+  lookupNumber: (n: number) => (n === 22 ? undefined : numbered.get(n)),
+});
+
+test('a cited plan number becomes a link over the whole phrase', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'links-'));
+  const text = "I've recorded the approval in plan 174.";
+  const [l] = detectLinks(text, numDeps(repo));
+  assert.equal(text.slice(l.start, l.end), 'plan 174');
+  assert.equal(l.path, 'game/plans/unity/2026-07-30-174-menu-fluidity.md');
+  assert.equal(l.kind, 'plan');
+  assert.equal(l.spoken, 'menu fluidity');
+});
+
+test('the forms she actually writes', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'links-'));
+  const forms = ['plan 174', 'Plan #174', 'plans 174', '#174'];
+  for (const f of forms) {
+    const got = detectLinks(`see ${f} for that`, numDeps(repo));
+    assert.equal(got.length, 1, `${f} should link`);
+    assert.equal(got[0].path, 'game/plans/unity/2026-07-30-174-menu-fluidity.md');
+  }
+});
+
+test('an AMBIGUOUS number draws nothing at all', () => {
+  // beadgame has two plan 22s. A confidently wrong link is worse than none:
+  // it looks resolved, so nobody checks it.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'links-'));
+  assert.deepEqual(detectLinks('that was plan 22, I think', numDeps(repo)), []);
+});
+
+test('a bare number is never a link', () => {
+  // All three are real lines from beadgame's own event log.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'links-'));
+  for (const t of ['timeout 174 pnpm audit', 'finished in 176 tok', 'exit 174']) {
+    assert.deepEqual(detectLinks(t, numDeps(repo)), [], t);
+  }
+});
+
+test('numbers and paths coexist, in reading order', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'links-'));
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'src/config.ts'), '');
+  const text = 'plan 176 touches src/config.ts and supersedes plan 174';
+  const got = detectLinks(text, numDeps(repo));
+  assert.deepEqual(
+    got.map((l) => text.slice(l.start, l.end)),
+    ['plan 176', 'src/config.ts', 'plan 174'],
+    'offsets must be ascending or the page splices scrambled'
+  );
+});

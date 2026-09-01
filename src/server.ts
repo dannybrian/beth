@@ -31,8 +31,7 @@ import { setPlanName } from './planName.ts';
 import { originAllowed } from './origin.ts';
 import { EarHost } from './earHost.ts';
 import { ScribeEngine } from './ear/scribeEngine.ts';
-import { blobUrl, hasWeb } from './repoWeb.ts';
-import { resolveImage } from './showImage.ts';
+import { resolveImage, resolveMarkdown } from './showImage.ts';
 import { listPersonas } from './personas.ts';
 import type { VoiceRoom } from './voiceRoom.ts';
 import type { CreditMeter } from './creditMeter.ts';
@@ -80,12 +79,6 @@ export function createServer(deps: {
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
 
-  /**
-   * Whether this repo is on github.com at all — read ONCE. A remote does not
-   * change under a running harness, and the page only needs to know whether to
-   * draw the button; where it points is resolved per click. See repoWeb.ts.
-   */
-  const repoOnWeb = hasWeb(cfg.repo);
 
   /**
    * What to bias the recogniser toward, for THIS page.
@@ -192,7 +185,6 @@ export function createServer(deps: {
         effort: session.chosenEffort() ?? '',
         // Draw the "open on GitHub" button, or do not. False is the ordinary
         // case for a repo with no remote, not an error.
-        repoOnWeb,
         // Read per connection, not at boot: he adds a persona by dropping a file
         // in a directory, and a list fixed at startup would not have it until the
         // harness was restarted — which is the opposite of how that should feel.
@@ -398,7 +390,7 @@ export function createServer(deps: {
           case '/api/reread': {
             // A paragraph Danny clicked to hear (again). Two deliberate
             // properties: only text the TRANSCRIPT carries is spoken — same
-            // principle as /api/github, where loopback is not a reason to let a
+            // principle as /api/image, where loopback is not a reason to let a
             // request name anything it likes — and it speaks at every level
             // including `off`, because a click is an explicit request, not
             // ambience (speak() has no level gate, which is exactly right
@@ -686,7 +678,8 @@ export function createServer(deps: {
         return json(200, session.wire.read(since));
       }
       if (url.pathname === '/api/image') {
-        // Bytes for a shown image. Same discipline as /api/github: a response
+        // Bytes for a shown image. The discipline every query-parameter
+        // endpoint here keeps: a response
         // built from a query parameter answers only what it can PROVE — here, a
         // real image file inside the repo (showImage.ts). The CSP header is for
         // the SVG case: inside an <img> its scripts never run, but this URL can
@@ -707,22 +700,39 @@ export function createServer(deps: {
         req.on('close', () => file.destroy());
         return void file.pipe(res);
       }
-      if (url.pathname === '/api/github') {
-        // A REDIRECT rather than a URL served with the page: the ref is read at
-        // the moment of the click, and Danny switches branches mid-session — a
-        // link baked into a page opened this morning would point at wherever he
-        // was standing then. It also keeps the click a plain user gesture, so
-        // the new tab opens before any await and nothing blocks it as a popup.
+      if (url.pathname === '/api/plan') {
+        // The markdown BEHIND a plan, for the in-harness preview.
         //
-        // ⚠️ Only paths the INDEX knows. This is a redirect built from a query
-        // parameter, and the loopback bind is not a reason to let one name any
-        // file on the machine — the index is the allowlist.
+        // ⚠️ Allowlisted like /api/image, and for the same reason: this reads a
+        // file off the machine and names it in a query parameter. The INDEX is the
+        // allowlist — not "is it under the repo", which would happily serve
+        // .env or .git/config. Read-only by construction; the preview never PUTs.
         const rel = url.searchParams.get('path') ?? '';
-        if (!work.byPath(rel)) return json(404, { error: 'not a known work item' });
-        const target = blobUrl(cfg.repo, rel);
-        if (!target) return json(404, { error: 'no github remote' });
-        res.writeHead(302, { location: target }).end();
-        return;
+        const item = work.byPath(rel);
+        // Index membership grants the ACTIONS; being real markdown inside the
+        // repo is what grants the read. She links ordinary docs too, and those
+        // used to fall through to a vscode:// prompt — the exact thing this
+        // reader exists to replace.
+        const md = resolveMarkdown(cfg.repo, rel);
+        if (!md.ok) return json(404, { error: md.reason });
+        try {
+          const text = fs.readFileSync(md.abs, 'utf8');
+          // Big enough for any plan, bounded so a pathological file cannot pin
+          // the page: beadgame's largest is well under this.
+          return json(200, {
+            path: rel,
+            title: item?.title ?? rel.split('/').pop(),
+            known: Boolean(item),
+            // ⚠️ The whole item, because the page CANNOT look it up: its
+            // `byPathAll` is built from the in-flight slice, and the plans she
+            // cites are usually finished. Without this the reader opened a
+            // parked plan with a filename for a title and no actions at all.
+            item: item ?? null,
+            text: text.slice(0, 400_000),
+          });
+        } catch {
+          return json(404, { error: 'unreadable' });
+        }
       }
       if (url.pathname === '/api/state') {
         return json(200, {

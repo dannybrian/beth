@@ -105,6 +105,17 @@ export type WorkItem = {
    * has somewhere to write to.
    */
   name?: string;
+  /**
+   * The SERIES number a reader recovered, when its convention has one.
+   *
+   * `/plans` mints these per scope directory (`YYYY-MM-DD-NN-slug.md`), which is
+   * why this is emphatically NOT an identity: measured across beadgame's roots,
+   * 126 numbers resolve to one plan and 66 do not — unity and backend both count
+   * from 01, so their early plans collide. It exists because AGENTS cite it
+   * ("recorded that in plan 174") and Danny could not map it back. Anything
+   * resolving a number must refuse an ambiguous one rather than pick.
+   */
+  number?: number;
   status: WorkStatus;
   priority?: string;
   started?: string;

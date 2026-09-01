@@ -5,6 +5,10 @@ import { RemoteEar } from '/remoteEar.js';
 import { createSpeaker } from '/speaker.js';
 import { createWirePanel } from '/wire.js';
 import { addRereadButtons } from '/reread.js';
+import { tabTitle } from '/title.js';
+import { testFailureText, commandOutputText, sizeLabel } from '/paste.js';
+import { parseBlocks, renderBlocks } from '/md.js';
+import { createBell } from '/bell.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
 const el = (tag, cls, text) => {
@@ -54,8 +58,6 @@ const renderUser = (m) =>
 
 /** The bound repo's absolute path, from `hello` — needed to build editor URLs. */
 let repoPath = '';
-/** Whether this repo is on github.com at all. No remote, no button. */
-let repoOnWeb = false;
 
 function openInEditor(link) {
   // vscode://file/<abs>[:line] is a well-defined scheme and needs no local server.
@@ -65,6 +67,8 @@ function openInEditor(link) {
 
 /** A proven file link that is a picture. An image is looked at, not edited. */
 const IMAGE_LINK = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
+/** ...and one that is prose. Read in the harness rather than handed to an editor. */
+const MD_LINK = /\.(md|markdown)$/i;
 
 function linkNode(link, label) {
   // `label` is optional: inside a message body the anchor's contents are built
@@ -81,14 +85,25 @@ function linkNode(link, label) {
     };
     return a;
   }
-  a.title =
-    link.kind === 'plan'
-      ? `${link.path}\nClick to open in VSCode · ${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}click to point Beth at it`
-      : `${link.path}\nClick to open in VSCode`;
+  const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+';
+  // ⚠️ Markdown by EXTENSION, not by `kind`. A plan she cites is kind 'plan',
+  // but she links ordinary docs too and those are kind 'file' — and sending
+  // those to a `vscode://` prompt is the exact interruption the in-harness
+  // reader exists to remove. What `kind` decides is whether the reader's header
+  // carries plan actions, not whether it opens.
+  const readable = MD_LINK.test(link.path);
+  a.title = readable
+    ? `${link.path}\nClick to read it here · ${mod}click to open in VSCode`
+    : `${link.path}\nClick to open in VSCode`;
   a.onclick = (e) => {
     e.preventDefault();
-    if ((e.metaKey || e.ctrlKey) && link.kind === 'plan') {
-      attachRef({ kind: 'item', path: link.path, spoken: link.spoken ?? link.path });
+    if (readable && !(e.metaKey || e.ctrlKey)) {
+      // READ it, and ONLY read it. Pointing used to ride along here, which was
+      // wrong twice over: opening something to look at it is not the same act as
+      // telling Beth to hold it, and the chip is SYNCED — so a glance quietly
+      // changed what his next turn would say. Pointing stays a deliberate
+      // gesture: the row's name, or the ⌖ in this reader's own header.
+      openPlanPreview(link.path);
       return;
     }
     openInEditor(link);
@@ -200,6 +215,14 @@ function renderAsk(m) {
   const answers = {};
   const blocks = [];
   let remaining = m.questions.length;
+  // ⚠ Answered asks STAY in the map — the dedup above is what stops a replay
+  // rebuilding a card that was already settled — so "is anything still waiting"
+  // cannot be map size. It is this flag.
+  const entry = { card, settle: null, live: true };
+  const answered = () => {
+    entry.live = false;
+    paintTitle();
+  };
 
   for (const q of m.questions) {
     const block = el('div', 'qblock');
@@ -215,6 +238,7 @@ function renderAsk(m) {
       free.remove();
       if (--remaining === 0) {
         card.classList.add('answered');
+        answered();
         post('/api/answer', { id: m.id, answers });
       }
     };
@@ -256,10 +280,13 @@ function renderAsk(m) {
       free.remove();
     }
     card.classList.add('answered');
+    answered();
   };
 
-  askCards.set(m.id, { card, settle });
+  entry.settle = settle;
+  askCards.set(m.id, entry);
   add(card);
+  paintTitle();
   card.querySelector('input')?.focus();
 }
 
@@ -277,6 +304,7 @@ function resolveApprovalCard(id, allowed, always) {
   entry.card.classList.add('answered');
   entry.card.append(el('div', 'answer', !allowed ? '→ denied' : always ? '→ allowed, and not asking again' : '→ allowed'));
   entry.opts.remove();
+  paintTitle();
 }
 
 function renderApproval(m) {
@@ -303,6 +331,7 @@ function renderApproval(m) {
   opts.append(no);
   card.append(opts);
   add(card);
+  paintTitle();
 }
 
 /** Decisions opened for answering. Survives the re-render an answer causes. */
@@ -483,6 +512,89 @@ function openLightbox(path, caption) {
   lightboxOpen = true;
 }
 
+/**
+ * Read a plan in the harness.
+ *
+ * READ-ONLY, structurally: the body is rendered from a GET and there is no path
+ * back — the harness does not write plan files (planName.ts is the one narrow
+ * exception and it is reached from the header, not the body), so the checkboxes
+ * are disabled rather than merely un-wired. The header carries the panel row's
+ * own controls because this is where you are standing when you decide to act.
+ */
+let planOverlayOpen = false;
+
+async function openPlanPreview(path) {
+  const box = $('plan-overlay');
+  // Provisional, from whatever the panel happens to hold. ⚠ Usually NOTHING:
+  // `byPathAll` is the in-flight slice and cited plans are mostly finished, so
+  // the real title and actions come from the response below.
+  const known = byPathAll.get(path);
+  $('plan-title').textContent = known?.spoken ?? path.split('/').pop();
+  $('plan-path').textContent = path;
+  $('plan-actions').replaceChildren(...(known ? planActions(known) : []));
+  const body = $('plan-body');
+  body.replaceChildren(el('div', 'snote', 'reading…'));
+  box.hidden = false;
+  planOverlayOpen = true;
+  try {
+    const res = await fetch(`/api/plan?path=${encodeURIComponent(path)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? res.status);
+    // Still the plan he asked for? A second click while the first was in flight
+    // would otherwise paint the wrong body under the right title.
+    if (!planOverlayOpen || $('plan-path').textContent !== path) return;
+    // The server's answer wins: it can see the whole index, this page cannot.
+    // Only a real work item gets ACTIONS — they all act on one, and half would
+    // 404 on an ordinary doc — but anything markdown gets read.
+    const item = data.item ?? known;
+    if (item) {
+      $('plan-title').textContent = item.spoken ?? item.title ?? data.title;
+      $('plan-actions').replaceChildren(...planActions(item));
+    } else {
+      $('plan-title').textContent = data.title ?? path.split('/').pop();
+    }
+    body.replaceChildren(renderBlocks(parseBlocks(data.text), (href) => followPlanLink(href, path)));
+    body.scrollTop = 0;
+  } catch (e) {
+    body.replaceChildren(el('div', 'snote', `⚠ could not read ${path} — ${String(e.message ?? e)}`));
+  }
+}
+
+/**
+ * A link inside a plan. Plans reference each other constantly and usually by
+ * BARE FILENAME, so resolve against the index — a sibling first, since that is
+ * what the convention means, then any unique match by basename.
+ */
+function followPlanLink(href, from) {
+  if (/^[a-z]+:/i.test(href)) return void window.open(href, '_blank', 'noreferrer');
+  const clean = href.replace(/^\.\//, '').split('#')[0];
+  if (byPathAll.has(clean)) return void openPlanPreview(clean);
+  const sibling = `${from.split('/').slice(0, -1).join('/')}/${clean}`;
+  if (byPathAll.has(sibling)) return void openPlanPreview(sibling);
+  const base = clean.split('/').pop();
+  const hits = [...byPathAll.keys()].filter((k) => k.endsWith(`/${base}`));
+  // Same rule as a cited number: one match or nothing. Opening a plausible
+  // wrong plan is worse than saying the link went nowhere.
+  if (hits.length === 1) return void openPlanPreview(hits[0]);
+  if (hits.length) return void alert(`Ambiguous link — ${hits.length} plans match ${base}`);
+  // Not in the index, but plans link ordinary docs constantly. The endpoint
+  // proves it is real markdown inside the repo, so let it answer rather than
+  // refusing here on a guess; a miss comes back as a message in the sheet.
+  if (/\.(md|markdown)$/i.test(clean)) return void openPlanPreview(sibling);
+  alert(`Not something this harness can read:\n${href}`);
+}
+
+function closePlanPreview() {
+  $('plan-overlay').hidden = true;
+  $('plan-body').replaceChildren();
+  planOverlayOpen = false;
+}
+$('plan-close').onclick = closePlanPreview;
+$('plan-overlay').onclick = (e) => {
+  // Click OFF the sheet dismisses; inside it must not, or every link closes it.
+  if (e.target === $('plan-overlay')) closePlanPreview();
+};
+
 function closeLightbox() {
   $('lightbox').hidden = true;
   // Drop the src so a large image is not kept alive behind a hidden node.
@@ -635,9 +747,10 @@ let workItems = [];
 const refKey = (r) => `${r.path}#${r.taskIndex ?? ''}`;
 
 /**
- * Mirror the chips to the server. A SPOKEN turn never passes through this page —
- * ElevenLabs dials the harness directly — so pointing has to live server-side or
- * clicking a plan and then talking loses the reference.
+ * Mirror the chips to the server. Pointing is server-side state: every open tab
+ * shows the same chips, and the turn that spends them may be sent from a different
+ * one than the click landed in. (It predates that reason — a spoken turn used to
+ * skip the page entirely — but the shared-ground one is why it stays.)
  */
 // Seeded from the clock so a page reload always outranks the previous page's
 // updates — a plain counter restarting at 0 would be rejected as stale.
@@ -672,6 +785,32 @@ function attachRef(ref) {
   input.focus();
 }
 
+/**
+ * Drop text into the composer as if he had typed it. NOT sent — the whole point
+ * is that a log arrives with a question in front of it, and "not sending is a
+ * feature" applies hardest to the paste that costs the most.
+ *
+ * ⚠️ Speech may own the box. What lands here is his, so take it back explicitly:
+ * leave `speechOwnsInput` set and the next interim overwrites the paste, while a
+ * settle appends to a `heldBase` captured before it ever arrived. Releasing and
+ * nulling the base puts a paste on exactly the footing of something typed, which
+ * is what it is — the next utterance then appends after it.
+ */
+function pasteIntoComposer(text) {
+  releaseComposer();
+  heldBase = null;
+  const held = input.value.replace(/\s+$/, '');
+  input.value = held ? `${held}\n\n${text}\n` : `${text}\n`;
+  input.classList.remove('interim');
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  input.focus();
+  // The caret goes to the END, so the question he is about to ask lands after
+  // the log rather than inside it.
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.scrollTop = input.scrollHeight;
+}
+
 /** Task progress, or null when the plan has no checkboxes. Never "0%". */
 const taskSummary = (item) =>
   item.tasks.length ? { done: item.tasks.filter((t) => t.done).length, total: item.tasks.length } : null;
@@ -687,8 +826,94 @@ function renderTask(item, task) {
   return row;
 }
 
+/**
+ * The controls a plan carries, built once for both surfaces.
+ *
+ * Shared rather than copied because the preview modal exposes the same four, and
+ * two copies of "rename writes to the plan file" would drift — the row is where
+ * they were learned, the modal is where they are used while actually reading it.
+ */
+function planActions(item) {
+  const out = [];
+
+  // Point Beth at it. This used to be what clicking the NAME did, and it is now
+  // an explicit control instead: reading a plan is the common act and pointing
+  // at one is the deliberate act, so the big target belongs to the former. The
+  // arrow is the direction the reference travels — into the composer.
+  const chip = el('button', 'chip-it', '\u2192');
+  chip.title = `Point Beth at "${item.spoken}"`;
+  chip.onclick = (e) => {
+    e.stopPropagation();
+    attachRef({ kind: 'item', path: item.path, spoken: item.spoken });
+  };
+  out.push(chip);
+
+  // Find it on the board. Drawn only in the reader's header (the row IS the
+  // board), and it closes the sheet first — revealing a row underneath a sheet
+  // that covers it is the feature doing nothing.
+  const board = el('button', 'board', '\u2316');
+  board.title = `Find "${item.spoken}" on the board`;
+  board.onclick = (e) => {
+    e.stopPropagation();
+    closePlanPreview();
+    revealPlan(item.path).catch(() => {});
+  };
+  out.push(board);
+
+  // The shelf. A pin is an ADDITIONAL place to find a plan, never a move, so the
+  // row keeps its place in the status tree either way.
+  const isPinned = pinnedPaths.has(item.path);
+  const pin = el('button', `pin${isPinned ? ' on' : ''}`, isPinned ? '★' : '☆');
+  pin.title = isPinned ? 'Unpin' : 'Pin to the top of the panel';
+  pin.onclick = (e) => {
+    e.stopPropagation();
+    post('/api/pin', { path: item.path, pinned: !isPinned });
+  };
+  out.push(pin);
+
+  // Rename. The spoken name is what Beth calls this plan out loud, and a derived
+  // one is sometimes wrong in a way only Danny can hear — so it is correctable
+  // from the surface where he notices it. ⚠ This WRITES to the plan file (the one
+  // place the harness does); see planName.ts.
+  const rename = el('button', 'rename', '✎');
+  rename.title = `Rename "${item.spoken}" — writes name: into the plan's frontmatter`;
+  rename.onclick = async (e) => {
+    e.stopPropagation();
+    const next = prompt(`Spoken name for this plan\n${item.path}`, item.name ?? item.spoken);
+    if (next === null || !next.trim() || next.trim() === item.spoken) return;
+    const res = await post('/api/rename', { path: item.path, name: next.trim() });
+    const bodyJson = await res.json().catch(() => ({}));
+    // The panel repaints from the file watcher, not from here — so a silent
+    // failure would look exactly like a rename that did not take.
+    if (!res.ok) alert(`Could not rename\n\n${bodyJson.reason ?? res.status}`);
+  };
+  out.push(rename);
+
+  // Hand off to a fresh interactive Claude Code session. Disabled outright on a
+  // live claim — one implementer at a time, and the server refuses too.
+  const hand = el('button', 'handoff', '\u203a_');
+  hand.title = item.claim?.live
+    ? `Claimed by a live session (${item.claim.owner}) — hand off is blocked`
+    : `Open a Claude Code session on "${item.spoken}"`;
+  if (item.claim?.live) hand.classList.add('blocked');
+  hand.onclick = async (e) => {
+    e.stopPropagation();
+    const res = await post('/api/handoff', { path: item.path });
+    const body = await res.json();
+    if (!res.ok) {
+      hand.classList.add('blocked');
+      hand.title = body.reason ?? 'refused';
+      alert(`Handoff refused\n\n${body.reason}`);
+    }
+  };
+  out.push(hand);
+  return out;
+}
+
 function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   const n = el('div', `item work-item status-${item.status}`);
+  // What revealPlan() finds a row by.
+  n.dataset.path = item.path;
   if (depth) n.style.marginLeft = `${depth * 11}px`;
   const head = el('div', 'work-head');
 
@@ -723,72 +948,15 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   }
 
   const name = el('button', 'work-name', item.spoken);
-  name.title = `Point Beth at this plan — ${item.path}`;
-  name.onclick = () => attachRef({ kind: 'item', path: item.path, spoken: item.spoken });
+  // The title OPENS it. A plan's name is the thing you reach for when you want
+  // to know what it says, which is far more often than you want to hand the
+  // reference to Beth — so the biggest target on the row does the common thing,
+  // and pointing moved to the → beside it.
+  name.title = `Read "${item.spoken}" — ${item.path}`;
+  name.onclick = () => openPlanPreview(item.path);
   head.append(name);
 
-  // The shelf. A pin is an ADDITIONAL place to find a plan, never a move, so this
-  // row keeps its place in the status tree either way.
-  const isPinned = pinnedPaths.has(item.path);
-  const pin = el('button', `pin${isPinned ? ' on' : ''}`, isPinned ? '★' : '☆');
-  pin.title = isPinned ? 'Unpin' : 'Pin to the top of the panel';
-  pin.onclick = (e) => {
-    e.stopPropagation();
-    post('/api/pin', { path: item.path, pinned: !isPinned });
-  };
-  head.append(pin);
-
-  // Rename. The spoken name is what Beth calls this plan out loud, and a derived
-  // one is sometimes wrong in a way only Danny can hear — so it is correctable
-  // from the surface where he notices it. ⚠ This WRITES to the plan file (the one
-  // place the harness does); see planName.ts.
-  const rename = el('button', 'rename', '✎');
-  rename.title = `Rename "${item.spoken}" — writes name: into the plan's frontmatter`;
-  rename.onclick = async (e) => {
-    e.stopPropagation();
-    const next = prompt(`Spoken name for this plan\n${item.path}`, item.name ?? item.spoken);
-    if (next === null || !next.trim() || next.trim() === item.spoken) return;
-    const res = await post('/api/rename', { path: item.path, name: next.trim() });
-    const bodyJson = await res.json().catch(() => ({}));
-    // The panel repaints from the file watcher, not from here — so a silent
-    // failure would look exactly like a rename that did not take.
-    if (!res.ok) alert(`Could not rename\n\n${bodyJson.reason ?? res.status}`);
-  };
-  head.append(rename);
-
-  // Read it where it is reviewable. Only drawn when the repo HAS a github origin
-  // — the hello says so — and the href is our own endpoint rather than a github
-  // URL, because the branch is resolved at the moment of the click. See
-  // repoWeb.ts for why that matters more than it sounds like it does.
-  if (repoOnWeb) {
-    const gh = el('a', 'gh', '↗');
-    gh.href = `/api/github?path=${encodeURIComponent(item.path)}`;
-    gh.target = '_blank';
-    gh.rel = 'noreferrer';
-    gh.title = `Open "${item.spoken}" on GitHub`;
-    gh.onclick = (e) => e.stopPropagation();
-    head.append(gh);
-  }
-
-  // Hand off to a fresh interactive Claude Code session. Disabled outright on a
-  // live claim — one implementer at a time, and the server refuses too.
-  const hand = el('button', 'handoff', '⌘');
-  hand.textContent = '›_';
-  hand.title = item.claim?.live
-    ? `Claimed by a live session (${item.claim.owner}) — hand off is blocked`
-    : `Open a Claude Code session on "${item.spoken}"`;
-  if (item.claim?.live) hand.classList.add('blocked');
-  hand.onclick = async (e) => {
-    e.stopPropagation();
-    const res = await post('/api/handoff', { path: item.path });
-    const body = await res.json();
-    if (!res.ok) {
-      hand.classList.add('blocked');
-      hand.title = body.reason ?? 'refused';
-      alert(`Handoff refused\n\n${body.reason}`);
-    }
-  };
-  head.append(hand);
+  head.append(...planActions(item));
   n.append(head);
 
   const meta = el('div', 'meta');
@@ -854,6 +1022,65 @@ let pinnedItems = [];
 let pinnedPaths = new Set();
 /** path → item, for resolving a parent that lives in a different group. */
 let byPathAll = new Map();
+
+/**
+ * Show a plan she mentioned, wherever it is hiding.
+ *
+ * A reference in the transcript is useless if the row is not on screen, and four
+ * separate things can be hiding it: the in-flight filter, a collapsed status
+ * group, a folded umbrella above it, and the scroll position. So this opens its
+ * way down rather than assuming.
+ *
+ * ⚠️ The filter is the one that bites, and it is why this is async. The default
+ * view holds ONLY in-flight plans — `byPathAll` is built from those — while the
+ * plans agents cite are usually finished ("recorded that in plan 174"). Deciding
+ * the row does not exist before widening and re-fetching would make the click do
+ * nothing in exactly the common case.
+ *
+ * ⚠️ Widening is sticky on purpose. Snapping back would re-hide the row the moment
+ * anything re-rendered, and the panel would flicker to a plan he never got to read.
+ */
+async function revealPlan(path) {
+  if (!byPathAll.has(path) && workScope !== 'all') {
+    workScope = 'all';
+    // Same as the scope toggle: everything past in-flight is reference material,
+    // collapsed until asked for — and the group we want is re-opened below.
+    for (const st of ALL_ORDER) if (st !== 'active') collapsedGroups.add(st);
+    await loadAllWork();
+  }
+  const item = byPathAll.get(path);
+  if (!item) return false;
+  collapsedGroups.delete(item.status);
+  // Unfold every umbrella above it, not just the immediate one.
+  for (let up = item.parent, guard = 0; up && guard < 20; guard++) {
+    collapsedParents.delete(up);
+    up = byPathAll.get(up)?.parent;
+  }
+  renderWork();
+  const panel = $('work-panel');
+  const row = panel.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  if (!row) return false;
+  // Scroll the PANEL, not the row's ancestors. scrollIntoView walks every
+  // scrollable parent, so revealing a plan could drag the transcript out from
+  // under him — the message that named the plan is exactly what he is reading.
+  // Measured against the panel rather than offsetTop, which would need the panel
+  // to be the offset parent and silently misplaces the row when it is not.
+  const rr = row.getBoundingClientRect();
+  const pr = panel.getBoundingClientRect();
+  const want = panel.scrollTop + (rr.top - pr.top) - (panel.clientHeight - rr.height) / 2;
+  // ⚠️ Assigned, not scrollTo({behavior:'smooth'}) — which silently does NOTHING
+  // in a hidden or zero-height pane (measured), and is also dropped under
+  // prefers-reduced-motion. A background tab is a legitimate place to reveal a
+  // row: he clicks here, then looks at the other monitor. The flash is what
+  // catches the eye anyway; the animation was never the point.
+  panel.scrollTop = Math.max(0, want);
+  // Restart the flash even when the same row is revealed twice — without the
+  // reflow the class is still there and the animation never re-runs.
+  row.classList.remove('revealed');
+  void row.offsetWidth;
+  row.classList.add('revealed');
+  return true;
+}
 
 function renderWork() {
   const panel = $('work-panel');
@@ -960,7 +1187,6 @@ function feedEvent(e) {
 const handlers = {
   hello: (m) => {
     repoPath = m.repo;
-    repoOnWeb = Boolean(m.repoOnWeb);
     setPersonas(m.personas ?? [], m.persona ?? '');
     projectName = m.repo.split('/').pop();
     $('repo-label').textContent = projectName;
@@ -1063,9 +1289,13 @@ const handlers = {
     void loadPlanUsage();
   },
   status: (m) => {
+    // The EDGE, not the level: `status` repeats, and a bell on every idle
+    // message would ring through anything that republished it.
+    const turnEnded = turnInFlight && m.state !== 'thinking';
     turnInFlight = m.state === 'thinking';
     statusState = m.state;
     setBusy();
+    if (turnEnded && bellOn && !roomMuted) bell.ring(roomVolume);
     // A deliberate stop is not a failure — mark it quietly.
     if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
@@ -1098,6 +1328,8 @@ const handlers = {
     askCards.clear();
     approvalCards.clear();
     lastUsage = null;
+    // The cards went with the conversation — so must the summons they earned.
+    paintTitle();
     entry('activity', (n) => (n.textContent = '— new conversation —'));
   },
   voice: (m) => {
@@ -1175,7 +1407,50 @@ function applyRoom(m) {
   // Not while he is dragging it: the echo of his own drag arriving a beat late
   // would yank the thumb out from under the pointer.
   if (document.activeElement !== slider) slider.value = String(Math.round(m.volume * 100));
+  roomMuted = m.muted;
+  roomVolume = m.volume;
+  // The bell's own button reflects the mute, so it never silently does nothing.
+  paintBell();
 }
+
+/**
+ * The end-of-turn tone.
+ *
+ * Obeys the machine's mute and volume, because it is a noise this desk makes and
+ * the whole point of those two controls is that they cover the desk. Kept in
+ * localStorage rather than the gear: it is a preference of this PAGE, like
+ * autosend, and not something a repo has an opinion about.
+ */
+const bell = createBell();
+let bellOn = localStorage.getItem('bell') !== 'off';
+let roomMuted = false;
+let roomVolume = 1;
+
+function paintBell() {
+  const b = $('bell-toggle');
+  b.classList.toggle('on', !bellOn);
+  // ⚠️ The machine mute silences this too, and a bell that is ON while nothing
+  // ever rings is an invisible failure — you conclude the feature is broken
+  // rather than that you muted the desk. So the button SAYS it is suppressed.
+  const suppressed = bellOn && roomMuted;
+  b.classList.toggle('suppressed', suppressed);
+  b.title = suppressed
+    ? 'Bell is on, but the machine mute is silencing it — unmute to hear it'
+    : bellOn
+      ? 'A soft tone when a turn finishes — click to silence it'
+      : 'No tone when a turn finishes — click to enable';
+}
+$('bell-toggle').onclick = () => {
+  bellOn = !bellOn;
+  localStorage.setItem('bell', bellOn ? 'on' : 'off');
+  paintBell();
+  // Ring on the way ON, so the choice is audible at the moment it is made —
+  // and this click is also the gesture that unlocks the audio context.
+  if (bellOn && !roomMuted) bell.ring(roomVolume);
+};
+// Any gesture will do; the first turn's bell should not be the one spent
+// unlocking the context.
+document.addEventListener('pointerdown', () => bell.unlock(), { once: true });
 
 /**
  * ONE MOUTH, however many tabs are open.
@@ -1229,6 +1504,7 @@ function paintDot() {
   if (turnInFlight) reasons.push('thinking');
   if (workersRunning) reasons.push(`${workersRunning} worker${workersRunning > 1 ? 's' : ''}`);
   if (decisionsWaiting) reasons.push(`${decisionsWaiting} waiting on you`);
+  if (blockedInline()) reasons.push('stopped on a card');
   const err = statusState === 'error';
   dot.className = `dot ${err ? 'error' : reasons.length ? 'busy' : 'idle'}`;
   dot.title = (err ? dotTitle : reasons.join(' · ') || 'idle') + ' — click for the wire';
@@ -1240,33 +1516,39 @@ function paintDot() {
  * The tab strip is the page when the page is hidden — and with one instance per
  * repo it is also the switchboard, so each tab answers "is anything waiting on
  * me over there" without being visited. The same state as the dot, front-loaded
- * because truncation eats the back: decisions waiting on Danny first (the
- * browser-tab convention for "unread, yours"), then the running dot, ⚠ instead
- * when the server reports an error.
+ * because truncation eats the back: ❗ when she is stopped on a card, then
+ * decisions waiting on Danny (the browser-tab convention for "unread, yours"),
+ * then the running dot, ⚠ instead when the server reports an error. The string
+ * itself is built in title.js, where it is tested.
  *
  * The mic is deliberately NOT here: Chrome paints its own recording badge on
  * any tab holding the mic, hidden or not, and a title glyph would be a copy of
  * an indicator the page cannot fake — trust the browser's.
  */
 /**
- * The test light, in the tab.
+ * Is she STOPPED, waiting on a card in the transcript?
  *
- * A tab title cannot be COLOURED — it is plain text in the browser's own chrome
- * — so a coloured emoji is the only coloured thing a title can carry. Grey is
- * NOTHING rather than ⚪: a repo with no runner, or one where the watch is off,
- * has nothing to say, and a permanent grey circle in every tab would train the
- * eye to stop reading the ones that do.
+ * Deliberately not folded into the `(N)` count. The queue is designed to be
+ * ignorable — a decision lands there precisely BECAUSE she is not blocked on it
+ * — so counting a card into the same number would say "three things to read
+ * sometime" about a session that is halted right now. And `canUseTool` pends
+ * forever with no timeout (see askgate.ts), so the only other tell is silence,
+ * which reads as a hang — the exact failure this glyph exists to end.
+ *
+ * ⚠ Not `askCards.size`: answered asks STAY in that map, because the dedup on
+ * render is what stops a replay rebuilding a settled card. Liveness is the flag.
  */
-const TITLE_LIGHT = { green: ' 🟢', yellow: ' 🟡', red: ' 🔴' };
+const blockedInline = () => approvalCards.size > 0 || [...askCards.values()].some((a) => a.live);
 
 function paintTitle() {
-  const badge =
-    (decisionsWaiting ? `(${decisionsWaiting}) ` : '') +
-    (statusState === 'error' ? '⚠ ' : turnInFlight || workersRunning ? '● ' : '');
-  // What is waiting on YOU goes in front, where the truncation cannot reach it;
-  // the tree's state goes after the name, which is what he asked for and also
-  // the right way round — one is a summons, the other is a status.
-  const t = badge + titleBase + (TITLE_LIGHT[testState?.light] ?? '');
+  const t = tabTitle({
+    base: titleBase,
+    blocked: blockedInline(),
+    decisions: decisionsWaiting,
+    error: statusState === 'error',
+    running: turnInFlight || workersRunning > 0,
+    testLight: testState?.light,
+  });
   // paintDot runs on the busy clock's every tick — only touch the tab on change.
   if (document.title !== t) document.title = t;
 }
@@ -1302,10 +1584,22 @@ function paintProgress() {
  * something else.
  */
 function paintMeter() {
+  const pct = Math.min(100, ctxPct);
+  const heat = ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : '';
   const ctx = $('ctx-meter');
-  ctx.firstElementChild.style.setProperty('--fill', `${Math.min(100, ctxPct)}%`);
-  ctx.className = `ctx${ctxPct >= 85 ? ' hot' : ctxPct >= 60 ? ' warm' : ''}`;
+  ctx.firstElementChild.style.setProperty('--fill', `${pct}%`);
+  ctx.className = `ctx${heat}`;
   ctx.title = `Context ${ctxPct.toFixed(1)}% used — click for the numbers`;
+  // The same number, in the strip, beside the windows it belongs with. Both
+  // gauges stay: the bottom one is where your eye already is mid-conversation,
+  // the top one is where the other two meters are — and they open the same
+  // panel, which now hangs from the strip.
+  const um = $('um-ctx');
+  const track = um.querySelector('.sbar');
+  track.className = `sbar${heat}`;
+  track.firstElementChild.style.width = `${pct}%`;
+  um.title = `Context ${ctxPct.toFixed(1)}% used`;
+  renderUsageMeters();
   if (statsOpen) renderStats();
 }
 
@@ -1396,26 +1690,63 @@ function renderTestPanel() {
   if (r.failures.length) {
     box.append(el('h3', null, `Failures (${r.failures.length})`));
     for (const f of r.failures) {
-      const row = el('button', 'tfail');
-      row.append(el('div', 'tname', f.spoken));
-      if (f.path) row.append(el('div', 'tloc', `${f.path}${f.line ? `:${f.line}` : ''}`));
-      if (f.detail) row.append(el('div', 'tdetail', f.detail));
+      const row = el('div', 'tfail');
+      const body = el('button', 'tfail-body');
+      body.append(el('div', 'tname', f.spoken));
+      if (f.path) body.append(el('div', 'tloc', `${f.path}${f.line ? `:${f.line}` : ''}`));
+      if (f.detail) body.append(el('div', 'tdetail', f.detail));
       // Same machinery as a plan: a reference PAIR, so she gets a name she can
       // say and the location underneath — not a paragraph of stack trace.
-      row.onclick = () => {
+      body.onclick = () => {
         attachRef({ kind: 'test', path: f.path ?? '', spoken: f.spoken, line: f.line, detail: f.detail });
         toggleTestPanel();
       };
+      row.append(body);
+      // The other half: sometimes the answer IS the stack trace. Pointing stays
+      // the click, because it is right far more often; this is the escape hatch
+      // beside it rather than a replacement for it.
+      row.append(pasteButton(() => testFailureText(f), 'Paste this failure into the composer', () => toggleTestPanel()));
       box.append(row);
     }
   }
 
   if (r.output.trim()) {
-    box.append(el('h3', null, 'Output'));
+    const head = el('div', 'thead');
+    head.append(el('h3', null, 'Output'));
+    head.append(
+      pasteButton(
+        () => commandOutputText({ kind: 'Test', command: s.command, result: r }),
+        'Paste the whole run into the composer',
+        () => toggleTestPanel()
+      )
+    );
+    box.append(head);
     // Whatever the parsers could not read is still here, which is always better
     // than nothing — and the TAIL is what matters when a suite fails late.
+    // ⚠️ The slice is the DISPLAY only. The paste above sends what the harness
+    // actually kept (runCommand caps at 256 KB, tail-first), because output that
+    // stops mid-sentence is worse than no output: she answers it anyway.
     box.append(el('pre', 'tlog', r.output.slice(-8000)));
   }
+}
+
+/**
+ * The paste control, which says what it is about to spend.
+ *
+ * The size is on the button rather than behind it: a 200 KB log and a 400 B
+ * failure are the same gesture and wildly different turns, and the only moment
+ * that difference can be seen is before the click.
+ */
+function pasteButton(build, title, after) {
+  const text = build();
+  const b = el('button', 'tpaste', `⇥ ${sizeLabel(text)}`);
+  b.title = `${title} — not sent, so you can ask something in front of it`;
+  b.onclick = (e) => {
+    e.stopPropagation();
+    pasteIntoComposer(text);
+    after?.();
+  };
+  return b;
 }
 
 function toggleTestPanel() {
@@ -1576,7 +1907,19 @@ function renderBuildPanel() {
   );
 
   if (r.output.trim()) {
-    box.append(el('h3', null, 'Output'));
+    const head = el('div', 'thead');
+    head.append(el('h3', null, 'Output'));
+    // With no parser there is no failure row to point at, so the paste is the
+    // ONLY way a build reaches her with its reasons attached. It matters more
+    // here than on the test side, not less.
+    head.append(
+      pasteButton(
+        () => commandOutputText({ kind: 'Build', command: s.command, result: r }),
+        'Paste the whole build into the composer',
+        () => toggleBuildPanel(false)
+      )
+    );
+    box.append(head);
     // No parser here yet, deliberately: a compiler-error parser written against
     // output nobody has seen fail is worth very little (see CLAUDE.md). The TAIL
     // is what matters when a build dies late.
@@ -1794,10 +2137,12 @@ function renderUsageMeters() {
     const when = w.resets_at ? untilWhen(w.resets_at) : '';
     said.push(`${label} ${Math.round(w.utilization)}%${when ? ` · resets ${/^\d/.test(when) ? 'in ' : ''}${when}` : ''}`);
   }
-  // Absent entirely rather than drawn empty: an API-key, Bedrock or Vertex
-  // session has no plan, and an unfillable gauge is worse than no gauge.
-  btn.hidden = !said.length;
-  if (!said.length) return;
+  // ⚠️ The plan windows are absent entirely rather than drawn empty — an
+  // API-key, Bedrock or Vertex session has no plan, and an unfillable gauge is
+  // worse than no gauge. CONTEXT is not like that: every session has one, so
+  // the button now survives on the ctx bar alone.
+  said.push(`context ${ctxPct.toFixed(1)}%`);
+  btn.hidden = false;
   // The tie-in worth having at exactly this glance: a window at 100% is when
   // usage credits begin to drain, and `armed` is the server's own verdict on
   // that — it counts the model-scoped windows the strip does not draw.
@@ -2297,6 +2642,9 @@ function openStream() {
         transcript.replaceChildren();
         askCards.clear();
         approvalCards.clear();
+        // The replay that follows re-renders any card still live and repaints
+        // as it goes; this covers the case where it re-renders none.
+        paintTitle();
       }
       streamSeenHello = true;
     }
@@ -2362,9 +2710,10 @@ document.addEventListener('keydown', (e) => {
   // top. Only when there is nothing to dismiss does Escape mean what it means
   // in Claude Code — and the button is small now, so the keyboard has to reach
   // the same thing your hand does.
-  if (lightboxOpen || pendingOverlayOpen) {
+  if (lightboxOpen || pendingOverlayOpen || planOverlayOpen) {
     if (lightboxOpen) closeLightbox();
     if (pendingOverlayOpen) closePendingOverlay();
+    if (planOverlayOpen) closePlanPreview();
     return;
   }
   if (statsOpen || testPanelOpen || buildPanelOpen || gearOpen) {
@@ -2376,6 +2725,7 @@ document.addEventListener('keydown', (e) => {
   }
   stopAll();
 });
+paintBell();
 paintMeter();
 
 // --- composer --------------------------------------------------------------

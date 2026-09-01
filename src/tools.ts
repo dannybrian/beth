@@ -378,7 +378,7 @@ export function createHarnessTools(deps: {
         .enum(SPEECH_LEVELS as [SpeechLevel, ...SpeechLevel[]])
         .optional()
         .describe(
-          'full = every word you write, verbatim. brief = `say` items in full plus the last paragraph of anything longer (the usual setting). headlines = findings and announcements only, plus short one-line progress notes. off = silence; nothing is spoken at all.'
+          'full = every word you write, verbatim. brief = `say` items in full plus the last paragraph of anything longer (the usual setting). headings = only the markdown headings of what you write, plus findings and events — the SHAPE of your progress, and silence when you write prose with no headings. headlines = findings and announcements only, plus short one-line progress notes. off = silence; nothing is spoken at all. A decision you queue is spoken at every level except off, because it waits on Danny.'
         ),
     },
     async ({ level }) => {

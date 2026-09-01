@@ -148,7 +148,16 @@ test('unread plans are counted only when the index read nothing', () => {
   fs.mkdirSync(path.join(repo, 'plans'));
   fs.writeFileSync(path.join(repo, 'plans', '2026-01-01-a.md'), 'x');
   fs.writeFileSync(path.join(repo, 'plans', 'README.md'), 'x');
-  assert.deepEqual(unreadPlanFiles(repo, 0), { dir: 'plans/', count: 1 }, 'README is not a plan');
+  fs.writeFileSync(path.join(repo, 'plans', 'TEMPLATE.md'), 'x');
+  assert.deepEqual(unreadPlanFiles(repo, 0), { dir: 'plans/', count: 1 }, 'README/TEMPLATE are not plans');
   assert.equal(unreadPlanFiles(repo, 5), null, 'an index that reads plans has no unread case');
   assert.equal(unreadPlanFiles(fs.mkdtempSync(path.join(os.tmpdir(), 'harness-noplans-')), 0), null);
+  // A freshly bootstrapped repo — README + TEMPLATE, no plans yet — must not be
+  // greeted with "1 file you cannot read as plans", pointing at the template the
+  // bootstrap just installed.
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-fresh-'));
+  fs.mkdirSync(path.join(fresh, 'plans'));
+  fs.writeFileSync(path.join(fresh, 'plans', 'README.md'), 'x');
+  fs.writeFileSync(path.join(fresh, 'plans', 'TEMPLATE.md'), 'x');
+  assert.equal(unreadPlanFiles(fresh, 0), null, 'a bootstrapped-but-empty plans dir is quiet');
 });

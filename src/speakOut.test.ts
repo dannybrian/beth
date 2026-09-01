@@ -301,3 +301,53 @@ test('setVoice and speechLevel survive being passed by REFERENCE', () => {
   assert.equal(currentVoice(), 'v_other');
   assert.equal(speechLevel(), 'full');
 });
+
+// --- a decision landing is a summons ----------------------------------------
+//
+// This used to be the hole behind "what does `headlines` even do": the queue is
+// the one thing genuinely waiting on Danny, and it was the one thing that never
+// reached the speech path at all — the subscription only ever took `assistant`
+// and `say`.
+
+const decision = (id: string, title: string) => ({ id, title, urgency: 'when-free' }) as any;
+
+test('the FIRST pending message is seeded, not announced', () => {
+  // The store restores decisions across a restart and publishes them. Starting
+  // from empty would read Danny his whole backlog aloud on every boot — exactly
+  // the noise that teaches you to mute it.
+  const { bus, seen } = recording();
+  new SpeakOut(cfg(), bus);
+  bus.publish({ type: 'pending', decisions: [decision('d1', 'Old one'), decision('d2', 'Older')], workers: [] });
+  assert.equal(spoken(seen).length, 0, 'the backlog is silent');
+});
+
+test('a decision arriving after that IS announced, once', () => {
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg(), bus);
+  bus.publish({ type: 'pending', decisions: [decision('d1', 'Old one')], workers: [] });
+  bus.publish({
+    type: 'pending',
+    decisions: [decision('d1', 'Old one'), decision('d2', 'Ship the ribbon now?')],
+    workers: [],
+  });
+  const lines = spoken(seen);
+  assert.equal(lines.length, 1);
+  assert.equal(s.textFor(lines[0].id), 'A decision for you: Ship the ribbon now?');
+
+  // `pending` fires for reasons that have nothing to do with decisions — a
+  // worker starting republishes the whole list. It must not re-announce.
+  bus.publish({
+    type: 'pending',
+    decisions: [decision('d1', 'Old one'), decision('d2', 'Ship the ribbon now?')],
+    workers: [{ taskId: 't1' } as any],
+  });
+  assert.equal(spoken(seen).length, 1, 'the same decision is not announced twice');
+});
+
+test('at level off a decision is silent like everything else', () => {
+  const { bus, seen } = recording();
+  new SpeakOut(cfg({ speechLevel: 'off' }), bus);
+  bus.publish({ type: 'pending', decisions: [], workers: [] });
+  bus.publish({ type: 'pending', decisions: [decision('d2', 'Anything')], workers: [] });
+  assert.equal(spoken(seen).length, 0);
+});

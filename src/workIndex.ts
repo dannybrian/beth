@@ -32,10 +32,11 @@ export class WorkIndex {
    * Harness-side name overrides, path → spoken name. Consulted BEFORE a plan's
    * own `name:` frontmatter, so a name given here wins over one in the file.
    *
-   * Empty today and deliberately so: this is the seam for renaming a plan from
-   * the panel — useful for an umbrella plan that wants a name reflecting the
-   * subplans under it, without editing someone else's file. When that lands it
-   * populates this map; nothing else has to change.
+   * Empty in practice, and no longer the seam it was drafted as: renaming from the
+   * panel shipped by WRITING `name:` into the file (`planName.ts`), because a name
+   * held only here would be invisible to `/plans` and to every other reader of the
+   * repo. Do not route rename through this map. It survives for drafts, which have
+   * no file to carry a name.
    */
   nameOverrides = new Map<string, string>();
 
@@ -57,10 +58,11 @@ export class WorkIndex {
 
   // --- what Danny is currently pointing at ---------------------------------
   //
-  // This lives on the SERVER, not in the browser, because a spoken turn never
-  // touches the browser: ElevenLabs dials in and the utterance goes straight to
-  // the director. Holding the chips only in the page meant clicking a plan and
-  // then SPEAKING lost the reference entirely. Both paths now consume from here.
+  // This lives on the SERVER, not in the browser. The original reason is gone
+  // (a spoken turn used to bypass the page entirely, back when ElevenLabs dialled
+  // in), but the placement outlived it: chips are shared ground across every open
+  // tab, and consumption has to be settled in one place or two tabs spend the same
+  // reference twice. Both input paths consume from here.
 
   private pointing: WorkRef[] = [];
   private pointSubs = new Set<(refs: WorkRef[]) => void>();
@@ -120,6 +122,21 @@ export class WorkIndex {
   /** What the panel and the `plans` tool show: in-flight PLUS awaiting-eyes. */
   live = () => this.items.filter((i) => isLive(i.status) && !i.roleLock);
   byPath = (p: string) => this.items.find((i) => i.path === p);
+
+  /**
+   * A plan by the number an agent said, or NOTHING when the number is ambiguous.
+   *
+   * Refusing is the whole point. `/plans` counts per scope directory, so beadgame
+   * has two plan 22s (unity and backend) and 64 more like it — while every number
+   * agents actually cite in practice (174, 176, 182, 186, 190, 198-202) is unique,
+   * because those collisions all sit in the low, long-shipped range. Linking the
+   * wrong plan confidently is worse than not linking: the reference LOOKS resolved,
+   * so nobody checks it. Same rule as links.ts — prove it, or draw nothing.
+   */
+  byNumber = (n: number) => {
+    const hits = this.items.filter((i) => i.number === n);
+    return hits.length === 1 ? hits[0] : undefined;
+  };
 
   /** Resolve a reference back to what it points at. */
   resolve(ref: WorkRef): { item: WorkItem; task?: WorkItem['tasks'][number] } | null {

@@ -23,6 +23,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { HarnessConfig } from './config.ts';
 import type { WorkItem } from './workItems.ts';
+import { NOT_A_PLAN } from './plansReader.ts';
 
 export type Opening = { at: string; text: string };
 
@@ -161,7 +162,10 @@ export function unreadPlanFiles(repo: string, indexed: number): OnboardingFacts[
   if (indexed > 0) return null;
   try {
     const dir = path.join(repo, 'plans');
-    const count = fs.readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').length;
+    // Exclude what the reader excludes, or a freshly bootstrapped repo —
+    // README.md + TEMPLATE.md, no plans yet — greets Danny with "1 file you
+    // cannot read as plans", pointing at the template the bootstrap installed.
+    const count = fs.readdirSync(dir).filter((f) => f.endsWith('.md') && !NOT_A_PLAN.test(f)).length;
     return count ? { dir: 'plans/', count } : null;
   } catch {
     return null;

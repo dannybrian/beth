@@ -43,6 +43,12 @@ land in a repo that gets pushed. (Machine-wide is arguably righter, since he is 
 person on every repo; per-repo is the safer default and the cheaper thing to change
 later.) Append-only, same as the event log, so nothing is silently rewritten.
 
+⚠ UPDATE (2026-09-01): the cheap change happened, and it went half-way on purpose. When a
+PERSONA is in force the store is her machine-wide directory (`personaStateDir`), because
+the relationship belongs to the director, not to the repo she is standing in — switching
+repos must not reset it. With no persona it stays per-repo, exactly as described above. A
+persona's first run copies an existing memory across ONCE, and only when the names match.
+
 Each entry is small and typed:
 
 ```jsonc

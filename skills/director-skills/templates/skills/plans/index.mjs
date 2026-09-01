@@ -16,10 +16,14 @@ import {
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const STATUSES = ['idea', 'planning', 'active', 'blocked', 'shipped', 'parked', 'review'];
+// `awaiting-eyes` is LIVE, not terminal: every mechanical gate passed and only a human
+// read is owed. It must be settable and it must print on the board — a status the plans
+// README documents but this CLI rejects is two sources of truth, which is the split this
+// whole file exists to prevent.
+const STATUSES = ['idea', 'planning', 'active', 'awaiting-eyes', 'blocked', 'shipped', 'parked', 'review'];
 const STALE_HOURS = 4;
 const PLAN_TREES = ['plans']; // relative to repo root — add more trees if plans live in several places
-const STATUS_ORDER = { active: 0, blocked: 1, planning: 2, idea: 3, shipped: 4, parked: 5, review: 6, unknown: 7 };
+const STATUS_ORDER = { active: 0, 'awaiting-eyes': 1, blocked: 2, planning: 3, idea: 4, shipped: 5, parked: 6, review: 7, unknown: 8 };
 
 // ─── Repo root ─────────────────────────────────────────────────────────────
 
@@ -39,9 +43,15 @@ function findRepoRoot(start = process.cwd()) {
 
 const REPO_ROOT = findRepoRoot();
 const SESSIONS_DIR = path.join(REPO_ROOT, '.claude', 'sessions');
-const TEMPLATE_PATH = path.join(REPO_ROOT, 'plans', 'TEMPLATE.md');
-const INDEX_MD = path.join(REPO_ROOT, 'plans', 'INDEX.md');
-const INDEX_JSON = path.join(REPO_ROOT, 'plans', 'INDEX.json');
+
+// Everything below hangs off PLAN_TREES[0], so moving plans out of `plans/` really is
+// the one-line edit the docs promise. It used to be four hardcoded `plans/` joins, and
+// a repo that followed the instruction got a CLI that walked the right tree, then died
+// on `new` and wrote its index into a directory that did not exist.
+const PRIMARY_TREE = PLAN_TREES[0];
+const TEMPLATE_PATH = path.join(REPO_ROOT, PRIMARY_TREE, 'TEMPLATE.md');
+const INDEX_MD = path.join(REPO_ROOT, PRIMARY_TREE, 'INDEX.md');
+const INDEX_JSON = path.join(REPO_ROOT, PRIMARY_TREE, 'INDEX.json');
 
 // ─── YAML helpers (small subset: scalars, null, inline arrays, dates) ─────
 
@@ -414,8 +424,8 @@ function cmdBoard(args = []) {
   }
 
   const statusOrder = filters.all
-    ? ['active', 'blocked', 'planning', 'idea', 'shipped', 'parked', 'review']
-    : ['active', 'blocked', 'planning'];
+    ? ['active', 'awaiting-eyes', 'blocked', 'planning', 'idea', 'shipped', 'parked', 'review']
+    : ['active', 'awaiting-eyes', 'blocked', 'planning'];
   for (const status of statusOrder) {
     const list = groups.get(status);
     if (!list || list.length === 0) continue;
@@ -563,7 +573,7 @@ function cmdNew(args) {
   const slug = args[0];
   if (!slug) die('Usage: new <slug> [--scope <path>] [--series]');
   const scopeIdx = args.indexOf('--scope');
-  const scope = scopeIdx >= 0 ? args[scopeIdx + 1] : 'plans';
+  const scope = scopeIdx >= 0 ? args[scopeIdx + 1] : PRIMARY_TREE;
   const series = args.includes('--series');
 
   if (!fs.existsSync(TEMPLATE_PATH)) die(`Missing template: ${TEMPLATE_PATH}`);
