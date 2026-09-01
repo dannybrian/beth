@@ -607,11 +607,14 @@ export class SessionManager {
       return;
     }
     if (m.subtype === 'task_started') {
-      const w = this.pending.workerStarted({
-        taskId: m.task_id,
-        description: m.description ?? 'worker',
-        agentType: m.subagent_type,
-      });
+      const w = this.pending.workerStarted(
+        {
+          taskId: m.task_id,
+          description: m.description ?? 'worker',
+          agentType: m.subagent_type,
+        },
+        m.tool_use_id
+      );
       this.events.append({
         source: 'harness',
         session: this.sessionIdValue,
@@ -666,6 +669,13 @@ export class SessionManager {
         const { text: read, spans } = renderInline(stripAudioTags(raw));
         this.bus.publish({ type: 'assistant', text: read, spans, voiceText: raw, links: this.links(read) });
       } else if (b.type === 'tool_use' && !String(b.name).endsWith('__say')) {
+        // The model a delegation asked for, kept against this call's id so the
+        // worker can claim it when `task_started` arrives with the same one.
+        // Matched by SHAPE rather than by tool name: the name has moved before
+        // (Task, Agent, an MCP prefix), while "a call that names a model" is
+        // what we actually mean — and any other tool's id is simply never
+        // looked up.
+        if (typeof b.input?.model === 'string') this.pending.noteTaskModel(String(b.id), b.input.model);
         const detail = JSON.stringify(b.input ?? {}).slice(0, 200);
         this.bus.publish({
           type: 'activity',

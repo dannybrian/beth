@@ -114,3 +114,41 @@ test('orphaning does not resurrect or re-close what already finished', () => {
   assert.equal(s.allWorkers()[0].summary, 'the real summary', 'a finished worker keeps its own account');
   assert.equal(s.allWorkers()[0].status, 'completed');
 });
+
+// --- the model a delegation asked for ----------------------------------------
+//
+// Nothing in the SDK's task messages carries one, so the only source is the tool
+// call that started the worker, correlated by tool_use_id. Which means the two
+// things worth pinning are that the correlation WORKS, and that a call which
+// named nothing produces nothing.
+
+test('the model a Task call named lands on the worker that call started', () => {
+  const s = new PendingStore();
+  s.noteTaskModel('toolu_1', 'sonnet');
+  const w = s.workerStarted({ taskId: 't1', description: 'read the parsers' }, 'toolu_1');
+  assert.equal(w.model, 'sonnet');
+});
+
+test('a call that named no model leaves the worker with none — never a guess', () => {
+  const s = new PendingStore();
+  const w = s.workerStarted({ taskId: 't1', description: 'read the parsers' }, 'toolu_1');
+  assert.equal(w.model, undefined);
+  assert.equal('model' in w, false, 'absent, not undefined — the panel tests truthiness');
+});
+
+test('one call\u2019s model cannot leak to the NEXT worker', () => {
+  const s = new PendingStore();
+  s.noteTaskModel('toolu_1', 'opus');
+  s.workerStarted({ taskId: 't1', description: 'first' }, 'toolu_1');
+  const second = s.workerStarted({ taskId: 't2', description: 'second' }, 'toolu_2');
+  assert.equal(second.model, undefined);
+});
+
+test('a call whose worker never starts does not accumulate forever', () => {
+  const s = new PendingStore();
+  for (let i = 0; i < 80; i++) s.noteTaskModel(`toolu_${i}`, 'haiku');
+  // The oldest are gone; the most recent still correlate, which is the window
+  // that matters — task_started follows its own call within a turn.
+  assert.equal(s.workerStarted({ taskId: 'old', description: 'x' }, 'toolu_0').model, undefined);
+  assert.equal(s.workerStarted({ taskId: 'new', description: 'x' }, 'toolu_79').model, 'haiku');
+});

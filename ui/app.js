@@ -402,7 +402,16 @@ function renderDecision(d) {
 function renderWorker(w) {
   const n = el('div', 'item running');
   n.append(el('div', null, w.description));
-  const meta = el('div', 'meta', `${w.agentType ?? 'agent'} · started ${new Date(w.startedAt).toLocaleTimeString()}`);
+  // The model only when the call named one — a worker that inherited its
+  // model says nothing here rather than borrowing the session's, which would
+  // be wrong exactly where you are looking to find out what this is costing.
+  const meta = el(
+    'div',
+    'meta',
+    [w.agentType ?? 'agent', w.model, `started ${new Date(w.startedAt).toLocaleTimeString()}`]
+      .filter(Boolean)
+      .join(' · ')
+  );
   // A worker that never reported back sits here forever with the dot lit
   // behind it. One click to say "that one is not running".
   const x = el('button', 'dismiss', '×');

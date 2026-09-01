@@ -22,8 +22,42 @@ export class PendingStore {
     return d;
   }
 
-  workerStarted(w: Omit<WorkerRecord, 'status' | 'startedAt'>): WorkerRecord {
-    const rec: WorkerRecord = { ...w, status: 'running', startedAt: new Date().toISOString() };
+  /**
+   * The model a delegation ASKED for, held until its worker announces itself.
+   *
+   * Nothing in the SDK's task messages carries a model — checked against
+   * `sdk.d.ts` on 2026-08-31, and it is absent from all five: `task_started`,
+   * `task_progress`, `task_notification`, `task_updated`'s patch, and the
+   * `background_tasks_changed` level, which is ids only. The one place it exists
+   * is the TOOL CALL that started the worker, so the correlation is by
+   * `tool_use_id`, which `task_started` carries back.
+   *
+   * ⚠️ It is what the call named and nothing else. A call that omits `model`
+   * leaves the worker without one, and the roster says nothing rather than
+   * repeating the session's: a subagent inherits from its own definition, so the
+   * session's answer would be confidently wrong exactly where it matters most —
+   * a sonnet worker labelled opus, on the panel you check to see what a delegation
+   * is costing.
+   */
+  private taskModels = new Map<string, string>();
+
+  noteTaskModel(toolUseId: string, model: string) {
+    if (!toolUseId || !model) return;
+    // A call whose worker never starts would otherwise sit here for the life of
+    // the process. Oldest out; this is a correlation window, not a record.
+    if (this.taskModels.size >= 50) this.taskModels.delete(this.taskModels.keys().next().value as string);
+    this.taskModels.set(toolUseId, model);
+  }
+
+  workerStarted(w: Omit<WorkerRecord, 'status' | 'startedAt'>, toolUseId?: string): WorkerRecord {
+    const model = w.model ?? (toolUseId ? this.taskModels.get(toolUseId) : undefined);
+    if (toolUseId) this.taskModels.delete(toolUseId);
+    const rec: WorkerRecord = {
+      ...w,
+      ...(model ? { model } : {}),
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    };
     this.workers.push(rec);
     return rec;
   }

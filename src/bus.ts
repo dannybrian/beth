@@ -35,6 +35,12 @@ export type WorkerRecord = {
   taskId: string;
   description: string;
   agentType?: string;
+  /**
+   * The model the DELEGATION ASKED FOR, when it asked for one — see
+   * `noteTaskModel` in state.ts for where it comes from and why it is often
+   * absent. Never the session's model standing in for an unstated one.
+   */
+  model?: string;
   status: 'running' | 'completed' | 'failed' | 'stopped';
   startedAt: string;
   endedAt?: string;
