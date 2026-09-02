@@ -136,10 +136,6 @@ body {
 #bell-toggle .slash { display: none; }
 #bell-toggle.on .slash { display: block; }
 #bell-toggle .cut { stroke: var(--panel); stroke-width: 4.5; }
-/* On, but the machine mute is eating it — dimmed and struck, so the button
-   never claims to be doing something it is not. */
-#bell-toggle.suppressed { color: color-mix(in srgb, var(--warn) 55%, transparent); }
-#bell-toggle.suppressed .slash { display: block; }
 #bell-toggle:hover { color: var(--text); }
 #mute-toggle {
   background: none;

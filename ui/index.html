@@ -34,7 +34,7 @@
              they are announced — nothing plays and nothing is billed. Volume is
              the knob on every speaker at once; zero still plays (and bills),
              just silently — the tooltip says which is which. -->
-        <button id="mute-toggle" class="mute" title="Mute every director on this machine — nothing plays, nothing is billed">
+        <button id="mute-toggle" class="mute" title="Mute every director’s voice on this machine — nothing plays, nothing is billed">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M11 5 6.5 8.5H3v7h3.5L11 19z" />
@@ -45,8 +45,11 @@
           </svg>
         </button>
         <!-- The end-of-turn bell. Sits with the other audio controls because that
-             is what it is; a page preference, so localStorage, not the gear. -->
-        <button id="bell-toggle" class="bell" title="Soft tone when a turn finishes">
+             is what it is; a page preference, so localStorage, not the gear.
+             ⚠ The mute beside it does NOT reach this: that one is about her
+             voice and about not paying for audio, and the bell is most useful
+             precisely when she is silent. -->
+        <button id="bell-toggle" class="bell" title="Soft tone when a turn finishes — independent of the voice mute">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M18 8.5a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" />

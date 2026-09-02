@@ -1295,7 +1295,7 @@ const handlers = {
     turnInFlight = m.state === 'thinking';
     statusState = m.state;
     setBusy();
-    if (turnEnded && bellOn && !roomMuted) bell.ring(roomVolume);
+    if (turnEnded && bellOn) bell.ring(roomVolume);
     // A deliberate stop is not a failure — mark it quietly.
     if (m.detail === 'stopped') entry('activity', (n) => (n.textContent = '⏹ stopped'));
     else if (m.state === 'error' && m.detail) entry('error', (n) => (n.textContent = `⚠ ${m.detail}`));
@@ -1401,44 +1401,42 @@ function applyRoom(m) {
   const mute = $('mute-toggle');
   mute.classList.toggle('on', m.muted);
   mute.title = m.muted
-    ? 'Muted — every director on this machine. Click to unmute.'
-    : 'Mute every director on this machine — nothing plays, nothing is billed';
+    ? 'Voices muted — every director on this machine. Click to unmute. (The bell has its own switch.)'
+    : 'Mute every director\u2019s VOICE on this machine — nothing plays, nothing is billed. The bell is separate.';
   const slider = $('volume-slider');
   // Not while he is dragging it: the echo of his own drag arriving a beat late
   // would yank the thumb out from under the pointer.
   if (document.activeElement !== slider) slider.value = String(Math.round(m.volume * 100));
-  roomMuted = m.muted;
   roomVolume = m.volume;
-  // The bell's own button reflects the mute, so it never silently does nothing.
   paintBell();
 }
 
 /**
  * The end-of-turn tone.
  *
- * Obeys the machine's mute and volume, because it is a noise this desk makes and
- * the whole point of those two controls is that they cover the desk. Kept in
- * localStorage rather than the gear: it is a preference of this PAGE, like
- * autosend, and not something a repo has an opinion about.
+ * ⚠️ INDEPENDENT of the voice mute, by Danny's call, and the reasoning is his
+ * use: he works muted. The mute exists so three directors do not talk over each
+ * other — it is about her VOICE, and about not paying for audio nobody wanted.
+ * A bell is neither: it costs nothing, says nothing, and is most useful exactly
+ * when she is not speaking, because then it is the only signal a turn ended. It
+ * has its own switch; that switch is the one that governs it.
+ *
+ * It still rides the machine VOLUME, which is a level rather than a mute — drag
+ * that to zero and the desk really is silent.
+ *
+ * Kept in localStorage rather than the gear: a preference of this PAGE, like
+ * autosend, not something a repo has an opinion about.
  */
 const bell = createBell();
 let bellOn = localStorage.getItem('bell') !== 'off';
-let roomMuted = false;
 let roomVolume = 1;
 
 function paintBell() {
   const b = $('bell-toggle');
   b.classList.toggle('on', !bellOn);
-  // ⚠️ The machine mute silences this too, and a bell that is ON while nothing
-  // ever rings is an invisible failure — you conclude the feature is broken
-  // rather than that you muted the desk. So the button SAYS it is suppressed.
-  const suppressed = bellOn && roomMuted;
-  b.classList.toggle('suppressed', suppressed);
-  b.title = suppressed
-    ? 'Bell is on, but the machine mute is silencing it — unmute to hear it'
-    : bellOn
-      ? 'A soft tone when a turn finishes — click to silence it'
-      : 'No tone when a turn finishes — click to enable';
+  b.title = bellOn
+    ? 'A soft tone when a turn finishes — click to silence it. Independent of the voice mute.'
+    : 'No tone when a turn finishes — click to enable';
 }
 $('bell-toggle').onclick = () => {
   bellOn = !bellOn;
@@ -1446,7 +1444,7 @@ $('bell-toggle').onclick = () => {
   paintBell();
   // Ring on the way ON, so the choice is audible at the moment it is made —
   // and this click is also the gesture that unlocks the audio context.
-  if (bellOn && !roomMuted) bell.ring(roomVolume);
+  if (bellOn) bell.ring(roomVolume);
 };
 // Any gesture will do; the first turn's bell should not be the one spent
 // unlocking the context.

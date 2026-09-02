@@ -287,6 +287,9 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   pin and handoff along the top, plus `→` to point Beth at it and `⌖` to find it
   on the board. Read-only on purpose: the checkboxes are
   disabled, because the harness does not write plan files.
+- **A bell**: a soft synthesised tone when a turn finishes, toggled beside the
+  volume. Deliberately *not* governed by the voice mute — that one is about her
+  voice and about not being billed, and the bell matters most when she is silent.
 - **Permission cards**: tool calls the session can't settle on its own become cards; a
   card cannot be answered by voice, so the session defaults to the SDK's
   `auto` mode and "Always" scopes its rule to the session — never written to

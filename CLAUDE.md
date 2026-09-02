@@ -307,7 +307,12 @@ These cost hours. Don't rediscover them.
 - **The end-of-turn bell is synthesised** (`ui/bell.js`) — two sine partials with
   an exponential decay, so no asset, no fetch that can 404, no dependency. It obeys
   the machine mute and volume because it is a noise this desk makes. ⚠ Rung on the
-  turn-end EDGE, never the idle level, which repeats. ⚠ `last` starts at
+  turn-end EDGE, never the idle level, which repeats. ⚠ It is INDEPENDENT of the
+  voice mute (Danny's call, from his use: he works muted). That mute is about her
+  VOICE and about not paying for audio nobody wanted; a bell costs nothing, says
+  nothing, and is most useful exactly when she is silent, because then it is the
+  only signal a turn ended. It still rides the machine VOLUME, which is a level
+  rather than a mute. ⚠ `last` starts at
   `-Infinity`: `currentTime` also starts at 0, so a zero there means the debounce
   swallows the very first bell — caught by the test, and it would have looked like
   a toggle that does nothing. ⚠ Gain is 0.28 BEFORE the machine volume: the first
