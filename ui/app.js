@@ -2617,19 +2617,80 @@ function setStreamHealth(ok, detail) {
   paintDot();
 }
 
+/**
+ * The stream can die WITHOUT anyone noticing, and that is the whole reason this
+ * exists.
+ *
+ * A half-open socket — a sleep, a network change, a proxy giving up — leaves the
+ * browser believing it is connected. No `onerror`, nothing in the console,
+ * nothing in the terminal; the page simply stops receiving. Danny's symptom was
+ * exact: bits of the conversation missing, no error anywhere, a refresh brings
+ * them back — and because POSTing a turn uses its own connection and still
+ * works, he ends up saying things twice while her answers never arrive.
+ *
+ * So the page counts the server's pulse. ⚠️ It arms only after a FIRST ping has
+ * actually landed: a harness that predates the ping never sends one, and a
+ * watchdog that armed regardless would tear down a perfectly good stream every
+ * minute against every server Danny has not restarted. Same rule as the mute —
+ * a change to what passes between page and server has to degrade, not misfire.
+ */
+const STREAM_SILENT_MS = 55_000; // pings land every 20s; three missed is dead
+let lastStreamAt = Date.now();
+let sawPing = false;
+let healedSilently = false;
+
+setInterval(() => {
+  // ⚠️ Deliberately NOT skipped for a hidden tab. A background tab is exactly
+  // where this rots unseen — two monitors, and the one you are not looking at is
+  // the one you trust when you finally look. Network events are not throttled,
+  // so its pings keep landing and a healthy hidden tab never trips this.
+  if (!sawPing) return;
+  if (Date.now() - lastStreamAt < STREAM_SILENT_MS) return;
+  // ⚠️ The note is deferred to AFTER the reconnect, not written here: `hello`
+  // clears the transcript and the replay rebuilds it, so a line written now is
+  // erased by the very reconnect it describes. It has to land at the bottom of
+  // the restored conversation, which is where he is reading.
+  healedSilently = true;
+  lastStreamAt = Date.now();
+  try {
+    stream?.close();
+  } catch {
+    /* already gone */
+  }
+  openStream();
+}, 10_000);
+
 function openStream() {
   stream = new EventSource('/api/stream');
 
   stream.onopen = () => {
     reconnectDelay = 1000;
+    lastStreamAt = Date.now();
     setStreamHealth(true);
+    // Say so rather than healing invisibly. This is rare, and when it happens
+    // the question "did I miss something?" deserves an answer — Danny's tell was
+    // repeating himself, so the note has to be where he is looking, after the
+    // replay has finished putting the conversation back.
+    if (healedSilently) {
+      healedSilently = false;
+      setTimeout(
+        () => entry('activity', (n) => (n.textContent = '⟳ the connection had gone quiet — reconnected, and this is current')),
+        800
+      );
+    }
   };
 
   stream.onmessage = (ev) => {
+    // ANY traffic is proof of life, including a message we do not render.
+    lastStreamAt = Date.now();
     let m;
     try {
       m = JSON.parse(ev.data);
     } catch {
+      return;
+    }
+    if (m.type === 'ping') {
+      sawPing = true;
       return;
     }
     // The server replays the whole history on every connect, so a RECONNECT

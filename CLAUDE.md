@@ -321,6 +321,23 @@ These cost hours. Don't rediscover them.
   to notice. ⚠ The mute silences it, so the button paints `suppressed` and says
   so — a bell switched on that never rings reads as a broken feature rather than
   as a muted desk.
+- **A stream can die with NOBODY noticing, and that is the whole bug.** A
+  half-open socket — a sleep, a network change, a proxy giving up — leaves the
+  browser believing it is connected: no `onerror`, nothing in the console,
+  nothing in the terminal. The page simply stops receiving, and because POSTing a
+  turn uses its OWN connection and still works, Danny said things twice while her
+  answers never arrived. The keepalive is now a real `{type:'ping'}` MESSAGE
+  rather than the SSE comment it was — EventSource never surfaces a comment to
+  JavaScript, so the page could not tell a quiet conversation from a dead socket.
+  One is sent immediately on connect, then every 20s; `ui/app.js` reconnects
+  after 55s of silence. ⚠ The watchdog ARMS only after a first ping lands, so a
+  harness that predates the ping is left exactly as it was instead of being torn
+  down every minute — the same degrade-don't-misfire rule as the mute. ⚠ It does
+  NOT skip hidden tabs: a background tab is precisely where this rots unseen.
+  ⚠ The "reconnected" note is written AFTER the reconnect, not before — `hello`
+  clears the transcript and the replay rebuilds it, so a line written at the
+  moment of the tear-down is erased by the very reconnect it describes.
+
   ⚠ **A page open since before a UI change is running the OLD `ui/*.js`.** Danny
   had beths up for 19 hours; nothing pushes to them and nothing warns. When a UI
   change "does not work", check the tab's age FIRST.

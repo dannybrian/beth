@@ -234,13 +234,20 @@ export function createServer(deps: {
       });
       // The keepalive is also how a half-open socket gets noticed at all: without
       // traffic, a connection the browser has already abandoned looks alive here.
+      //
+      // ⚠️ A real MESSAGE, not the SSE comment it used to be. A comment keeps the
+      // socket warm but EventSource never surfaces it to JavaScript, so the page
+      // could not tell a quiet conversation from a dead socket — and a socket
+      // that dies half-open raises no error on either side. This is the beat the
+      // page's watchdog counts. Old pages ignore it: an unknown type hits no
+      // handler and falls through, which is how it stays safe to add.
+      // ⚠️ One straight away, so the page's watchdog ARMS on connect rather than
+      // twenty seconds later — that window is a stream it cannot yet judge, and
+      // it is exactly when a reconnect is most likely to have just happened.
+      send({ type: 'ping' });
       const keepalive = setInterval(() => {
-        try {
-          res.write(': ping\n\n');
-        } catch {
-          dead = true;
-          cleanup();
-        }
+        send({ type: 'ping' });
+        if (dead) return;
       }, 20_000);
       cleanup = () => {
         clearInterval(keepalive);

@@ -159,6 +159,13 @@ export type UIMessage =
    * not replay.
    */
   | { type: 'room'; muted: boolean; volume: number }
+  /**
+   * The stream's pulse. Never published to the bus and never replayed — the
+   * server writes it straight down each connection so the PAGE has something to
+   * count. See the watchdog in ui/app.js: silence is otherwise indistinguishable
+   * from a conversation nobody is having.
+   */
+  | { type: 'ping' }
   | { type: 'cleared' }
   | { type: 'model'; model: string }
   | { type: 'permission'; mode: string }
