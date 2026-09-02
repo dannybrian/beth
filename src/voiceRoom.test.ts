@@ -165,3 +165,57 @@ test('a broken room never blocks speech', () => {
   assert.doesNotThrow(() => r.release());
   r.close();
 });
+
+// --- the dial has to correct itself -----------------------------------------
+//
+// Danny, after a night idle: "the harnesses still showed muted, but speech
+// happened anyway until I remuted." A dead fs.watch fails silently — the page
+// keeps rendering whatever it last heard, and the button then does the opposite
+// of what it shows. The poll is what makes the dial converge on the truth.
+
+test('a change reaches the callback even with the watcher dead', async () => {
+  const dir = roomDir();
+  const a = new VoiceRoom(dir);
+  const seen: boolean[] = [];
+  a.watch((s) => seen.push(s.muted), 40);
+
+  // Exactly the macOS-after-sleep case: the handle is closed, so no fs event
+  // will EVER arrive again, and nothing anywhere reports that.
+  (a as any).watcher?.close();
+  (a as any).watcher = null;
+
+  const other = new VoiceRoom(dir);
+  other.setMuted(true);
+  await new Promise((r) => setTimeout(r, 160));
+  assert.deepEqual(seen, [true], 'the poll noticed what the watcher could not');
+
+  other.setMuted(false);
+  await new Promise((r) => setTimeout(r, 160));
+  assert.deepEqual(seen, [true, false], 'and keeps noticing');
+
+  a.close();
+  other.close();
+});
+
+test('the poll does not echo a state that did not change', async () => {
+  const dir = roomDir();
+  const a = new VoiceRoom(dir);
+  const seen: boolean[] = [];
+  a.watch((s) => seen.push(s.muted), 30);
+  await new Promise((r) => setTimeout(r, 150));
+  assert.deepEqual(seen, [], 'five ticks, nothing changed, nothing published');
+  a.close();
+});
+
+test('close stops the poll', async () => {
+  const dir = roomDir();
+  const a = new VoiceRoom(dir);
+  const seen: boolean[] = [];
+  a.watch((s) => seen.push(s.muted), 30);
+  a.close();
+  const other = new VoiceRoom(dir);
+  other.setMuted(true);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.deepEqual(seen, [], 'a closed room is not still watching');
+  other.close();
+});

@@ -2873,7 +2873,9 @@ $('speech-select').onchange = (e) => post('/api/speech', { level: e.target.value
 // The machine's mute and volume. No optimistic paint on the mute: the echo is
 // one loopback SSE hop away, and the button showing the SERVER's state is the
 // same contract every other strip control keeps.
-$('mute-toggle').onclick = () => post('/api/voice/room', { muted: !roomState.muted });
+// ⚠️ Sends the INTENT, not a computed value. `!roomState.muted` was this page's
+// belief, and a page whose belief had gone stale unmuted when you clicked mute.
+$('mute-toggle').onclick = () => post('/api/voice/room', { toggleMute: true });
 {
   const slider = $('volume-slider');
   let settle = null;

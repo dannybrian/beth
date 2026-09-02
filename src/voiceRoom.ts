@@ -35,6 +35,14 @@ const STICK_TTL_MS = 12_000;
 const HEARTBEAT_MS = 4_000;
 const POLL_MS = 250;
 
+/**
+ * How often the room is re-read regardless of the watcher.
+ *
+ * Slow enough to be free, fast enough that a stale dial corrects itself before
+ * you reach for it.
+ */
+const REPOLL_MS = 3_000;
+
 export class VoiceRoom {
   private dir: string;
   private stickFile: string;
@@ -42,6 +50,8 @@ export class VoiceRoom {
   private volumeFile: string;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private watcher: fs.FSWatcher | null = null;
+  /** The backstop under fs.watch — see watch(). */
+  private repoll: ReturnType<typeof setInterval> | null = null;
   /** What the watcher last reported, so our own writes do not echo back. */
   private lastSeen: RoomState | null = null;
   private holding = false;
@@ -240,27 +250,39 @@ export class VoiceRoom {
    * dir also carries state subdirs and heartbeat churn — so every event
    * re-reads and diffs, which also absorbs platforms that omit filenames.
    */
-  watch(cb: (s: RoomState) => void) {
+  watch(cb: (s: RoomState) => void, pollMs = REPOLL_MS) {
     if (this.broken) return;
     this.lastSeen = this.state();
+    const settle = () => {
+      const now = this.state();
+      if (this.lastSeen && now.muted === this.lastSeen.muted && now.volume === this.lastSeen.volume) return;
+      this.lastSeen = now;
+      cb(now);
+    };
     try {
-      this.watcher = fs.watch(this.dir, () => {
-        const now = this.state();
-        if (this.lastSeen && now.muted === this.lastSeen.muted && now.volume === this.lastSeen.volume) return;
-        this.lastSeen = now;
-        cb(now);
-      });
+      this.watcher = fs.watch(this.dir, settle);
       this.watcher.unref?.();
     } catch (e) {
       this.broken = true;
       console.log(`  voice-room: cannot watch (${e instanceof Error ? e.message : e}) — other harnesses' dials won't reach this page live`);
     }
+    // ⚠️ A POLL under the watcher, and it is not belt-and-braces — it is the
+    // only thing that survives the case Danny hit. `fs.watch` stops delivering
+    // across a macOS sleep, and a dead watcher fails SILENTLY: the page goes on
+    // rendering whatever it last heard, so a mute that was lifted (or set) on
+    // another harness leaves this one showing the opposite of the truth, and the
+    // button then does the opposite of what it says. The dial is two tiny reads;
+    // paying for them every few seconds is nothing beside a page that lies.
+    this.repoll = setInterval(settle, pollMs);
+    this.repoll.unref?.();
   }
 
   close() {
     this.closed = true;
     this.watcher?.close();
     this.watcher = null;
+    if (this.repoll) clearInterval(this.repoll);
+    this.repoll = null;
     this.release();
   }
 }

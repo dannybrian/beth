@@ -446,7 +446,13 @@ export function createServer(deps: {
             // tell their own pages; this one tells its pages right here. Mute
             // gates lines before they are announced — never fetched, never
             // billed — where volume zero still plays (and bills), quietly.
-            if ('muted' in body) deps.room.setMuted(Boolean(body.muted));
+            // ⚠️ TOGGLE is an intent; `muted` is a computed value, and the page
+            // is the wrong place to compute it. The button sent `!roomState.muted`
+            // from whatever the page last heard, so a page holding a stale belief
+            // did the OPPOSITE of what its own icon showed — click "mute" and be
+            // unmuted. The server owns the truth, so the server does the flip.
+            if (body.toggleMute) deps.room.setMuted(!deps.room.muted());
+            else if ('muted' in body) deps.room.setMuted(Boolean(body.muted));
             if ('volume' in body) deps.room.setVolume(Number(body.volume));
             const state = deps.room.state();
             bus.publish({ type: 'room', ...state });

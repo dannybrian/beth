@@ -463,6 +463,20 @@ These cost hours. Don't rediscover them.
   stale stick is stolen only when provably dead — past TTL or dead pid, cleared by
   RENAME so two stealers cannot unlink each other's fresh stick — because a wrong steal
   cuts into a live sentence, the inverted bug that sounds like the feature working.
+  ⚠ The dial CANNOT rest on `fs.watch` alone. It stops delivering across a macOS
+  sleep and fails silently, so a page goes on rendering what it last heard —
+  Danny found three harnesses showing muted after a night idle while speech
+  played, which is the same failure whichever way the truth drifted. `watch()`
+  now runs a 3s re-read beside the watcher; it publishes only on change, so a
+  quiet room costs two `existsSync` per tick and nothing else.
+  ⚠ And the mute button sends an INTENT (`toggleMute`), never a computed
+  `muted`. It used to send `!roomState.muted` — this page's belief — so a page
+  whose belief had gone stale did the OPPOSITE of what its own icon showed. The
+  server owns the truth and does the flip.
+  ⚠ Nothing in this repo deletes `voice.mute` except an explicit unmute (the
+  creditMeter sweep matches only `credits-*.jsonl`; the stale-stick steal touches
+  only stick files) — so if it vanishes again, suspect something outside the
+  harness. The poll means the page will at least stop lying about it.
   ⚠ The mute is checked at THREE points, not one, and the extra two are why
   Danny stopped hearing lines after clicking it. The bus-subscription gate runs
   when she WRITES; the line then waits — for TTS, and for the stick, which blocks
