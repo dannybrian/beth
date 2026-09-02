@@ -469,10 +469,17 @@ These cost hours. Don't rediscover them.
   played, which is the same failure whichever way the truth drifted. `watch()`
   now runs a 3s re-read beside the watcher; it publishes only on change, so a
   quiet room costs two `existsSync` per tick and nothing else.
-  ⚠ And the mute button sends an INTENT (`toggleMute`), never a computed
-  `muted`. It used to send `!roomState.muted` — this page's belief — so a page
-  whose belief had gone stale did the OPPOSITE of what its own icon showed. The
-  server owns the truth and does the flip.
+  ⚠ And the mute button sends an INTENT (`toggleMute`) **and** a computed
+  `muted`, and the pair is load-bearing. The intent is preferred by the server,
+  so a page whose belief has gone stale cannot do the opposite of what its own
+  icon shows. The computed value is the FALLBACK for a server that predates the
+  intent — and that is not a theoretical case: `ui/` is served fresh from disk on
+  every load while the harness is a process that has been up for days, so a
+  reload routinely pairs a NEW page with an OLD server. Shipping only the intent
+  made the button do nothing at all there. ⚠ This cuts both ways and is the
+  general rule: a change to the page↔server contract must degrade on an old
+  server, or it breaks every harness Danny has not restarted — the mirror of the
+  stale-tab gotcha below.
   ⚠ Nothing in this repo deletes `voice.mute` except an explicit unmute (the
   creditMeter sweep matches only `credits-*.jsonl`; the stale-stick steal touches
   only stick files) — so if it vanishes again, suspect something outside the

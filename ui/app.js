@@ -2873,9 +2873,19 @@ $('speech-select').onchange = (e) => post('/api/speech', { level: e.target.value
 // The machine's mute and volume. No optimistic paint on the mute: the echo is
 // one loopback SSE hop away, and the button showing the SERVER's state is the
 // same contract every other strip control keeps.
-// ⚠️ Sends the INTENT, not a computed value. `!roomState.muted` was this page's
-// belief, and a page whose belief had gone stale unmuted when you clicked mute.
-$('mute-toggle').onclick = () => post('/api/voice/room', { toggleMute: true });
+/**
+ * ⚠️ BOTH, and the pair is the point.
+ *
+ * `toggleMute` is the intent, and a new server prefers it — a page whose belief
+ * has gone stale then cannot do the opposite of what its own icon shows.
+ * `muted` is the computed fallback for a server that predates the intent, and it
+ * is not optional: `ui/` is served fresh from disk on every load while the
+ * harness is a process that has been up for days, so a reload pairs a NEW page
+ * with an OLD server routinely. Sending only the intent made the button do
+ * nothing at all there — dead, not stale, which is worse.
+ */
+$('mute-toggle').onclick = () =>
+  post('/api/voice/room', { toggleMute: true, muted: !roomState.muted });
 {
   const slider = $('volume-slider');
   let settle = null;
