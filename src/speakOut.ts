@@ -70,6 +70,24 @@ export class SpeakOut {
   /** Whether her turn is in flight — the signal that more lines are coming. */
   private turnBusy = false;
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Lines asked for by a click, which the mute does not reach. */
+  private explicit = new Set<string>();
+  /** True only for the synchronous span of an explicit `speak()`. */
+  private explicitNext = false;
+
+  /**
+   * Was this line ASKED for?
+   *
+   * ⚠️ Both halves are needed and they cover different moments. `explicitNext`
+   * covers the synchronous span inside `speak()`, where the id is not yet
+   * registered because `mouth.speak` calls back before it returns; the set
+   * covers everything after, where a line can sit on the stick for seconds.
+   * Checking only one drops the reread on a muted machine — silently, since a
+   * click that plays nothing is indistinguishable from a click that missed.
+   */
+  private isExplicit(id: string) {
+    return this.explicitNext || this.explicit.has(id);
+  }
   /** Injectable so the backstop and linger paths are testable in milliseconds. */
   private backstop: (chars: number) => number;
   private linger: (turnBusy: boolean) => number;
@@ -168,6 +186,12 @@ export class SpeakOut {
   }
 
   private onLine(line: { id: string; chars: number }) {
+    // ⚠️ The mute is checked AGAIN here, not only at the subscription. The two
+    // are far apart in time: the subscription gate runs when she writes, and a
+    // line then waits — for the TTS request, and for the talking stick, which
+    // can block for as long as another beth is mid-sentence. Danny muted and
+    // still heard a line, because it had already passed the only gate there was.
+    if (this.room?.muted() && !this.isExplicit(line.id)) return;
     // No room, or no page connected: publish straight through. With no
     // audience nothing will play, and taking the stick would let a boot with
     // no tab yet (the greeting races the browser opening) silence every other
@@ -181,6 +205,12 @@ export class SpeakOut {
   }
 
   private pump() {
+    // The last gate, and the one that catches a mute landing DURING a wait —
+    // `acquire()` resolves into here, so a line that queued before the mute and
+    // won the stick after it would otherwise publish as if nothing happened.
+    // Dropped rather than deferred: unmuting replays nothing, because by then
+    // it is news that has passed. Never fetched, so never billed.
+    if (this.room?.muted()) this.dropQueued();
     if (!this.queue.length || this.waiting) return;
     // A new line lands inside the linger: the thought continues on the same hold.
     if (this.releaseTimer) {
@@ -228,6 +258,8 @@ export class SpeakOut {
    * down once each, not feed each other.
    */
   playbackDone(ids: string[], opts?: { fromBackstop?: boolean }) {
+    // Done is done: the bypass was for getting it played, not a standing pass.
+    this.forget(ids);
     for (const id of ids) {
       const a = this.awaiting.get(id);
       if (a?.timer) clearTimeout(a.timer);
@@ -263,6 +295,31 @@ export class SpeakOut {
     this.releaseTimer.unref?.();
   }
 
+  /**
+   * Throw away what was queued and let the floor go.
+   *
+   * ⚠️ Must release: the stick is machine-wide, so holding it for lines nobody
+   * will ever hear is how a mute on THIS harness silences the other two — the
+   * same class of bug as a page that ends a line without reporting it.
+   */
+  private forget(ids: string[]) {
+    for (const id of ids) this.explicit.delete(id);
+  }
+
+  private dropQueued() {
+    // A clicked line is kept: the mute is about what she volunteers, and this
+    // was asked for. Everything else goes.
+    this.queue = this.queue.filter((l) => this.isExplicit(l.id));
+    if (this.queue.length) return;
+    if (this.releaseTimer) {
+      clearTimeout(this.releaseTimer);
+      this.releaseTimer = null;
+    }
+    // Anything already published is the page's to finish; its own stop() reports
+    // those back, which is what clears `awaiting` and releases from there.
+    if (this.holding && !this.awaiting.size) this.releaseNow();
+  }
+
   private releaseNow() {
     this.holding = false;
     this.room?.release();
@@ -290,8 +347,28 @@ export class SpeakOut {
     return this.mouth.lastError;
   }
 
+  /**
+   * Say this, because someone clicked. Bypasses the mute on purpose — the same
+   * rule that lets a reread speak at level `off`: an explicit request is not
+   * ambience. The stick still applies; explicit is not a licence to overlap.
+   *
+   * ⚠️ The id is REMEMBERED, because the mute is re-checked further down the
+   * pipe now (a held line can outlive the mute that should have stopped it) and
+   * those checks cannot otherwise tell this line from one she simply wrote.
+   */
   speak(raw: string): string | null {
-    return this.mouth.speak(raw);
+    // ⚠️ The flag is set BEFORE the call, not after: `mouth.speak` invokes
+    // `onLine` synchronously, so there is no id to register until it has already
+    // been through every gate below. The id is recorded too, for the gates that
+    // run later — the stick can hold a line long after this returns.
+    this.explicitNext = true;
+    try {
+      const id = this.mouth.speak(raw);
+      if (id) this.explicit.add(id);
+      return id;
+    } finally {
+      this.explicitNext = false;
+    }
   }
 
   textFor(id: string): string | null {

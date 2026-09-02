@@ -351,3 +351,81 @@ test('at level off a decision is silent like everything else', () => {
   bus.publish({ type: 'pending', decisions: [decision('d2', 'Anything')], workers: [] });
   assert.equal(spoken(seen).length, 0);
 });
+
+// --- a mute that arrives while a line is in flight ---------------------------
+//
+// Danny: "I still get spoken text sometimes, right after I click mute, like
+// something snuck through or was queued." It had. The subscription gate runs
+// when she WRITES; the line then waits — for TTS, and for the talking stick,
+// which blocks for as long as another beth is mid-sentence. A mute landing in
+// that window used to change nothing, because the only gate was already behind
+// the line.
+
+test('a line already queued does not publish once the mute lands', async () => {
+  const dir = roomDir();
+  const room = new VoiceRoom(dir);
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg(), bus, room);
+  s.setAudience(() => true);
+
+  // Another beth holds the floor, so ours queues rather than publishing.
+  const rival = new VoiceRoom(dir);
+  assert.equal(rival.tryAcquire(), true);
+
+  bus.publish({ type: 'assistant', text: 'Something long she was going to say.' });
+  assert.equal(spoken(seen).length, 0, 'held behind the stick');
+
+  room.setMuted(true);
+  rival.release();
+  // ⚠️ Long enough for acquire() to actually resolve — it polls every 250ms, and
+  // a shorter wait made this pass against the BROKEN code, which is worse than
+  // no test: nothing had published yet either way.
+  await new Promise((r) => setTimeout(r, 700));
+  assert.equal(spoken(seen).length, 0, 'the mute reached the line that was waiting');
+  rival.close();
+  room.close();
+});
+
+test('the stick is let go when a muted queue is dropped', async () => {
+  // Holding a machine-wide stick for lines nobody will hear is how a mute on
+  // THIS harness silences the other two.
+  const dir = roomDir();
+  const room = new VoiceRoom(dir);
+  const { bus } = recording();
+  const s = new SpeakOut(cfg(), bus, room, { lingerMs: () => 0 });
+  s.setAudience(() => true);
+
+  // A neighbour has the floor, so our line queues and waits on acquire().
+  const rival = new VoiceRoom(dir);
+  assert.equal(rival.tryAcquire(), true);
+  bus.publish({ type: 'assistant', text: 'A line that wants the floor.' });
+
+  room.setMuted(true);
+  rival.release();
+  // Our acquire() resolves into pump(), which must drop the line AND let go
+  // rather than sit on a stick it took for something it will never say.
+  // ⚠️ 700ms because acquire() polls every 250 — see the note above.
+  await new Promise((r) => setTimeout(r, 700));
+
+  const next = new VoiceRoom(dir);
+  assert.equal(next.tryAcquire(), true, 'the floor came back');
+  next.close();
+  rival.close();
+  room.close();
+});
+
+test('a reread still speaks on a muted machine, stick and all', () => {
+  // The bypass has to survive every new gate — a click that plays nothing is
+  // indistinguishable from a click that missed.
+  const dir = roomDir();
+  const room = new VoiceRoom(dir);
+  room.setMuted(true);
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg(), bus, room);
+  s.setAudience(() => true);
+  const id = s.speak('Read that back.');
+  assert.ok(id);
+  assert.equal(spoken(seen).length, 1);
+  s.playbackDone([id!]);
+  room.close();
+});

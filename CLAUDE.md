@@ -463,6 +463,18 @@ These cost hours. Don't rediscover them.
   stale stick is stolen only when provably dead — past TTL or dead pid, cleared by
   RENAME so two stealers cannot unlink each other's fresh stick — because a wrong steal
   cuts into a live sentence, the inverted bug that sounds like the feature working.
+  ⚠ The mute is checked at THREE points, not one, and the extra two are why
+  Danny stopped hearing lines after clicking it. The bus-subscription gate runs
+  when she WRITES; the line then waits — for TTS, and for the stick, which blocks
+  as long as another beth is mid-sentence — so `onLine` and `pump` re-check, and
+  `pump` DROPS what it finds (unmuting replays nothing; by then it is news that
+  has passed) and lets the stick go with it. ⚠ The reread bypass has to survive
+  all three: `explicitNext` covers the synchronous span inside `speak()`, where
+  `mouth.speak` calls back before returning an id to register, and the id set
+  covers every gate after. ⚠ The tests for this were VACUOUS at first and passed
+  against the broken code — `acquire()` polls every 250ms and the waits were
+  60ms, so nothing had published either way. Wait past the poll, and check a new
+  test fails without the fix.
   Every way a line ends on the page (played, refused, errored, stopped) must reach
   `report` in `speaker.js`; an unreported ending holds every other beth quiet with no
   symptom on the page that caused it.
