@@ -330,7 +330,13 @@ These cost hours. Don't rediscover them.
   rather than the SSE comment it was — EventSource never surfaces a comment to
   JavaScript, so the page could not tell a quiet conversation from a dead socket.
   One is sent immediately on connect, then every 20s; `ui/app.js` reconnects
-  after 55s of silence. ⚠ The watchdog ARMS only after a first ping lands, so a
+  after 55s of silence. ⚠ There is a SECOND watchdog beside it that needs no
+  server cooperation at all, and it is the one that covers a harness which has
+  been up for days: the page does not render your own words locally — it waits
+  for the bus to echo them — so a turn that does not come back within 6s proves
+  the stream has stopped CARRYING, whatever it claims about being open. It
+  rebuilds, and the replay puts the missing turn back (verified: a turn published
+  with no stream attached is still in history). ⚠ The watchdog ARMS only after a first ping lands, so a
   harness that predates the ping is left exactly as it was instead of being torn
   down every minute — the same degrade-don't-misfire rule as the mute. ⚠ It does
   NOT skip hidden tabs: a background tab is precisely where this rots unseen.

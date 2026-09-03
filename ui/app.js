@@ -2634,12 +2634,44 @@ function setStreamHealth(ok, detail) {
  * minute against every server Danny has not restarted. Same rule as the mute —
  * a change to what passes between page and server has to degrade, not misfire.
  */
+/**
+ * A turn you sent that never came back.
+ *
+ * The page does not render your own words locally — it waits for the bus to echo
+ * them, so every tab agrees and the ordering is the server's. That makes an
+ * unnoticed dead stream look precisely like Danny described: you type, the
+ * composer empties, and nothing appears. His words for it were "I don't see my
+ * own answer without a refresh."
+ *
+ * ⚠️ This is the check that needs NO cooperation from the server, which is why it
+ * exists alongside the ping. The ping proves the stream is alive but only against
+ * a harness new enough to send one; this proves the stream is CARRYING, using a
+ * fact the page already owns — I sent something, so it must come back. An old
+ * harness gets the benefit too, and that matters because the ones that have been
+ * up for days are exactly the ones whose sockets have had time to rot.
+ */
+const ECHO_GRACE_MS = 6_000;
+let awaitingEchoSince = 0;
+
+function expectEcho() {
+  if (!awaitingEchoSince) awaitingEchoSince = Date.now();
+}
+
 const STREAM_SILENT_MS = 55_000; // pings land every 20s; three missed is dead
 let lastStreamAt = Date.now();
 let sawPing = false;
 let healedSilently = false;
 
 setInterval(() => {
+  // A turn that never echoed is proof the stream has stopped carrying, whatever
+  // it claims about being open. Rebuild it: the replay holds the missing turn
+  // (verified — a turn published with no stream attached is still in history),
+  // so the reconnect is what puts his words back on the page.
+  if (awaitingEchoSince && Date.now() - awaitingEchoSince > ECHO_GRACE_MS) {
+    awaitingEchoSince = 0;
+    rebuildStream('your message did not come back');
+    return;
+  }
   // ⚠️ Deliberately NOT skipped for a hidden tab. A background tab is exactly
   // where this rots unseen — two monitors, and the one you are not looking at is
   // the one you trust when you finally look. Network events are not throttled,
@@ -2650,7 +2682,11 @@ setInterval(() => {
   // clears the transcript and the replay rebuilds it, so a line written now is
   // erased by the very reconnect it describes. It has to land at the bottom of
   // the restored conversation, which is where he is reading.
-  healedSilently = true;
+  rebuildStream('the connection went quiet');
+}, 2_500);
+
+function rebuildStream(why) {
+  healedSilently = why;
   lastStreamAt = Date.now();
   try {
     stream?.close();
@@ -2658,7 +2694,7 @@ setInterval(() => {
     /* already gone */
   }
   openStream();
-}, 10_000);
+}
 
 function openStream() {
   stream = new EventSource('/api/stream');
@@ -2672,9 +2708,10 @@ function openStream() {
     // repeating himself, so the note has to be where he is looking, after the
     // replay has finished putting the conversation back.
     if (healedSilently) {
+      const why = healedSilently;
       healedSilently = false;
       setTimeout(
-        () => entry('activity', (n) => (n.textContent = '⟳ the connection had gone quiet — reconnected, and this is current')),
+        () => entry('activity', (n) => (n.textContent = `⟳ ${why} — reconnected, and this is current`)),
         800
       );
     }
@@ -2693,6 +2730,8 @@ function openStream() {
       sawPing = true;
       return;
     }
+    // Our own words came back — whichever tab sent them, the stream is carrying.
+    if (m.type === 'user') awaitingEchoSince = 0;
     // The server replays the whole history on every connect, so a RECONNECT
     // would append the entire transcript a second time. `hello` arrives first on
     // each connection, which makes it the reliable signal to start clean.
@@ -2803,6 +2842,7 @@ const send = () => {
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
   post('/api/turn', { text, refs, seq: ++pointSeq });
+  expectEcho();
   refs = [];
   renderRefs();
 };
