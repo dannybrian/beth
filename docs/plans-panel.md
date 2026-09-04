@@ -106,7 +106,7 @@ Building this feature *is* Phase 4.
 Almost all of it is harness-side: the watcher, the index, the panel, the tool, and the
 `/plans` reader all live in this repo. beadgame contributes only its existing plans.
 
-So: **build it from a fresh session in `director-harness`**, with this document as the
+So: **build it from a fresh session in `beth`**, with this document as the
 handoff. Give that session read access to a real corpus — `--add-dir ~/Sources/beadgame`
 — because the reader must be written against real frontmatter and real `INDEX.json`,
 not against an idea of them. Test by running `beth` from beadgame as usual; the harness
