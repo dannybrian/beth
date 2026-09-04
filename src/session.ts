@@ -23,7 +23,7 @@ import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
 import { WireTap } from './wireTap.ts';
 import type { Workbench } from './workbench.ts';
-import type { Suggestion } from './suggestion.ts';
+import { bootSuggestion, type Suggestion } from './suggestion.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -607,6 +607,14 @@ export class SessionManager {
     // The page drops the ghost on `cleared` too, but the server's copy is what
     // the next connection is sent.
     this.suggestion.reset();
+    // A cleared conversation is a new one, so it gets the same opening line the
+    // boot does — shown at once rather than seeded, because no greeting is
+    // coming to wait for and nothing is in flight to interrupt. AFTER `cleared`,
+    // which is the page's instruction to empty everything, this one included.
+    // ⚠️ `directorName()` is read here, not captured: a persona switch clears as
+    // its last act, so this is already the new director being said hello to.
+    const opening = this.suggestion.show(bootSuggestion(this.directorName()));
+    if (opening) this.bus.publish(opening);
     this.thinking = false;
     this.bus.publish({ type: 'status', state: 'idle' });
   }

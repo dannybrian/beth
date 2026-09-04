@@ -423,6 +423,27 @@ These cost hours. Don't rediscover them.
   Tab accepts from the field or from body focus only — inside a settings box it
   means Tab. Escape on an empty box dismisses the ghost locally, before it
   means stop.
+  ⚠ The FIRST one is not hers: `main.ts` seeds "Hey, <her name>, good morning!
+  Bring me up to speed." (afternoon and evening as the clock says) before the
+  greeting turn starts, because the reply that is always obvious is the opening
+  one and there is no turn she could have offered it in. It is the reply to the GREETING, so it survives
+  exactly one `turnStarted` (which promotes it to `held`) and is then ordinary
+  — an interrupted greeting shows nothing, and her own `suggest_reply` in that
+  turn wins. Seeded ONLY when a kickoff runs: with `HARNESS_NO_KICKOFF` the
+  next turn to end is Danny's own first sentence, and an opening line under
+  that is a reply to nobody. The SHAPE is fixed on purpose — her greeting must
+  differ every morning because it is read, this must not because it is used —
+  and the only part that moves is the time of day, because that is the only
+  part that would be WRONG rather than repetitive. ⚠ The hour is read when the
+  line is BUILT: the harness runs for days, so a boot-time answer would still
+  say good morning at midnight. The small hours count as evening, which is why
+  the afternoon band is bounded at both ends.
+  ⚠ A `/clear` (and a persona switch, which ends in one) is a new conversation
+  too, so `session.clear()` puts the same line back — but with `show()`, not
+  `seed()`: no greeting is coming to wait for, and nothing is in flight for a
+  Tab-Enter to interrupt. Published AFTER `cleared`, which is the page's
+  instruction to empty everything. The name is read at that moment rather than
+  captured, because the persona is already the new one by then.
 
 - **The numbers hang from the STRIP** (2026-09-01). `.stats` moved from
   `bottom: 78px` to `top: 44px`: the controls that open it are the top-right

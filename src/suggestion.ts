@@ -35,6 +35,34 @@ export type SuggestionMessage = { type: 'suggestion'; text: string | null };
  */
 export const SUGGESTION_MAX = 160;
 
+/**
+ * The opening line, written in his voice and seeded at boot.
+ *
+ * Fixed SHAPE on purpose, and that is the opposite of the rule her greeting
+ * lives under: hers has to be different every morning (greeting.ts) because it
+ * is a sentence he READS, while this is a control he USES — one that changed
+ * shape each boot would have to be read before it could be taken.
+ *
+ * The one thing that does move is the time of day, because it is the one thing
+ * that would otherwise be WRONG rather than merely repetitive: a clear at four
+ * in the afternoon puts a "good morning" in his composer, and a line he has to
+ * edit before sending is worse than an empty box. Read at the moment the line
+ * is built, never captured — the harness runs for days, so a boot-time answer
+ * would still be saying good morning at midnight.
+ *
+ * ⚠️ The night belongs to the evening. Danny works late, and the alternative to
+ * calling 1am "evening" is a fourth branch with something knowing in it, which
+ * is a joke that stops being funny the second time it is read.
+ */
+export function bootSuggestion(name: string, now: Date = new Date()): string {
+  const h = now.getHours();
+  // ⚠️ The small hours fall through to the evening, which means the afternoon
+  // band has to be BOUNDED at both ends — an `h < 18` tail alone wishes him a
+  // good afternoon at one in the morning.
+  const partOfDay = h >= 5 && h < 12 ? 'good morning' : h >= 12 && h < 18 ? 'good afternoon' : 'good evening';
+  return `Hey, ${name}, ${partOfDay}! Bring me up to speed.`;
+}
+
 export function vetSuggestion(raw: unknown): { ok: true; text: string } | { ok: false; reason: string } {
   if (typeof raw !== 'string') return { ok: false, reason: 'pass `text`, the reply as he would type it' };
   // One line: newlines and runs of whitespace collapse. A two-line suggestion
@@ -52,6 +80,8 @@ export class Suggestion {
   private held: string | null = null;
   /** What the page shows now. */
   private shown: string | null = null;
+  /** The boot line, waiting for the greeting turn it answers. See seed(). */
+  private seeded: string | null = null;
 
   current(): string | null {
     return this.shown;
@@ -62,11 +92,48 @@ export class Suggestion {
     return { type: 'suggestion', text: this.shown };
   }
 
+  /**
+   * The opening line, put there by the harness rather than offered by her
+   * (main.ts, bootSuggestion above). The one reply that is always obvious is
+   * the FIRST one — bring me up to speed — and a fresh page has no turn she
+   * could have offered it in: she is still writing her greeting, and the whole
+   * point of the ghost text is that it is already in the box when he arrives.
+   *
+   * It is a reply to the GREETING, so it is seeded before that turn starts and
+   * survives exactly one clearing: `turnStarted` moves it into `held`, and
+   * from there it is an ordinary offer — shown when the greeting lands cleanly,
+   * dropped if he interrupted it, replaced if she offers something better.
+   * ⚠ Seed it only when a greeting is actually going to run. With no boot turn
+   * the next turn to end is Danny's own first sentence, and an opening line
+   * sitting under that is a reply to nobody.
+   */
+  seed(raw: unknown): { ok: true; text: string } | { ok: false; reason: string } {
+    const vetted = vetSuggestion(raw);
+    if (vetted.ok) this.seeded = vetted.text;
+    return vetted;
+  }
+
   /** Her offer. A second offer in the same turn replaces the first. */
   offer(raw: unknown): { ok: true; text: string } | { ok: false; reason: string } {
     const vetted = vetSuggestion(raw);
     if (vetted.ok) this.held = vetted.text;
     return vetted;
+  }
+
+  /**
+   * Show a line at once, with no turn to wait for — the opening line on a
+   * conversation that has just been cleared. The difference from boot is that
+   * NOTHING is in flight: at boot she is mid-greeting, and ghost text under an
+   * unfinished sentence invites a Tab-Enter that lands as an interrupt, but a
+   * cleared page has an empty transcript and an idle session, so the reply
+   * that is obvious there can simply be sitting in the box. Returns the
+   * message when something changed, so a caller publishes only on change.
+   */
+  show(raw: unknown): SuggestionMessage | null {
+    const vetted = vetSuggestion(raw);
+    if (!vetted.ok || this.shown === vetted.text) return null;
+    this.shown = vetted.text;
+    return this.message();
   }
 
   /**
@@ -77,7 +144,12 @@ export class Suggestion {
    * caller publishes only on change.
    */
   turnStarted(): SuggestionMessage | null {
-    this.held = null;
+    // The boot seed answers the turn now BEGINNING — her greeting — not the one
+    // that just ended, so it survives this clearing by becoming what is held.
+    // Exactly this one: `seeded` is spent here and every later turn finds it
+    // empty, which is the same as the old `this.held = null`.
+    this.held = this.seeded;
+    this.seeded = null;
     if (this.shown === null) return null;
     this.shown = null;
     return this.message();
@@ -98,6 +170,9 @@ export class Suggestion {
 
   /** Everything gone — /clear. Same contract as turnStarted. */
   reset(): SuggestionMessage | null {
+    // Everything means the seed too: a clear leaves no greeting for it to be
+    // the reply to.
+    this.seeded = null;
     return this.turnStarted();
   }
 }

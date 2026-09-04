@@ -18,7 +18,7 @@ import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFile
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { Workbench } from './workbench.ts';
-import { Suggestion } from './suggestion.ts';
+import { Suggestion, bootSuggestion } from './suggestion.ts';
 import { ensurePersonasDir } from './personas.ts';
 import { VoiceRoom } from './voiceRoom.ts';
 import { CreditMeter, anyWindowExhausted } from './creditMeter.ts';
@@ -154,6 +154,13 @@ const kickoff = process.env.HARNESS_NO_KICKOFF
     ]
       .filter(Boolean)
       .join('\n\n');
+// The first reply is the one reply that is always obvious, and there is no turn
+// she could have offered it in — so the harness puts it in the composer itself,
+// as the reply to the greeting about to be written. Only when there IS one: see
+// Suggestion.seed for why an opening line under his own first sentence is worse
+// than none. Her name, not the harness's — a ghost line addressing a stranger
+// is the same mistake as a permission card that says "Claude".
+if (kickoff) suggestion.seed(bootSuggestion(session.directorName()));
 const { resumed } = session.start(kickoff);
 
 // Remember what she actually said, which is the only input that makes the NEXT
