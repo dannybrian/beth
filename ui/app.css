@@ -1379,15 +1379,15 @@ button.tpaste:hover { color: var(--text); border-color: var(--muted); }
   color: var(--muted);
 }
 #pending-overlay .sheet h2:first-child { margin-top: 0; }
-#pending-overlay .sheet > .meta { color: var(--muted); font-size: 12.5px; }
+#pending-overlay .sheet > .meta { color: var(--muted); font-size: 14.5px; }
 /* The panel's cards, given room: whole context readable, options side by side. */
-#pending-overlay .sheet .item { font-size: 13px; }
-#pending-overlay .sheet .dcontext { font-size: 12.5px; color: var(--text); }
+#pending-overlay .sheet .item { font-size: 15px; }
+#pending-overlay .sheet .dcontext { font-size: 14.5px; color: var(--text); }
 #pending-overlay .sheet .dbody button.opt {
   display: inline-block;
   width: auto;
   margin-right: 6px;
-  font-size: 12.5px;
+  font-size: 14.5px;
 }
 
 /* A plan she referenced, just revealed. One slow fade and gone: the row has to
