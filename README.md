@@ -300,8 +300,8 @@ commit, what's in flight, the clock, the gap since the harness was last up.
 - **The strip**: the plan's five-hour and seven-day windows and this session's
   context, model, reasoning
   effort, speech level, persona — all live, all showing what the *server*
-  believes rather than what was clicked. Two lights on the right: tests, and a
-  build you fire from the strip (keypad 1 and 2), and the same light again in
+  believes rather than what was clicked. Two lights on the right: tests and
+  build — click to look, keypad 1 and 2 to fire — and the same light again in
   the tab title, where it is the only part of the page you can see while
   looking at something else. The tab also front-loads what wants *you*: `(N)`
   for queued decisions, and `❗` when Beth is stopped on a card in the

@@ -1269,6 +1269,11 @@ button.topt {
   cursor: pointer;
 }
 button.topt.ghost { background: none; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
+/* Both buttons of a pair stay on the page and take turns being live, so the
+   panel keeps its shape across a press. Dimmed rather than hidden: a Stop that
+   appears only mid-run is a control you have to hunt for at the one moment it
+   matters. */
+button.topt:disabled { opacity: 0.4; cursor: default; }
 /* A failure is a thing you point at, so it looks like the plan rows do — and the
    paste sits INSIDE that frame, because it is a second way to use the same row
    rather than a second row. */

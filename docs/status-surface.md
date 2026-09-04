@@ -209,3 +209,17 @@ The session now treats the prediction itself as the proof: the first
 one, whoever started the turn, and the `result` closes it as before
 (`session.ts`, the `thinking` flag). The dot/spinner split above is unchanged;
 what changed is that the spinner's input is now the stream, not the send.
+
+## Dated correction — 2026-09-04 (the build light's click)
+
+The build light's click used to RUN the build, on the argument that kicking one
+off fast was the point of having it in the strip. From use it was the wrong
+gesture: opening the panel to read the last failure started another build over
+the tree still being edited, and a look had a cost the test light's look did
+not. The two lights now share one gesture — a click opens the panel — and the
+keypad (1 for the build, 2 for the tests) is the only trigger on the page: it
+runs AND opens, so the output is where the eye already is. In the panel the
+Build and Stop buttons are both always present and take turns being live, the
+Build one reading "Building…" while it is; the test panel's Run button does the
+same. Dimmed rather than hidden, because a Stop that appears only mid-run is a
+control you hunt for at the one moment it matters.

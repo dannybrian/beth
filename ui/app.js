@@ -427,7 +427,7 @@ function renderDecision(d) {
   return n;
 }
 
-/** A worker card — shared by the side panel and the queue overlay. */
+/** A worker card, for the side panel's roster. */
 function renderWorker(w) {
   const n = el('div', 'item running');
   n.append(el('div', null, w.description));
@@ -672,36 +672,50 @@ $('bench-clear').onclick = () => post('/api/workbench', {});
  * The queue, full size. The side panel's cards squeezed into 34vh are fine to
  * glance at and miserable to WORK: context clipped, options below the fold,
  * scrolling inside a scrolling column. This renders the same immutable records
- * (renderDecision — fresh nodes, the panel's cache keeps its own) with room to
- * read and answer them.
+ * with room to read and answer them. Decisions only: the workers used to be
+ * listed underneath, and a roster nobody opened the sheet to see was the reason
+ * the sheet kept rebuilding (below).
+ *
+ * ⚠️ The cards are CACHED by decision id, exactly as the panel's are — a second
+ * cache rather than the panel's, because one node cannot be in two places. The
+ * first version built fresh nodes on every change to the pending SET, and that
+ * set included the workers: a worker finishing replaced the card Danny was
+ * halfway through answering with an empty one, mid-sentence, which is the same
+ * bug `decisionNodes` exists to fix, one surface over. The cache also outlives a
+ * close — Escape while typing, then reopening, finds the words still there.
  */
 let pendingOverlayOpen = false;
 let lastPending = { decisions: [], workers: [] };
-/** What the overlay last built, so a worker heartbeat does not rebuild a card mid-answer. */
+const overlayNodes = new Map();
+/** What the overlay last laid out, so an unchanged queue touches no DOM at all. */
 let overlaySig = null;
 
 function renderPendingOverlay() {
-  const sig = `${lastPending.decisions.map((d) => d.id).join(',')}|${lastPending.workers.map((w) => w.taskId).join(',')}`;
+  const sig = lastPending.decisions.map((d) => d.id).join(',');
   if (sig === overlaySig) return;
   overlaySig = sig;
+  const live = new Set(lastPending.decisions.map((d) => d.id));
+  for (const id of overlayNodes.keys()) if (!live.has(id)) overlayNodes.delete(id);
   const sheet = $('pending-sheet');
   keepingFocus(sheet, () => {
     const kids = [el('h2', null, 'Pending')];
     if (!lastPending.decisions.length) kids.push(el('div', 'meta', 'Nothing waiting.'));
     for (const d of lastPending.decisions) {
-      const n = renderDecision(d);
-      n.classList.add('open'); // full size is the point — no second unfold
+      let n = overlayNodes.get(d.id);
+      if (!n) {
+        n = renderDecision(d);
+        n.classList.add('open'); // full size is the point — no second unfold
+        overlayNodes.set(d.id, n);
+      }
       kids.push(n);
-    }
-    if (lastPending.workers.length) {
-      kids.push(el('h2', null, 'Workers'));
-      for (const w of lastPending.workers) kids.push(renderWorker(w));
     }
     sheet.replaceChildren(...kids);
   });
 }
 
 function openPendingOverlay() {
+  // The sheet is not kept in step while hidden, so lay it out again on open —
+  // the cached cards make that a reorder, not a rebuild.
   overlaySig = null;
   renderPendingOverlay();
   $('pending-overlay').hidden = false;
@@ -711,7 +725,6 @@ function openPendingOverlay() {
 function closePendingOverlay() {
   $('pending-overlay').hidden = true;
   pendingOverlayOpen = false;
-  overlaySig = null;
 }
 $('pending-overlay').onclick = (e) => {
   if (!e.target.closest('.sheet')) closePendingOverlay();
@@ -1670,7 +1683,11 @@ function renderTestPanel() {
   const toggle = el('button', 'topt', s.enabled ? 'Stop watching' : 'Watch this repo');
   toggle.onclick = () => post('/api/tests/enable', { on: !s.enabled });
   box.append(toggle);
-  const now = el('button', 'topt ghost', 'Run now');
+  // Says what it is doing while it does it. The runner already refuses to
+  // overlap itself, so disabling is not what stops a second run — it is what
+  // stops the press from looking like it did nothing.
+  const now = el('button', 'topt ghost', s.running ? 'Running…' : 'Run now');
+  now.disabled = s.running;
   now.onclick = () => post('/api/tests/run');
   box.append(now);
 
@@ -1835,12 +1852,14 @@ function toggleGear(open = !gearOpen) {
 
 // --- the build light ---------------------------------------------------------
 //
-// The test light's colours, and the opposite gesture. That one is a READOUT you
-// click to inspect; this one is a TRIGGER — clicking runs the build, because
-// kicking one off quickly is the whole point of it being in the strip. The panel
-// opens with the run so the output is where you are already looking, and while a
-// build is in flight the click is only the panel: a second press must not pile
-// another build on top of the first.
+// The test light's colours and the test light's gesture: a READOUT you click to
+// inspect, with the panel holding the controls. It used to be the opposite — a
+// click RAN the build — and that made a look cost a build: opening the panel to
+// read the last failure kicked off another run over the top of the tree you were
+// still editing. The quick trigger is the keypad (`buildNow`), which runs AND
+// opens, so the output is where you are already looking. The two buttons are
+// always both there and take turns being live, so the panel's shape never
+// changes under the cursor between a press and the state that follows it.
 
 let buildState = null;
 let buildPanelOpen = false;
@@ -1890,15 +1909,14 @@ function renderBuildPanel() {
   cmd.title = `detected from ${s.why}`;
   box.append(cmd);
 
-  if (s.running) {
-    const stop = el('button', 'topt ghost', 'Stop');
-    stop.onclick = () => post('/api/build/stop');
-    box.append(stop);
-  } else {
-    const again = el('button', 'topt', s.last ? 'Build again' : 'Build now');
-    again.onclick = () => post('/api/build/run');
-    box.append(again);
-  }
+  const run = el('button', 'topt', s.running ? 'Building…' : 'Build');
+  run.disabled = s.running;
+  run.onclick = () => post('/api/build/run');
+  box.append(run);
+  const stop = el('button', 'topt ghost', 'Stop');
+  stop.disabled = !s.running;
+  stop.onclick = () => post('/api/build/stop');
+  box.append(stop);
 
   const r = s.last;
   if (!r) return void (s.running || box.append(el('div', 'snote', 'no build yet')));
@@ -1939,9 +1957,9 @@ function toggleBuildPanel(open = !buildPanelOpen) {
 }
 
 /**
- * The click, and the key. Runs unless one is already running — in which case
- * this is just a way to look at it, which is the only reading of a second press
- * that cannot cost anything.
+ * The key. Runs unless one is already running — in which case this is just a
+ * way to look at it, which is the only reading of a second press that cannot
+ * cost anything. The click is `toggleBuildPanel`, same as the test light.
  */
 function buildNow() {
   if (buildState?.command && !buildState.running) post('/api/build/run');
@@ -2541,6 +2559,7 @@ paintAutosend();
 //   0 — the mic        1 — build        2 — run the tests
 // Both of the run keys open their panel too: firing something off and then
 // having to go and find where it went would be a worse gesture than the click.
+// ⚠ The keys are the only TRIGGERS on the page; both lights' clicks just open.
 const KEYPAD = {
   Numpad0: () => void toggleVoice(),
   Numpad1: buildNow,
@@ -2789,7 +2808,7 @@ openStream();
 $('ctx-meter').onclick = toggleStats;
 $('usage-meters').onclick = toggleStats;
 $('test-light').onclick = toggleTestPanel;
-$('build-light').onclick = buildNow;
+$('build-light').onclick = () => toggleBuildPanel();
 $('gear').onclick = () => toggleGear();
 void loadGearSettings();
 // The windows move once a TURN, which is why the usage handler re-reads them;
