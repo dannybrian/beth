@@ -21,6 +21,7 @@ import { Workbench } from './workbench.ts';
 import { ensurePersonasDir } from './personas.ts';
 import { VoiceRoom } from './voiceRoom.ts';
 import { CreditMeter, anyWindowExhausted } from './creditMeter.ts';
+import { StatusLine } from './statusLine.ts';
 
 // The harness runs ON node, but the PATH it inherited may not carry one — beth
 // launched outside an interactive shell (nvm lives in .zshrc) hands us a PATH
@@ -41,6 +42,17 @@ const cfg = loadConfig();
 // an empty directory next to the secrets is the only hint personas exist.
 ensurePersonasDir();
 const bus = new ConversationBus();
+
+// The terminal's bottom line — `beth: <repo>`, spinning while a turn runs.
+// Installed before anything logs so every later line lands above it; shown
+// only after the boot summary, so that summary reads as plain output. Rides
+// the same `status` messages the page's dot does: `thinking` is a turn in
+// flight, anything else is not.
+const statusLine = new StatusLine({ label: path.basename(cfg.repo) });
+statusLine.install();
+bus.subscribe((m) => {
+  if (m.type === 'status') statusLine.setBusy(m.state === 'thinking');
+});
 const events = new EventLog(cfg.eventLogPath);
 const pending = new PendingStore();
 
@@ -218,9 +230,12 @@ server.listen(cfg.port, cfg.bind, () => {
   } else {
     console.log(`  terms: biasing off — ${mined.length} nouns available, HARNESS_SPEECH_BIASING=on to use them`);
   }
+  statusLine.show();
 });
 
 const shutdown = () => {
+  // First, so the line is gone before anything below prints a farewell.
+  statusLine.stop();
   events.stop();
   work.stop();
   tests.stop();

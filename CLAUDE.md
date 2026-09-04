@@ -126,7 +126,10 @@ on the page; and `localhost:3000` parses with scheme `localhost:`, so the most
 natural input of all was refused until the retry-as-http), `bus` (the `show` replay split — a pop
 that replayed would re-open the lightbox on every reconnect, which looks exactly
 like the feature working until the first mid-conversation reload), and the greeting's
-onboarding offer (a nag if it repeats, silently absent if it never fires). The Scribe
+onboarding offer (a nag if it repeats, silently absent if it never fires), and
+`statusLine` (the terminal's bottom line — a log printed over it leaves half of
+it on the row, a spinner that outlives the turn reads as a hang, and off a TTY it
+must write nothing). The Scribe
 ear added four more in the same two shapes: `ear/pcm` (a resampler that drifts or
 warbles at chunk seams doesn't error — she just mishears him), `ear/scribeEngine`
 (driven by REAL captured frames from `src/ear/fixtures/`, including a live
