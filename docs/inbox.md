@@ -162,8 +162,11 @@ beside the watcher the way the room's dial does. It publishes only on change.
 **It does not start a turn.** A session that runs shells acting on a file another
 process wrote, with nobody watching, is the trust model `desk.md` set aside with the
 assistant director, and this is not the door to reopen it through. Instead the queue is
-where she already looks: it rides `pending` and the `plans` tool answer so she knows on
-the next turn, and the count is greeting MATERIAL (`greeting.ts` — "two hand-offs from
+where she already looks: it rides `pending` and the `plans` tool answer, the count is
+greeting MATERIAL, and — because the summons reaches Danny and not her — an arrival
+is told to her on HIS next turn as scaffolding on the model's copy (`session.ts`,
+`noteArrival`/`arrivalsPreamble`, the same split pointing uses), dropped if he
+already closed it, so she learns at the next natural moment and can raise it herself (`greeting.ts` — "two hand-offs from
 Memobase waiting" is a fact that differs by the day, which is what the greeting wants;
 ⚠ material, not a second instruction, per the three-times-"I am here" lesson).
 

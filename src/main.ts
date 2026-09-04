@@ -152,6 +152,9 @@ work.subscribe((items) => {
     // is published by hand — it is the message speakOut speaks.
     const event = events.append({ source: 'harness', session: session.sessionId(), kind: 'handoff', text, ref: i.path });
     bus.publish({ type: 'event', event });
+    // The summons above reaches Danny; this is how it reaches HER — on his
+    // next turn, never as one of her own.
+    session.noteArrival(i.path);
   }
 });
 

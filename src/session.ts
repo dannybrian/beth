@@ -138,6 +138,15 @@ export class SessionManager {
   private personaChoice: PersonaChoice;
   /** When Danny last said something, so an arrival can be told from mid-work. */
   private lastHumanTurnAt = 0;
+  /**
+   * Hand-offs that arrived since she was last told. The summons at arrival is
+   * spoken to Danny and written to the transcript, and neither reaches HER —
+   * so without this she would not know a hand-off existed until she happened
+   * to call `plans`. Drained onto his next turn as scaffolding, the way pointing
+   * rides one: she learns at the next natural moment and can raise it herself,
+   * which is what "asking about it afterwards" means without a turn of her own.
+   */
+  private arrivals: string[] = [];
   /** Survives /clear, so a model chosen in the UI sticks to the next conversation. */
   private modelChoice = '';
   /** Likewise for the permission mode — /clear drops context, not preferences. */
@@ -381,6 +390,31 @@ export class SessionManager {
    * too, and they must not silently eat a reference he was holding for his next
    * question.
    */
+  /** A hand-off landed (main.ts). Told on his next turn, not now. */
+  noteArrival(path: string) {
+    if (!this.arrivals.includes(path)) this.arrivals.push(path);
+  }
+
+  /**
+   * The arrivals block for the model's copy, or ''. Resolved at SEND time
+   * against the live index: one he has already ✓'d or ×'d before his next turn
+   * is dropped rather than announced, because telling her about a dismissed
+   * hand-off is an invitation to act on it.
+   */
+  private arrivalsPreamble(): string {
+    const items = this.arrivals
+      .map((p) => this.work.byPath(p))
+      .filter((i) => i?.inbox && !i.inbox.ack);
+    this.arrivals = [];
+    if (!items.length) return '';
+    const lines = items.map((i) => `- "${i!.spoken}" from ${i!.inbox!.from} (${i!.path})`);
+    return [
+      `[harness: since your last turn, ${items.length} hand-off${items.length === 1 ? '' : 's'} arrived in the inbox:`,
+      ...lines,
+      'He has seen the summons. Mention it if it bears on what he says, or when he asks; `plans` has the text and `close_inbox` closes one. Do not act on a hand-off he has not taken up.]',
+    ].join('\n');
+  }
+
   sendPointed(text: string): number {
     // The two moments a personal beat is allowed are the boot greeting and the
     // first turn after a LONG GAP — he is arriving, not returning mid-task. Any
@@ -399,6 +433,8 @@ export class SessionManager {
     // was rendered in the transcript as a sentence Danny had apparently typed.
     let forModel = beat ? `${text}\n\n[harness: ${beat}]` : text;
     if (preamble) forModel = `${preamble}\n${forModel}`;
+    const arrived = this.arrivalsPreamble();
+    if (arrived) forModel = `${arrived}\n${forModel}`;
     return this.send(forModel, {
       // Falls back to the pointing line only when he genuinely said nothing —
       // which a beat glued onto an empty string used to make impossible.

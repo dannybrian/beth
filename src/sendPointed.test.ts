@@ -22,7 +22,7 @@ import type { WorkRef } from './workItems.ts';
  * input stream, so everything under test runs without a query — which is the
  * only reason this file can exist at all.
  */
-function harness(opts: { beat?: string | null; refs?: WorkRef[]; preamble?: string } = {}) {
+function harness(opts: { beat?: string | null; refs?: WorkRef[]; preamble?: string; items?: Record<string, any> } = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-send-'));
   const cfg = { stateDir, repo: stateDir, directorPlan: 'x.md', personal: true } as HarnessConfig;
   const bus = new ConversationBus();
@@ -35,6 +35,7 @@ function harness(opts: { beat?: string | null; refs?: WorkRef[]; preamble?: stri
   (s as any).work = {
     takePointed: () => opts.refs ?? [],
     preamble: () => opts.preamble ?? '',
+    byPath: (p: string) => opts.items?.[p],
   };
   s.personal.beat = () => opts.beat ?? null;
   // Long enough ago to count as arriving, which is the only time a beat rides along.
@@ -73,4 +74,33 @@ test('with nothing to say about him, nothing is added at all', () => {
   s.sendPointed('carry on');
   assert.equal(sent[0], 'carry on');
   assert.equal(shown(), 'carry on');
+});
+
+// --- a hand-off that arrived is told on his NEXT turn, to her only ----------------
+
+test('an arrival rides the next turn as scaffolding, once, and never the transcript', () => {
+  const items = {
+    'inbox/memobase/m1': { path: 'inbox/memobase/m1', spoken: 'the settle window', inbox: { from: 'memobase' } },
+  };
+  const { s, sent, shown } = harness({ beat: null, items });
+  s.noteArrival('inbox/memobase/m1');
+  s.noteArrival('inbox/memobase/m1');
+  s.sendPointed('morning');
+  assert.match(sent[0], /^\[harness: since your last turn, 1 hand-off arrived in the inbox:\n- "the settle window" from memobase \(inbox\/memobase\/m1\)\n/);
+  assert.match(sent[0], /\]\nmorning$/);
+  assert.equal(shown(), 'morning');
+  // Drained: the second turn carries nothing.
+  s.sendPointed('and?');
+  assert.equal(sent[1], 'and?');
+});
+
+test('an arrival he already closed before his next turn is not announced', () => {
+  const items = {
+    'inbox/memobase/m1': { path: 'inbox/memobase/m1', spoken: 'x', inbox: { from: 'memobase', ack: { state: 'dismissed' } } },
+  };
+  const { s, sent } = harness({ beat: null, items });
+  s.noteArrival('inbox/memobase/m1');
+  s.noteArrival('inbox/memobase/gone');
+  s.sendPointed('hi');
+  assert.equal(sent[0], 'hi');
 });

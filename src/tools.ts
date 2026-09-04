@@ -347,7 +347,7 @@ export function createHarnessTools(deps: {
 
   const pending = tool(
     'pending',
-    'Read back what is currently pending: unresolved queued decisions, running workers, and recent events. Answer "what\'s pending?" from THIS, never from memory.',
+    'Read back what is currently pending: unresolved queued decisions, running workers, hand-offs waiting in the inbox, and recent events. Answer "what\'s pending?" from THIS, never from memory.',
     {},
     async () => {
       const decisions = deps.pending.openDecisions().map((d) => ({
@@ -364,7 +364,12 @@ export function createHarnessTools(deps: {
         startedAt: w.startedAt,
       }));
       const events = deps.events.recent(15).map((e) => ({ ts: e.ts, kind: e.kind, text: e.text, ref: e.ref }));
-      return ok({ decisions, workers, recentEvents: events });
+      // Hand-offs nobody has taken — the inbox is pending too (inbox.ts).
+      const inbox = deps.work
+        .live()
+        .filter((i) => i.status === 'inbox')
+        .map((i) => ({ path: i.path, spoken: i.spoken, from: i.inbox?.from, at: i.inbox?.at, text: i.inbox?.text }));
+      return ok({ decisions, workers, inbox, recentEvents: events });
     },
     { alwaysLoad: true }
   );
