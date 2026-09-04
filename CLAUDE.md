@@ -623,6 +623,15 @@ the conversation that produced it. Where things stand:
   rows still appear in their status group, because a plan that vanished from `active`
   because it was pinned would make the board lie about what is active.
 
+- **`desk.md`** — AGREED, unbuilt (2026-09-03). One page over the running directors:
+  a roster file each harness writes (the voice room's pattern), a desk process that
+  proxies each harness under a prefix over loopback, a summons strip pooling every
+  director's pending, and every voice through one speaker. No session, no model; the
+  directors learn nothing. ⚠ It records two designs set aside on the way — one
+  harness over several repos, and an assistant director with authority over the
+  others — with the signal that would reopen the second. Do not re-propose either
+  from here. The phone's compact mode is its own future record.
+
 Already done from the same list, so do not re-plan them: the spoken settle window is
 2500 ms, the speech levels and last-paragraph excerpt exist (`spoken.ts`), and the
 activity lines and in-progress indicator are in.
