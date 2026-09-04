@@ -9,6 +9,7 @@ import type { ConversationBus } from './bus.ts';
 import type { EventLog } from './eventlog.ts';
 import type { PendingStore } from './state.ts';
 import type { WorkIndex } from './workIndex.ts';
+import type { InboxAcks } from './inbox.ts';
 import type { PersonalStore, PersonalKind } from './personal.ts';
 import { taskSummary } from './workItems.ts';
 import { SPEECH_LEVELS, type SpeechControl, type SpeechLevel } from './spoken.ts';
@@ -46,6 +47,8 @@ export function createHarnessTools(deps: {
   publishPending: () => void;
   voiceActive: () => boolean;
   work: WorkIndex;
+  /** The inbox acks (inbox.ts) — hers to take or dismiss a hand-off. */
+  inbox: InboxAcks;
   repo: string;
   /**
    * Null when personal context is off — and then the tools are not REGISTERED at
@@ -280,6 +283,41 @@ export function createHarnessTools(deps: {
   );
 
   /**
+   * A hand-off from the inbox, taken or set aside. Same reasoning as
+   * close_decision: a queue with settled items in it is a queue you learn to
+   * ignore. ⚠️ This writes the STATE DIR, never the producer's file — see
+   * inbox.ts. The `ref` is for the common outcome, that she took it into a plan:
+   * the row then links to what it became.
+   */
+  const closeInbox = tool(
+    'close_inbox',
+    'Take or dismiss a hand-off from the inbox — an item with status `inbox` in `plans`. `done` when it has been dealt with (pass `ref` — the plan path — when you recorded it as a plan, which is the usual outcome); `dismissed` when it does not apply. Do not close one he has not seen or agreed to; the inbox is his to read too.',
+    {
+      path: z.string().describe('The item path from `plans`, e.g. inbox/memobase/m1.'),
+      state: z.enum(['done', 'dismissed']),
+      ref: z.string().optional().describe('What it became — a plan path — when it became something.'),
+      note: z.string().optional().describe('One line for the event log: what was done, or why it was set aside.'),
+    },
+    async (raw) => {
+      const { path: p, state, ref, note } = repaired('close_inbox', raw);
+      const item = deps.work.byPath(p);
+      if (!item?.inbox) return ok({ closed: false, reason: 'no hand-off at that path — call `plans` for the current ones' });
+      deps.inbox.set(p, { state, ref });
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'inbox_closed',
+        text: `${item.spoken} → ${state}${note ? ` — ${note}` : ''}`,
+        ref: ref ?? p,
+      });
+      // The index re-reads on the next change; this IS the change, so ask.
+      deps.work.refresh();
+      return ok({ closed: true, title: item.title, state });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
    * The other half of keeping the queue honest — see closeWorker in state.ts for
    * why a worker gets stuck in the first place.
    */
@@ -344,7 +382,7 @@ export function createHarnessTools(deps: {
       scope: z
         .enum(['in-flight', 'all'])
         .default('in-flight')
-        .describe('in-flight = awaiting-eyes, active, blocked and planning. Use all only when explicitly asked about parked or shipped work.'),
+        .describe('in-flight = inbox (hand-offs from other agents and apps, not yet taken — close with `close_inbox`), awaiting-eyes, active, blocked and planning. Use all only when explicitly asked about parked or shipped work.'),
       match: z.string().optional().describe('Filter to plans whose spoken name, title or path contains this.'),
       tasks: z.boolean().default(false).describe('Include the full task list per plan, not just counts. Verbose — ask for it only when the tasks themselves are the question.'),
     },
@@ -459,6 +497,7 @@ export function createHarnessTools(deps: {
       suggestReply,
       queueDecision,
       closeDecision,
+      closeInbox,
       closeWorker,
       pending,
       plans,

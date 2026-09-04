@@ -16,6 +16,7 @@
 // not enough: warnings get clicked through. A live claim is a hard no.
 import { spawn } from 'node:child_process';
 import type { WorkIndex } from './workIndex.ts';
+import { isInboxPath } from './inbox.ts';
 import { taskSummary } from './workItems.ts';
 
 export type HandoffVerdict = { ok: boolean; reason: string; command?: string };
@@ -48,6 +49,12 @@ export function seedPrompt(index: WorkIndex, path: string): string {
 export function canHandOff(index: WorkIndex, path: string): HandoffVerdict {
   const item = index.byPath(path);
   if (!item) return { ok: false, reason: `${path} is not in the work index.` };
+  // A hand-off from the inbox has no file: its path is synthetic (inbox.ts), and
+  // a Claude Code session opened at it would be a shell at a path that does not
+  // exist. Take it into a plan first; the plan can be handed off.
+  if (isInboxPath(path)) {
+    return { ok: false, reason: `"${item.spoken}" is a hand-off from the inbox — there is no file to open. Take it into a plan first.` };
+  }
   if (item.claim?.live) {
     return {
       ok: false,

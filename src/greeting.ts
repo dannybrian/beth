@@ -206,6 +206,8 @@ export function kickoffPrompt(input: {
   repoName: string;
   snapshot: RepoSnapshot;
   live: WorkItem[];
+  /** Hand-offs nobody has taken (inbox.ts). Material, like the rest. */
+  inbox?: WorkItem[];
   priors: Opening[];
   lastAt: number | null;
   /** Present only when the offer should be made THIS boot. See OnboardingOffer. */
@@ -220,11 +222,23 @@ export function kickoffPrompt(input: {
     }`
   );
   if (s.lastCommit) facts.push(`- last commit ${s.lastCommit.age}: "${s.lastCommit.subject}"`);
-  if (input.live.length) {
-    const names = input.live.slice(0, 3).map((i) => `"${i.spoken}"`).join(', ');
-    facts.push(`- ${input.live.length} in flight — ${names}${input.live.length > 3 ? ', and others' : ''}`);
+  // The inbox is not "in flight" — nothing is running — so it is its own line,
+  // and only when there is something in it: a standing "inbox empty" is the
+  // same fact every day, which is what the material exists to avoid.
+  const flight = input.live.filter((i) => i.status !== 'inbox');
+  if (flight.length) {
+    const names = flight.slice(0, 3).map((i) => `"${i.spoken}"`).join(', ');
+    facts.push(`- ${flight.length} in flight — ${names}${flight.length > 3 ? ', and others' : ''}`);
   } else {
     facts.push('- nothing in flight');
+  }
+  const inbox = input.inbox ?? input.live.filter((i) => i.status === 'inbox');
+  if (inbox.length) {
+    const who = [...new Set(inbox.map((i) => i.inbox?.from).filter(Boolean))].join(', ');
+    const names = inbox.slice(0, 2).map((i) => `"${i.spoken}"`).join(', ');
+    facts.push(
+      `- ${inbox.length} hand-off${inbox.length === 1 ? '' : 's'} waiting in the inbox from ${who || 'outside'} — ${names}${inbox.length > 2 ? ', and others' : ''}`
+    );
   }
   facts.push(`- it is ${now.toLocaleString('en-GB', { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false })} where he is`);
   facts.push(`- ${sinceLine(now.getTime(), input.lastAt)}`);

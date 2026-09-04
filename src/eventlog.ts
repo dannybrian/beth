@@ -15,7 +15,11 @@ export type EventKind =
   | 'worker_done'
   | 'commit'
   | 'status_change'
-  | 'ship';
+  | 'ship'
+  /** A hand-off arrived in the inbox (inbox.ts) — the summons. */
+  | 'handoff'
+  /** ...and was taken or dismissed here. */
+  | 'inbox_closed';
 
 export type HarnessEvent = {
   ts: string;

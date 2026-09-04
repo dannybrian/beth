@@ -26,6 +26,7 @@ import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
 import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
+import type { InboxAcks } from './inbox.ts';
 import type { Workbench } from './workbench.ts';
 import type { Suggestion } from './suggestion.ts';
 import { setPlanName } from './planName.ts';
@@ -72,6 +73,8 @@ export function createServer(deps: {
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
   pins: Pins;
+  /** The inbox acks — his ✓ and × on a hand-off. See inbox.ts. */
+  inbox: InboxAcks;
   bench: Workbench;
   suggestion: Suggestion;
   /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
@@ -554,6 +557,26 @@ export function createServer(deps: {
             const pinned = deps.pins.set(target, Boolean(body.pinned));
             bus.publish(workMessage(work, deps.pins));
             return json(200, { ok: true, pinned });
+          }
+          case '/api/inbox': {
+            // A hand-off taken or dismissed from the panel. ⚠️ Writes the STATE
+            // DIR and never the producer's file — see inbox.ts. An absent or
+            // unknown state REOPENS: there is no third state to get stuck in.
+            const target = String(body.path ?? '');
+            const item = work.byPath(target);
+            if (!item?.inbox) return json(404, { ok: false, reason: 'no such hand-off' });
+            const state = body.state === 'done' || body.state === 'dismissed' ? body.state : null;
+            deps.inbox.set(target, state ? { state } : null);
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'inbox_closed',
+              text: `${item.spoken} → ${state ?? 'reopened'}`,
+              ref: target,
+            });
+            // The index re-reads on a file change; the ack is the change.
+            work.refresh();
+            return json(200, { ok: true, state });
           }
           case '/api/workbench': {
             // The × on the bench, and a hand for setting it without asking her.

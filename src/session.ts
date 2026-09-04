@@ -21,6 +21,7 @@ import { createHarnessTools } from './tools.ts';
 import { assessRole, roleInstruction, type RoleAssessment } from './directorRole.ts';
 import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
+import type { InboxAcks } from './inbox.ts';
 import { WireTap } from './wireTap.ts';
 import type { Workbench } from './workbench.ts';
 import { bootSuggestion, type Suggestion } from './suggestion.ts';
@@ -154,6 +155,7 @@ export class SessionManager {
   private speech: SpeechControl;
   private bench: Workbench;
   private suggestion: Suggestion;
+  private inbox: InboxAcks;
 
   constructor(
     cfg: HarnessConfig,
@@ -164,8 +166,10 @@ export class SessionManager {
     work: WorkIndex,
     speech: SpeechControl,
     bench: Workbench,
-    suggestion: Suggestion
+    suggestion: Suggestion,
+    inbox: InboxAcks
   ) {
+    this.inbox = inbox;
     this.cfg = cfg;
     this.bus = bus;
     this.events = events;
@@ -304,6 +308,7 @@ export class SessionManager {
             publishPending: this.publishPending,
             voiceActive: this.voiceActive,
             work: this.work,
+            inbox: this.inbox,
             repo: this.cfg.repo,
             personal: this.personal.enabled ? this.personal : null,
             speech: this.speech,

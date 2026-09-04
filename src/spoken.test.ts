@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spokenFor, lastParagraph, lastSentence, headingsOf, spokenForDecision } from './spoken.ts';
+import { spokenFor, lastParagraph, lastSentence, headingsOf, spokenForDecision, spokenForHandoff } from './spoken.ts';
 
 const reply = (text: string) => ({ type: 'assistant' as const, text });
 const say = (kind: string, text: string) => ({ type: 'say' as const, kind, text });
@@ -113,6 +113,15 @@ test('a queued decision speaks at every level except off', () => {
     assert.equal(spokenForDecision(d, level), 'A decision for you: Ship the ribbon now or after the candles?', level);
   }
   assert.equal(spokenForDecision(d, 'off'), '', 'off means off, here too');
+});
+
+test('a hand-off arriving is the other summons — spoken at every level except off', () => {
+  const h = { from: 'memobase', title: 'Fix the  settle\nwindow' };
+  for (const level of ['full', 'brief', 'headings', 'headlines'] as const) {
+    assert.equal(spokenForHandoff(h, level), 'A hand-off from memobase: Fix the settle window', level);
+  }
+  assert.equal(spokenForHandoff(h, 'off'), '');
+  assert.equal(spokenForHandoff({ from: 'x', title: '  ' }, 'full'), '', 'nothing to say is nothing said');
 });
 
 test('only blocking-later earns a different lead', () => {

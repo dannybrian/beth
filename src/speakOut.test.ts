@@ -90,6 +90,17 @@ test('her own transcript does not echo — only assistant and say are spoken', (
   assert.equal(spoken(seen).length, 0);
 });
 
+test('a hand-off event is spoken as a summons; other events are not', () => {
+  const { bus, seen } = recording();
+  const s = new SpeakOut(cfg(), bus);
+  const ev = { ts: '2026-09-04T10:00:00Z', source: 'harness' as const, session: 's', kind: 'commit' as const, text: 'abc123 tidy' };
+  bus.publish({ type: 'event', event: ev });
+  assert.equal(spoken(seen).length, 0, 'a commit is transcript, not a summons');
+  bus.publish({ type: 'event', event: { ...ev, kind: 'handoff', text: 'memobase: Fix the settle window' } });
+  assert.equal(spoken(seen).length, 1);
+  assert.equal(s.textFor(spoken(seen)[0].id), 'A hand-off from memobase: Fix the settle window');
+});
+
 test('the speech LEVEL decides what is pronounced, and only that', () => {
   const { bus, seen } = recording();
   const s = new SpeakOut(cfg({ speechLevel: 'brief' }), bus);

@@ -42,6 +42,15 @@ export type HarnessConfig = {
    * reader cannot find on its own.
    */
   planRoots: string[];
+  /**
+   * Where hand-offs from other agents and apps are read from (docs/inbox.md).
+   * `inboxDir` is the machine-level drop, every `*.jsonl` inside; `inboxFiles`
+   * are named outright by HARNESS_INBOX — a producer that keeps its outbox in
+   * its own data dir. Machine-level like the personas, because a hand-off is
+   * addressed to a DIRECTOR, not a repo. The harness only ever reads these.
+   */
+  inboxDir: string;
+  inboxFiles: string[];
   model: string;
   /**
    * How tool permissions are resolved, using the SDK's own modes:
@@ -303,6 +312,14 @@ export function loadConfig(): HarnessConfig {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    inboxDir: path.join(os.homedir(), '.director-harness', 'inbox'),
+    // Accumulates across the layers like keyterms: the machine names the
+    // producers this Mac has, and a repo may add one of its own.
+    inboxFiles: confAll('HARNESS_INBOX')
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean)
+      .map((f) => path.resolve(f.replace(/^~(?=$|\/)/, os.homedir()))),
     model: conf('HARNESS_MODEL') ?? DEFAULT_MODEL,
     permissionMode: (conf('HARNESS_PERMISSION_MODE') ?? 'auto') as HarnessConfig['permissionMode'],
     directorName: directorName(repo, conf('HARNESS_DIRECTOR_NAME') ?? ''),

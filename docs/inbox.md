@@ -5,9 +5,13 @@
 > memo work: he has started addressing an assistant directly in memos — instructions,
 > and to-dos meant for a director — and nothing carries them from there to here.
 
-Agreed, unbuilt (2026-09-04). This records the design so a fresh session can pick it
-up without the conversation that produced it. Nothing here is started. The producer
-side for the first producer (Memobase) is recorded in that repo's `PLAN.md`, item 7a.
+Agreed 2026-09-04, and BUILT the same day through step 3: `src/inbox.ts` (the parse,
+the reader, the acks), the `inbox` status, the refusals, `close_inbox`, `/api/inbox`,
+the panel group, the summons and the greeting material — verified on a throwaway
+harness with a fixture outbox (arrival spoke and wrote its line, ✓ moved the row to
+shipped, an appended record showed within the debounce). Step 4, the producer, is
+Memobase's and is recorded in that repo's `PLAN.md`, item 7a. The rest of this record
+is the design as agreed, kept for the reasoning.
 
 ## What this is, and what it is not
 
@@ -185,7 +189,8 @@ account, so a per-repo setting would be the same duplicate-and-forget mistake.
    producer's file (hash it before and after).
 3. **Summons** — the `event`, the seeded seen-set, the poll beside the watcher, the
    greeting material, the `pending`/`plans` surfacing.
-4. **The producer** — in the Memobase repo, against this format, after 1 lands.
+4. **The producer** — in the Memobase repo, against this format. Still open: steps
+   1–3 landed 2026-09-04, so the format above is what it writes to.
 
 ## Set aside
 

@@ -157,6 +157,18 @@ export function spokenFor(m: { type: 'assistant' | 'say'; kind?: string; text: s
  * rather than narration, and a summons you have to go and look for is a queue you
  * learn to ignore.
  */
+/**
+ * A hand-off arriving is the same kind of thing as a decision arriving: the one
+ * message on the bus that is genuinely waiting on him, from OUTSIDE the
+ * conversation. Spoken at every level except off, same as the decision.
+ */
+export function spokenForHandoff(h: { from: string; title: string }, level: SpeechLevel): string {
+  if (level === 'off') return '';
+  const title = (h.title ?? '').trim().replace(/\s+/g, ' ');
+  if (!title) return '';
+  return `A hand-off from ${h.from}: ${title}`;
+}
+
 export function spokenForDecision(d: { title: string; urgency?: string }, level: SpeechLevel): string {
   if (level === 'off') return '';
   const title = (d.title ?? '').trim();

@@ -161,3 +161,20 @@ test('unread plans are counted only when the index read nothing', () => {
   fs.writeFileSync(path.join(fresh, 'plans', 'TEMPLATE.md'), 'x');
   assert.equal(unreadPlanFiles(fresh, 0), null, 'a bootstrapped-but-empty plans dir is quiet');
 });
+
+// --- the inbox is material, and it is not "in flight" -------------------------
+
+test('hand-offs waiting are a fact of their own, and never counted as in flight', () => {
+  const handoff = {
+    spoken: 'the settle window',
+    status: 'inbox',
+    tasks: [],
+    inbox: { from: 'memobase', text: 'Fix it', at: '2026-08-02T08:00:00Z' },
+  } as unknown as WorkItem;
+  const p = prompt({ live: [item('alpha'), handoff] });
+  assert.match(p, /- 1 in flight — "alpha"/);
+  assert.match(p, /- 1 hand-off waiting in the inbox from memobase — "the settle window"/);
+  // And an empty inbox says nothing: a standing "inbox empty" is the same
+  // sentence every morning, which is what the material exists to avoid.
+  assert.doesNotMatch(prompt({ live: [item('alpha')] }), /inbox/);
+});

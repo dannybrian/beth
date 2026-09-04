@@ -288,10 +288,18 @@ export class WorkIndex {
         /* counted below; the poll fallback covers it */
       }
     }
-    if (watched < roots.length) {
-      // Degrade to the dashboard's cadence rather than going silently stale.
-      console.warn(`  work: watching ${watched}/${roots.length} roots — polling every ${POLL_MS / 1000}s for the rest`);
-      this.poller = setInterval(() => this.refresh(), POLL_MS);
+    // A reader that asked for a poll gets one whether or not the watcher armed:
+    // the failure it guards against is a watcher that LOOKS armed and delivers
+    // nothing (across a sleep), which `watched` cannot see. refresh() publishes
+    // only on change, so a quiet poll costs a few reads and nothing else.
+    const asked = this.readers.map((r) => r.pollMs ?? 0).filter((ms) => ms > 0);
+    const pollMs = watched < roots.length ? Math.min(POLL_MS, ...asked) : asked.length ? Math.min(...asked) : 0;
+    if (pollMs) {
+      if (watched < roots.length) {
+        // Degrade to the dashboard's cadence rather than going silently stale.
+        console.warn(`  work: watching ${watched}/${roots.length} roots — polling every ${pollMs / 1000}s for the rest`);
+      }
+      this.poller = setInterval(() => this.refresh(), pollMs);
       this.poller.unref?.();
     }
     console.log(`  work: ${this.items.length} items from ${roots.length} root(s), ${this.inFlight().length} in flight`);
@@ -334,6 +342,14 @@ export class WorkIndex {
       if (task) {
         lines.push(
           `- the task "${task.spoken}" (${task.done ? 'done' : 'not done'}) on "${item.spoken}" — ${item.path}:${task.line}`
+        );
+      } else if (item.inbox) {
+        // No file to read, so the content comes along. The producer and its
+        // reference are facts she can repeat; the text is what he is pointing at.
+        const who = `${item.inbox.from}${item.inbox.ref ? ` (${item.inbox.ref})` : ''}`;
+        const state = item.inbox.ack ? `${item.inbox.ack.state}` : 'not yet taken';
+        lines.push(
+          `- the hand-off "${item.spoken}" from ${who}, ${state} — its text:\n    ${item.inbox.text.replace(/\n/g, '\n    ')}`
         );
       } else {
         lines.push(`- "${item.spoken}" — ${item.path} (${bits.join(', ')})`);

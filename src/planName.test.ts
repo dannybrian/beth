@@ -23,6 +23,12 @@ test('a name is inserted, and the READER agrees it is there', () => {
   assert.equal(parseFrontmatter(read(dir)).fm.name, 'Notation view');
 });
 
+test('a hand-off from the inbox cannot be renamed — no file, no frontmatter', () => {
+  const dir = repo();
+  const r = setPlanName(dir, 'inbox/memobase/m1', 'the settle window');
+  assert.equal(r.ok, false);
+});
+
 test('nothing else in the file is touched', () => {
   const dir = repo();
   const before = read(dir);

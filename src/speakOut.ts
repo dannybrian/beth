@@ -17,7 +17,7 @@ import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
 import type { VoiceRoom } from './voiceRoom.ts';
 import { Mouth } from './mouth/mouth.ts';
-import { spokenFor, spokenForDecision, type SpeechLevel } from './spoken.ts';
+import { spokenFor, spokenForDecision, spokenForHandoff, type SpeechLevel } from './spoken.ts';
 
 export type { HeldLine } from './mouth/mouth.ts';
 
@@ -138,6 +138,16 @@ export class SpeakOut {
       // fires for unrelated reasons (a worker started, a worker finished), so
       // what counts is an id we have not seen — not the message.
       if (m.type === 'pending') return void this.announceDecisions(m.decisions);
+      // A hand-off arriving is the other summons (inbox.ts). main.ts publishes
+      // the event ONCE per new id, seeded from the boot read, so unlike
+      // `pending` the message itself is the trigger — and the backlog is never
+      // read aloud, because no event is published for it.
+      if (m.type === 'event') {
+        if (m.event.kind !== 'handoff' || this.room?.muted()) return;
+        const from = m.event.text.split(':')[0]?.trim() || 'the inbox';
+        const title = m.event.text.slice(m.event.text.indexOf(':') + 1).trim();
+        return void this.mouth.speak(spokenForHandoff({ from, title }, this.verbosity));
+      }
       if (m.type !== 'assistant' && m.type !== 'say') return;
       // The universal mute gates HERE, before the line is even held: never
       // announced, never fetched, never billed — consistent with counting the

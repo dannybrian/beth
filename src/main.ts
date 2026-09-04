@@ -14,6 +14,7 @@ import { Settings } from './settings.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
+import { InboxAcks, createInboxReader } from './inbox.ts';
 import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFiles } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
@@ -59,11 +60,24 @@ const pending = new PendingStore();
 
 // One index, two consumers: the panel over the stream, and Beth via the `plans`
 // tool. `/plans` is the built-in reader; a repo with foreign work adds its own.
-const work = new WorkIndex([createPlansReader({ repo: cfg.repo, roots: cfg.planRoots })], {
-  // The director plan is the role LOCK, not work. Held out of the board so it
-  // stops occupying a permanent slot in ACTIVE and inflating the count.
-  roleLockPath: cfg.directorPlan,
-});
+// The inbox: hand-offs other agents and apps wrote to a file (docs/inbox.md).
+// The acks are hers, in the state dir; the producer's file is only ever read.
+const inbox = new InboxAcks(cfg);
+// Who she is, read at READ time rather than captured: the session (and the
+// persona it restores) is built after the index, and a persona switch changes
+// the name mid-run. Until the session exists, the repo's own director.
+let directorNow: () => string = () => cfg.directorName;
+const work = new WorkIndex(
+  [
+    createPlansReader({ repo: cfg.repo, roots: cfg.planRoots }),
+    createInboxReader({ dir: cfg.inboxDir, files: cfg.inboxFiles, director: () => directorNow(), acks: inbox }),
+  ],
+  {
+    // The director plan is the role LOCK, not work. Held out of the board so it
+    // stops occupying a permanent slot in ACTIVE and inflating the count.
+    roleLockPath: cfg.directorPlan,
+  }
+);
 const pins = new Pins(cfg);
 // The url being iterated on, if the last run pinned one — same shelf-life
 // reasoning as pins: the dev server it points at usually outlives the harness.
@@ -106,11 +120,40 @@ session = new SessionManager(
     setVoice: speakOut.setVoice,
   },
   bench,
-  suggestion
+  suggestion,
+  inbox
 );
 // A persona chosen on a previous run speaks in her own voice from the first line
 // of the greeting, not from the first switch.
 speakOut.setVoice(session.persona()?.voiceId ?? null);
+// ...and reads her own inbox from the first read. The boot read above ran under
+// the repo's name; if a persona is in the room, re-address it now, and again
+// whenever the room changes hands.
+directorNow = () => session.persona()?.name ?? cfg.directorName;
+if (session.persona()) work.refresh();
+bus.subscribe((m) => {
+  if (m.type === 'persona') work.refresh();
+});
+
+// A hand-off ARRIVING is a summons — spoken, and a line in the transcript —
+// exactly once. ⚠️ The seen-set is seeded from what is already there, so a
+// restart does not read him the whole backlog: the same trap `speakOut`'s
+// decision announcements walk around, closed one step earlier here by never
+// publishing an event for the backlog at all. Acknowledged items are seeded
+// too, so reopening one from the panel is not an arrival.
+const seenHandoffs = new Set(work.all().filter((i) => i.inbox).map((i) => i.path));
+work.subscribe((items) => {
+  for (const i of items) {
+    if (!i.inbox || seenHandoffs.has(i.path)) continue;
+    seenHandoffs.add(i.path);
+    if (i.inbox.ack) continue;
+    const text = `${i.inbox.from}: ${i.title}`;
+    // Harness-written events are not echoed off the tail (below), so this one
+    // is published by hand — it is the message speakOut speaks.
+    const event = events.append({ source: 'harness', session: session.sessionId(), kind: 'handoff', text, ref: i.path });
+    bus.publish({ type: 'event', event });
+  }
+});
 
 // Terminal-session and hook writes to the event log flow into the UI too.
 events.onEvent((e) => {
@@ -196,7 +239,7 @@ const build = new BuildRunner(cfg, bus, { settings });
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, bench, suggestion, room, credits });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, inbox, bench, suggestion, room, credits });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.

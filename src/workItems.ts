@@ -9,6 +9,7 @@
 
 /** Harness vocabulary. A reader maps whatever the project stores into this. */
 export type WorkStatus =
+  | 'inbox'
   | 'idea'
   | 'planning'
   | 'active'
@@ -55,7 +56,19 @@ export const NEEDS_EYES: WorkStatus[] = ['awaiting-eyes'];
  * mixing it in would dilute the confirmation queue with audit debris. It is a
  * recognised status (so it stops falling to `unknown`) and shows under "show all".
  */
-export const LIVE: WorkStatus[] = [...NEEDS_EYES, ...IN_FLIGHT];
+/**
+ * Work HANDED IN from outside the conversation — another agent or app wrote it
+ * to the inbox (see inbox.ts and docs/inbox.md) and nobody here has taken it yet.
+ * Neither of the vocabularies above fits: it is not in flight (nothing is
+ * running) and it is not awaiting-eyes (that means finished except for Danny;
+ * this is the opposite — not started, waiting for someone to take it). Borrowing
+ * either would make the board lie in exactly the way the comment above warns.
+ * It leads LIVE because it is the one pile that arrived from OUTSIDE and nothing
+ * else on the page announces it.
+ */
+export const INBOX: WorkStatus[] = ['inbox'];
+
+export const LIVE: WorkStatus[] = [...INBOX, ...NEEDS_EYES, ...IN_FLIGHT];
 
 export const isInFlight = (s: WorkStatus) => IN_FLIGHT.includes(s);
 export const needsEyes = (s: WorkStatus) => NEEDS_EYES.includes(s);
@@ -142,6 +155,23 @@ export type WorkItem = {
   /** Which reader produced this, for debugging a wrong-looking panel. */
   reader: string;
   /**
+   * Present on an item that came in through the inbox. There is no file behind
+   * one — `path` is synthetic — so the CONTENT rides the item: the panel renders
+   * it inline, and the pointing preamble hands it to her, because there is
+   * nothing for either of them to go and read.
+   */
+  inbox?: {
+    from: string;
+    text: string;
+    at: string;
+    /** The producer's source reference. Opaque here: shown, never opened. */
+    ref?: string;
+    /** Whoever it was addressed to, when it was — the row says so. */
+    to?: string;
+    /** Whether and how it was acknowledged. See InboxAcks. */
+    ack?: { state: 'done' | 'dismissed'; at: string; ref?: string };
+  };
+  /**
    * This item is the DIRECTOR ROLE LOCK, not a deliverable.
    *
    * The role is held by claiming a plan, because `/plans` is the claim mechanism
@@ -168,6 +198,13 @@ export type WorkReader = {
   watchRoots(): string[];
   /** Whole-corpus re-read. Kept cheap enough to run on every debounced change. */
   read(): WorkItemDraft[];
+  /**
+   * A re-read cadence to keep BESIDE the watcher, for a source written while
+   * this machine is asleep. `fs.watch` stops delivering across a macOS sleep
+   * and fails silently (voiceRoom.ts learned this first), and the inbox is
+   * written precisely while Danny is away. Absent means the watcher is trusted.
+   */
+  pollMs?: number;
 };
 
 /**

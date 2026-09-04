@@ -884,6 +884,37 @@ function planActions(item) {
   };
   out.push(pin);
 
+  // A hand-off: taken or set aside, and that is the whole of what can be done
+  // to it here — no file to rename, none to hand off. ⚠ Writes the state dir,
+  // never the producer's file (inbox.ts). An acknowledged one offers reopen.
+  if (item.inbox) {
+    if (item.inbox.ack) {
+      const reopen = el('button', 'take', '↺');
+      reopen.title = `Reopen — put "${item.spoken}" back in the inbox`;
+      reopen.onclick = (e) => {
+        e.stopPropagation();
+        post('/api/inbox', { path: item.path, state: null });
+      };
+      out.push(reopen);
+    } else {
+      const take = el('button', 'take', '✓');
+      take.title = `Done — "${item.spoken}" has been dealt with`;
+      take.onclick = (e) => {
+        e.stopPropagation();
+        post('/api/inbox', { path: item.path, state: 'done' });
+      };
+      out.push(take);
+      const drop = el('button', 'dismiss', '×');
+      drop.title = `Dismiss — "${item.spoken}" does not apply`;
+      drop.onclick = (e) => {
+        e.stopPropagation();
+        post('/api/inbox', { path: item.path, state: 'dismissed' });
+      };
+      out.push(drop);
+    }
+    return out;
+  }
+
   // Rename. The spoken name is what Beth calls this plan out loud, and a derived
   // one is sometimes wrong in a way only Danny can hear — so it is correctable
   // from the surface where he notices it. ⚠ This WRITES to the plan file (the one
@@ -947,9 +978,9 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
       renderWork();
     };
     head.append(caret);
-  } else if (t) {
+  } else if (t || item.inbox) {
     const caret = el('button', 'caret', expanded.has(item.path) ? '▾' : '▸');
-    caret.title = 'Show tasks';
+    caret.title = item.inbox ? 'Show the hand-off' : 'Show tasks';
     caret.onclick = (e) => {
       e.stopPropagation();
       expanded.has(item.path) ? expanded.delete(item.path) : expanded.add(item.path);
@@ -967,6 +998,16 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   // and pointing moved to the → beside it.
   name.title = `Read "${item.spoken}" — ${item.path}`;
   name.onclick = () => openPlanPreview(item.path);
+  if (item.inbox) {
+    // No file behind a hand-off (the path is synthetic — inbox.ts), so the
+    // content IS the row: the name unfolds the text in place instead of
+    // opening a reader that would 404.
+    name.title = `From ${item.inbox.from} — show the hand-off`;
+    name.onclick = () => {
+      expanded.has(item.path) ? expanded.delete(item.path) : expanded.add(item.path);
+      renderWork();
+    };
+  }
   head.append(name);
 
   head.append(...planActions(item));
@@ -974,7 +1015,10 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
 
   const meta = el('div', 'meta');
   if (item.priority) meta.append(document.createTextNode(`${item.priority} · `));
-  if (t) {
+  if (item.inbox) {
+    const when = new Date(item.inbox.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    meta.append(document.createTextNode(`from ${item.inbox.from} · ${when}${item.inbox.ack ? ` · ${item.inbox.ack.state}` : ''}`));
+  } else if (t) {
     // Clickable everywhere, so opening tasks does not depend on whether this row
     // happens to be an umbrella.
     const count = el('button', 'task-toggle', `${t.done}/${t.total} tasks`);
@@ -1013,7 +1057,11 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
     n.append(bc);
   }
 
-  if (expanded.has(item.path)) {
+  if (expanded.has(item.path) && item.inbox) {
+    n.append(el('div', 'inbox-text', item.inbox.text));
+    if (item.inbox.ref) n.append(el('div', 'inbox-ref', item.inbox.ref));
+    if (item.inbox.ack?.ref) n.append(el('div', 'inbox-ref', `→ ${item.inbox.ack.ref}`));
+  } else if (expanded.has(item.path)) {
     const list = el('div', 'tasks');
     for (const task of item.tasks) list.append(renderTask(item, task));
     n.append(list);
@@ -1024,7 +1072,9 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
 // awaiting-eyes leads: it is the one pile only Danny can clear, and burying it
 // under thirty active plans is what hid the batched-confirmation queue entirely.
 // Then work in progress, then everything else in roughly lifecycle order.
-const LIVE_ORDER = ['awaiting-eyes', 'active', 'blocked', 'planning'];
+// And inbox leads THAT: a hand-off from outside the conversation is the one
+// pile nothing else on the page announces. See docs/inbox.md.
+const LIVE_ORDER = ['inbox', 'awaiting-eyes', 'active', 'blocked', 'planning'];
 const ALL_ORDER = [...LIVE_ORDER, 'idea', 'review', 'unknown', 'parked', 'shipped'];
 
 /** 'in-flight' (the default) or 'all'. The panel is a work surface, not an archive. */
@@ -1109,7 +1159,7 @@ function renderWork() {
   $('work-count').title =
     workScope === 'all'
       ? 'Every plan in the repo.'
-      : `${workItems.length} plans are in flight (active, blocked or planning). ${workTotal} exist in total — the rest are shipped, parked or ideas.`;
+      : `${workItems.length} plans are in flight (inbox, awaiting eyes, active, blocked or planning). ${workTotal} exist in total — the rest are shipped, parked or ideas.`;
   $('work-scope').textContent = workScope === 'all' ? 'in flight only' : 'show all';
   panel.replaceChildren();
 

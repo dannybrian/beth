@@ -27,6 +27,13 @@ test('an unclaimed plan can be handed off', () => {
   assert.match(v.reason, /unclaimed/);
 });
 
+test('a hand-off from the inbox refuses — there is no file to open', () => {
+  const idx = indexOf(item({ path: 'inbox/memobase/m1', title: 'Fix the settle window', status: 'inbox', reader: 'inbox' }));
+  const v = canHandOff(idx, 'inbox/memobase/m1');
+  assert.equal(v.ok, false);
+  assert.match(v.reason, /inbox/);
+});
+
 test('a LIVE claim refuses, and names who holds it', () => {
   // The discipline this protects: one implementer at a time. A second session
   // started quietly on a claimed plan is exactly the regression to avoid.

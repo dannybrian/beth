@@ -983,6 +983,8 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
    invisible until you hover is how you forget what is on it. */
 .work-item .pin,
 .work-item .chip-it,
+.work-item .take,
+.work-item .dismiss,
 .work-item .rename {
   flex: none;
   background: none;
@@ -998,7 +1000,23 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
 }
 .work-item:hover .pin,
 .work-item:hover .chip-it,
+.work-item:hover .take,
+.work-item:hover .dismiss,
 .work-item:hover .rename { opacity: 1; }
+/* A hand-off's ✓ and × are the row's whole purpose, so they do not hide. */
+.work-item.status-inbox .take,
+.work-item.status-inbox .dismiss { opacity: 1; }
+.work-item .take:hover { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.work-item .dismiss:hover { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+/* The hand-off itself, unfolded in place: there is no file to open instead. */
+.work-item .inbox-text {
+  margin: 4px 0 2px 17px;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.work-item .inbox-ref { margin-left: 17px; font-size: 10.5px; color: var(--muted); word-break: break-all; }
 .work-item .pin.on { opacity: 1; color: var(--warn); }
 .work-item .pin:hover { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .work-item .chip-it:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
