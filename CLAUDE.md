@@ -681,6 +681,15 @@ the conversation that produced it. Where things stand:
   others — with the signal that would reopen the second. Do not re-propose either
   from here. The phone's compact mode is its own future record.
 
+- **`inbox.md`** — AGREED, unbuilt (2026-09-04). Hand-offs from other agents and
+  apps: an append-only JSONL file a producer writes and every running director
+  reads through a built-in `WorkReader`, addressed by director NAME, acknowledged
+  in the state dir like pins, announced like a queued decision and never a turn.
+  ⚠ The harness defines the record shape and never learns the producer — the
+  first (Memobase) is named only by `HARNESS_INBOX` in the machine `.env`. Read
+  it for why it is a reader and not an API, and for what is set aside (a broker,
+  retraction, a channel back).
+
 Already done from the same list, so do not re-plan them: the spoken settle window is
 2500 ms, the speech levels and last-paragraph excerpt exist (`spoken.ts`), and the
 activity lines and in-progress indicator are in.
