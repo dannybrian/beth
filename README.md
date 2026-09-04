@@ -64,7 +64,8 @@ This repo includes the `/plans` and `/tidyrepo` skills I use. The `/plans` skill
 truth is JIRA, GitHub issues, or something else with an API, the seam is
 `workItems.ts`: the harness defines the shape of a work item, `/plans` is just
 the built-in reader, and a reader of your own feeds the same panel. See *What
-This Is Not*, above.)
+This Is Not*, above. There is a second built-in reader that shows the shape:
+the **inbox**, below.)
 
 
 ```bash
@@ -287,6 +288,16 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   pin and handoff along the top, plus `→` to point Beth at it and `⌖` to find it
   on the board. Read-only on purpose: the checkboxes are
   disabled, because the harness does not write plan files.
+- **The inbox**: other agents and apps can hand the director work. A producer
+  appends one JSON line per hand-off to a file — `~/.director-harness/inbox/*.jsonl`,
+  or a file it keeps itself, named by `HARNESS_INBOX` — and every running
+  director reads every file. No API, no discovery: a record's `to` is a
+  director's *name*, an unaddressed one is for everyone, and the harness never
+  learns who wrote it. Hand-offs lead the plans panel in their own group, unfold
+  in place (there is no file behind one), and are closed with ✓/× on the row or
+  by Beth with `close_inbox`; the acknowledgement lives in the state dir, and the
+  producer's file is never touched. Arrival is a summons — spoken, once — and the
+  backlog at boot is not. `docs/inbox.md` has the record shape and the reasoning.
 - **A bell**: a soft synthesised tone when a turn finishes, toggled beside the
   volume. Deliberately *not* governed by the voice mute — that one is about her
   voice and about not being billed, and the bell matters most when she is silent.
@@ -361,6 +372,7 @@ set lives there (the test and build commands, today); secrets stay in the
 | `HARNESS_DIRECTOR_PLAN` | — | The role-lock plan (`/director-skills` creates one) |
 | `HARNESS_PLAN_ROOTS` | — | Comma list of plan trees; empty means auto-discovery |
 | `HARNESS_NO_KICKOFF` | — | Boot silently (cheap for testing) |
+| `HARNESS_INBOX` | — | Hand-off files to read beside the inbox dir (see *The inbox*). ⚠ Accumulates across layers |
 | `ELEVENLABS_API_KEY` | — | Voice, both directions. Needs the **Text to Speech** permission |
 | `HARNESS_VOICE_ID` | — | The machine's default voice; personas override |
 | `HARNESS_TTS_MODEL` | `eleven_flash_v2_5` | ⚠ Flash predates v3 audio tags — tags stripped |
@@ -389,7 +401,7 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turns; model/effort/permission/persona switches |
 | `askgate.ts` | `canUseTool` — questions pend, everything else becomes an approve/deny card |
-| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `suggest_reply`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
+| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `suggest_reply`, `queue_decision`, `close_decision`, `close_inbox`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
 | `mouth/mouth.ts` / `speakOut.ts` / `spoken.ts` / `audioTags.ts` | Speech out: a liftable core (held lines, TTS, the bill) and its harness adapter; what is said and excerpted |
@@ -398,6 +410,8 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 | `ui/capture.js` / `ui/remoteEar.js` / `ui/pcm.js` | The page half of the ear — mic capture, PCM, the Listener-shaped remote |
 | `ui/listen.js` / `ui/speaker.js` / `ui/wire.js` | The fallback (browser) ear, the mouth, and the wire panel — native ES modules, each tested from node with a stubbed browser object |
 | `workIndex.ts` / `workItems.ts` / `plansReader.ts` | The work contract and its built-in reader |
+| `inbox.ts` | The other built-in reader: hand-offs from other agents, addressed by name; the acks, never the producer's file |
+| `statusLine.ts` | The terminal's bottom line — where she is, and whether she is thinking; nothing off a TTY |
 | `planName.ts` | ⚠ The one plan-file writer — `name:` on rename, nothing else |
 | `pins.ts` / `handoff.ts` | Shelf, and terminal handoff |
 | `personal.ts` / `greeting.ts` | Memory of the person; the boot line and the onboarding offer |
@@ -412,9 +426,10 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 | `keyterms.ts` / `links.ts` / `markdown.ts` / `activity.ts` | Vocabulary, file links as offsets, span overlays, activity lines |
 | `showImage.ts` | Proving an image path before `/api/image` serves it or `show` renders it |
 
-`docs/` holds design records — the reasoning behind the voice plane, the status
-surface, personal context, the plans panel, and `/director-skills` — written so
-a fresh session can pick the work up without the conversation that produced it.
+`docs/` holds design records — the reasoning behind the voice plane, the ear, the
+status surface, personal context, the plans panel, the inbox, `/director-skills`,
+and the desk (agreed, unbuilt: one page over several running directors) — written
+so a fresh session can pick the work up without the conversation that produced it.
 
 ## Machine gotcha
 
