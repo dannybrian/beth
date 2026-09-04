@@ -145,6 +145,29 @@ test('a build you cancelled reads as no news, not as broken', async () => {
   assert.equal(s.light, 'grey');
 });
 
+/**
+ * The old log clears the moment the next build starts. A previous failure left
+ * on the page under "Building…" reads as this build's output, and a stale-run
+ * note beside it as news about a run that has not happened.
+ */
+test('starting a build drops the previous result first', async () => {
+  const bus = new ConversationBus();
+  const seen = watched(bus);
+  const b = new BuildRunner(cfgFor(tmp(), 'node -e process.stdout.write("built")'), bus);
+  await b.run();
+  assert.equal(b.state().last?.output, 'built');
+  seen.length = 0;
+  await b.run();
+  // The yellow published at start carries NO last, and the green after it does.
+  assert.deepEqual(
+    seen.map((s) => [s.light, s.last === null]),
+    [
+      ['yellow', true],
+      ['green', false],
+    ]
+  );
+});
+
 test('a second run while one is in flight is refused, not queued', async () => {
   const bus = new ConversationBus();
   const seen = watched(bus);

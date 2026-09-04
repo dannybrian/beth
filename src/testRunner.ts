@@ -406,6 +406,12 @@ export class TestMonitor {
   async run(): Promise<void> {
     if (this.running || !this.detected) return;
     this.running = true;
+    // The previous run goes the moment a new one starts, failures and all: a
+    // failure row still showing under "Running…" is one nothing has confirmed
+    // yet, and pasting it to her would hand over last time's reasons as this
+    // run's. Same rule as `setCommand`, and done on the server so every tab
+    // clears at once.
+    this.last = null;
     const startedFingerprint = this.fingerprint || treeFingerprint(this.cfg.repo);
     this.publish();
 

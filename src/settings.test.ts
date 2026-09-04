@@ -103,6 +103,27 @@ test('a new build command drops the light the old one earned', async () => {
   assert.equal(b.state().light, 'grey');
 });
 
+test('starting a test run drops the failures the last one found', async () => {
+  const repo = repoWith({ 'fail.js': 'console.log("not ok 1 - the settle window");process.exit(1);' });
+  const settings = new Settings({ stateDir: repo });
+  const bus = new ConversationBus();
+  const t = new TestMonitor(cfgFor(repo, { testCmd: 'node fail.js' }), bus, settings);
+  await t.run();
+  assert.equal(t.state().last?.failures.length, 1);
+  const seen: Array<[boolean, boolean]> = [];
+  bus.subscribe((m) => {
+    if (m.type === 'tests') seen.push([m.state.running, m.state.last === null]);
+  });
+  await t.run();
+  // The state published at start carries no failures; the one at the end
+  // carries this run's. (The light is not asserted: it is grey until the
+  // repo is watched, whatever the run found.)
+  assert.deepEqual(seen, [
+    [true, true],
+    [false, false],
+  ]);
+});
+
 test('a new test command drops the failures the old one found', async () => {
   // A real failing run, from a script rather than `node -e`: the command is
   // split on whitespace, so anything with a space in it is several arguments.

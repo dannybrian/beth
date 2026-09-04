@@ -208,6 +208,12 @@ export class BuildRunner {
     this.running = true;
     this.cancelling = false;
     this.stopWatch();
+    // The previous result goes the moment a new one starts, not when it lands.
+    // Yellow beside last time's log reads as this build having produced it, and
+    // the page renders whatever `last` says — so it is dropped HERE, once, for
+    // every tab, rather than hidden by each page on its own.
+    this.last = null;
+    this.stale = false;
     const startedFingerprint = this.fingerprint();
     this.publish();
 
