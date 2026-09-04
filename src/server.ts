@@ -27,6 +27,7 @@ import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import type { Workbench } from './workbench.ts';
+import type { Suggestion } from './suggestion.ts';
 import { setPlanName } from './planName.ts';
 import { originAllowed } from './origin.ts';
 import { EarHost } from './earHost.ts';
@@ -72,6 +73,7 @@ export function createServer(deps: {
   mined: string[];
   pins: Pins;
   bench: Workbench;
+  suggestion: Suggestion;
   /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
   room: VoiceRoom;
   /** The usage-credit countdown. See creditMeter.ts. */
@@ -214,6 +216,9 @@ export function createServer(deps: {
       // Current state, not transcript — same species as `pending` and `tests`,
       // so a reconnecting page gets the bench without it riding the replay.
       send(deps.bench.message());
+      // Likewise the ghost reply: a reload mid-conversation keeps it, and a
+      // page that arrives with none gets an explicit empty rather than silence.
+      send(deps.suggestion.message());
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       // Plus the shelf, which is not in-flight by definition.

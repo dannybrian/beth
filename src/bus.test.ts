@@ -21,6 +21,15 @@ test('a surface show is all pop — none of it reaches history', () => {
   assert.equal(bus.replay().length, 0);
 });
 
+// A suggestion is current state, sent fresh on connect — replaying an old one
+// after a newer null would resurrect a ghost reply the server already dropped.
+test('a suggestion never reaches the replay', () => {
+  const bus = new ConversationBus();
+  bus.publish({ type: 'suggestion', text: 'Yes, go ahead.' });
+  bus.publish({ type: 'suggestion', text: null });
+  assert.equal(bus.replay().length, 0);
+});
+
 test('live subscribers still see the pop the replay drops', () => {
   const bus = new ConversationBus();
   const seen = [];

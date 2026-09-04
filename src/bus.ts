@@ -153,6 +153,12 @@ export type UIMessage =
    */
   | { type: 'workbench'; url: string | null; label?: string }
   /**
+   * The reply she thinks he is about to type (suggestion.ts): ghost text in
+   * the composer, accepted with Tab. Null clears it. Current state like the
+   * bench — the server sends the live one on connect, so it does not replay.
+   */
+  | { type: 'suggestion'; text: string | null }
+  /**
    * The MACHINE's voice room (voiceRoom.ts): the universal mute and the one
    * shared volume, for every harness on this Mac. Current state, not
    * transcript — the server sends the live room on every connect, so it does
@@ -223,6 +229,7 @@ export class ConversationBus {
       m.type !== 'tests' &&
       m.type !== 'build' &&
       m.type !== 'workbench' &&
+      m.type !== 'suggestion' &&
       m.type !== 'room' &&
       // A partial transcript is a moment; replaying an hour of them into a
       // reconnecting tab would render someone's morning into the composer.

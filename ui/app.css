@@ -1113,6 +1113,9 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
   background: var(--panel);
 }
 .composer-row { display: flex; gap: 8px; }
+/* The field wrapper takes the textarea's place in the row so the Tab hint can
+   be positioned against the field's own edge. */
+.composer .field { flex: 1; position: relative; display: flex; min-width: 0; }
 .composer textarea {
   flex: 1;
   resize: none;
@@ -1125,6 +1128,31 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
   max-height: 160px;
 }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
+/* The suggested reply rides the PLACEHOLDER — it is only ever visible when the
+   box is empty, which is exactly the condition for offering it, and the browser
+   keeps that invariant for free. Painted apart from the readiness cue it
+   displaces: the cue is a hint about the field, the ghost is words he can take,
+   and the two must not read alike. Room on the right for the Tab badge. */
+.composer textarea.suggesting:placeholder-shown { padding-right: 46px; }
+/* The badge follows the placeholder, in CSS: every path that puts text in the
+   box — typing, held speech, a paste — hides both without a line of JS. */
+.composer .field textarea:not(:placeholder-shown) ~ .suggest-hint { display: none; }
+.composer textarea.suggesting::placeholder { color: color-mix(in srgb, var(--text) 62%, transparent); font-style: normal; }
+.composer .suggest-hint {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 5px;
+  pointer-events: none;
+}
+.composer .suggest-hint[hidden] { display: none; }
 /* Speech in flight — provisional, and sent by stopping, not by Enter. Styled
    distinctly so it never reads as text he typed and is waiting to send. */
 .composer textarea.interim {

@@ -402,6 +402,28 @@ These cost hours. Don't rediscover them.
   `scrollIntoView` (it drags the transcript the reference was read in), and not
   `behavior:'smooth'` (measured: silently does nothing in a hidden pane).
 
+- **The suggested reply is HERS to offer, and it waits for the turn to end**
+  (2026-09-04). `suggest_reply` in `tools.ts` puts one line of ghost text in the
+  composer, Tab takes it into the box (not sent — Enter still sends), and
+  `src/suggestion.ts` owns the lifecycle. Her tool rather than a second model
+  guessing after each turn: she knows what she just asked, and a prediction call
+  would cost a turn's tokens per turn. ⚠ HELD until the `result`, never shown
+  when the call lands — she calls it mid-turn and keeps writing, and a ghost
+  reply under an unfinished sentence answers a question not yet put. Any turn
+  beginning (his send, a worker's report resuming her, `/clear`) drops it, shown
+  or held; an interrupted or errored turn shows nothing. Current state, not
+  transcript: sent on connect beside the bench, kept out of the replay.
+  ⚠ On the page it IS the placeholder. That is the whole "only if I haven't
+  typed" rule, enforced by the browser rather than by watching keystrokes, and
+  the `:placeholder-shown` selector hides the Tab badge along every path that
+  fills the box. The cost is that it DISPLACES the voice readiness cue while it
+  stands — deliberate, the mic button still carries the listening state, and
+  the cue returns the moment the ghost goes. Do not move it to an overlay to
+  get the cue back; you would be re-deriving "is the box empty" by hand.
+  Tab accepts from the field or from body focus only — inside a settings box it
+  means Tab. Escape on an empty box dismisses the ghost locally, before it
+  means stop.
+
 - **The numbers hang from the STRIP** (2026-09-01). `.stats` moved from
   `bottom: 78px` to `top: 44px`: the controls that open it are the top-right
   meters, and reaching to the bottom-right for what a top-right control opens was

@@ -389,7 +389,7 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turns; model/effort/permission/persona switches |
 | `askgate.ts` | `canUseTool` — questions pend, everything else becomes an approve/deny card |
-| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
+| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `suggest_reply`, `queue_decision`, `close_decision`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
 | `mouth/mouth.ts` / `speakOut.ts` / `spoken.ts` / `audioTags.ts` | Speech out: a liftable core (held lines, TTS, the bill) and its harness adapter; what is said and excerpted |
@@ -405,6 +405,7 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 | `settings.ts` | The gear's store — the one config layer the page writes, and it wins |
 | `creditMeter.ts` | The usage-credit countdown, armed only past the plan windows |
 | `workbench.ts` | The pinned bench URL — what we're working on, bold at centre top |
+| `suggestion.ts` | The suggested reply — ghost text in the composer, Tab to accept; held until her turn ends |
 | `directorRole.ts` / `directorName.ts` | Shadow vs director; what to call the director |
 | `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` / `origin.ts` | Transport, replay, events, queues, and the Origin check on API writes |
 | `wireTap.ts` | The compact record of every SDK message the wire panel pulls |

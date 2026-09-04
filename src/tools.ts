@@ -18,6 +18,7 @@ import { renderInline } from './markdown.ts';
 import { detectLinks } from './links.ts';
 import { resolveImage } from './showImage.ts';
 import type { Workbench } from './workbench.ts';
+import type { Suggestion } from './suggestion.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -60,6 +61,8 @@ export function createHarnessTools(deps: {
   speech: SpeechControl;
   /** The one-url bench at the top of the page. See workbench.ts. */
   bench: Workbench;
+  /** The reply she expects, held until her turn ends. See suggestion.ts. */
+  suggestion: Suggestion;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -182,6 +185,28 @@ export function createHarnessTools(deps: {
         text: result.state.label ? `bench → ${result.state.url} (${result.state.label})` : `bench → ${result.state.url}`,
       });
       return ok({ pinned: true, url: result.state.url });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * Her guess at his next line, as ghost text he can Tab into the box. Hers to
+   * make rather than a second model's, because she knows what she just asked.
+   * Nothing is shown until the turn ENDS (suggestion.ts): she calls this mid-
+   * turn and keeps writing, and a reply offered under an unfinished sentence
+   * answers a question not yet put.
+   */
+  const suggestReply = tool(
+    'suggest_reply',
+    'Pre-fill Danny\'s next reply as ghost text in his composer, which he accepts with Tab. Use it ONLY when what he will say next is short and obvious — you asked "shall I commit?" and the answer is "yes, commit it"; you finished a step and the natural next line is "run the tests" or "go ahead". Write it as HE would type it, one short line, first person. Not for a queued decision (the queue has its own buttons), not for a genuinely open question, and never to nudge him toward what you would prefer — a wrong suggestion costs him a keystroke and some trust. It appears when your turn ends, disappears the moment he sends anything, and is never spoken. Calling it twice in a turn keeps the later one.',
+    {
+      text: z.string().describe('The reply, as Danny would type it. One line, under 160 characters. "Yes, go ahead." / "Commit it." / "Run the suite first."'),
+    },
+    async (raw) => {
+      const { text } = repaired('suggest_reply', raw);
+      const result = deps.suggestion.offer(text);
+      if (!result.ok) return ok({ offered: false, reason: result.reason });
+      return ok({ offered: true, text: result.text, shownWhen: 'your turn ends' });
     },
     { alwaysLoad: true }
   );
@@ -431,6 +456,7 @@ export function createHarnessTools(deps: {
       say,
       show,
       workbench,
+      suggestReply,
       queueDecision,
       closeDecision,
       closeWorker,

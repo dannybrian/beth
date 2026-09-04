@@ -1257,6 +1257,10 @@ const handlers = {
   // The turn was sent — the preview has become a real message in the transcript.
   user: (m) => {
     clearInterim();
+    // The server drops the ghost reply when a turn begins; this is the same
+    // drop a beat earlier, so the other tab's send does not leave it lingering
+    // here for the round trip.
+    setSuggestion(null);
     renderUser(m);
   },
   assistant: (m) => {
@@ -1268,6 +1272,7 @@ const handlers = {
   },
   show: renderShow,
   workbench: renderBench,
+  suggestion: (m) => setSuggestion(m.text),
   // Tool calls are the conversation still moving. Without this, a long stretch
   // of work emits nothing the idle timer recognises, the paid session closes
   // mid-job, and the result Danny actually wanted to hear arrives to a shut
@@ -1328,6 +1333,7 @@ const handlers = {
     askCards.clear();
     approvalCards.clear();
     lastUsage = null;
+    setSuggestion(null);
     // The cards went with the conversation — so must the summons they earned.
     paintTitle();
     entry('activity', (n) => (n.textContent = '— new conversation —'));
@@ -2370,6 +2376,18 @@ const PLACEHOLDER = {
 /** The readiness cue for the state we are in, which autosend is half of. */
 function paintPlaceholder(state = voice?.state ?? 'off') {
   if (speechOwnsInput) return;
+  // The suggested reply displaces the cue while it stands. Deliberate: the cue
+  // says the field is ready, the ghost says what to put in it, and a box can
+  // show one string. The mic button still carries the listening state, and the
+  // cue comes straight back when the ghost goes.
+  if (suggestion) {
+    input.placeholder = suggestion;
+    input.classList.add('suggesting');
+    suggestHint.hidden = false;
+    return;
+  }
+  input.classList.remove('suggesting');
+  suggestHint.hidden = true;
   input.placeholder = (state === 'listening' && !autosend ? PLACEHOLDER.holding : PLACEHOLDER[state]) ?? PLACEHOLDER.off;
 }
 
@@ -2821,6 +2839,12 @@ document.addEventListener('keydown', (e) => {
     if (gearOpen) toggleGear(false);
     return;
   }
+  // A ghost reply on an empty box is the last dismissable thing before Escape
+  // means stop. Local only: the other tab keeps its own until the turn goes.
+  if (suggestion && !input.value) {
+    setSuggestion(null);
+    return;
+  }
   stopAll();
 });
 paintBell();
@@ -2838,6 +2862,8 @@ const send = () => {
   releaseComposer();
   heldBase = null;
   input.classList.remove('interim');
+  // Sent, so whatever was suggested is answered — by this or by something else.
+  setSuggestion(null);
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
@@ -2865,6 +2891,47 @@ function clearComposer() {
   input.classList.remove('interim');
   input.style.height = 'auto';
 }
+
+// --- the suggested reply ----------------------------------------------------
+//
+// Her guess at his next line (`suggest_reply`, suggestion.ts), shown as the
+// composer's placeholder and taken with Tab. The placeholder is the whole
+// "only if I haven't typed" rule: the browser shows it only while the box is
+// empty, so nothing here has to watch keystrokes, and a sentence half-typed
+// hides it by itself. Text in the box is his; the ghost never competes with it.
+
+let suggestion = null;
+const suggestHint = $('suggest-hint');
+
+function setSuggestion(text) {
+  suggestion = text || null;
+  paintPlaceholder();
+}
+
+/**
+ * Tab. Into the box, not sent — the same as Claude Code, and the point: he
+ * reads it as his own line for a beat, edits it or not, and Enter sends it.
+ * Goes through the editing surface so ⌘Z takes it back out, like clearComposer.
+ */
+function acceptSuggestion() {
+  if (!suggestion || input.value.trim()) return false;
+  const text = suggestion;
+  input.focus();
+  if (!document.execCommand?.('insertText', false, text)) input.value = text;
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  input.setSelectionRange(input.value.length, input.value.length);
+  return true;
+}
+// Document-level rather than on the field: after a click in the transcript the
+// composer has lost focus, and Tab should still take the line rather than walk
+// the focus ring. Only from the field or from nothing — a Tab inside a settings
+// box means what it always means.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target !== input && e.target !== document.body) return;
+  if (acceptSuggestion()) e.preventDefault();
+});
 
 /**
  * The one button, and what it is really for.

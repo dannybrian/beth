@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Suggestion } from './suggestion.ts';
 import { ConversationBus, type UIMessage } from './bus.ts';
 import { SessionManager } from './session.ts';
 import type { HarnessConfig } from './config.ts';
@@ -27,7 +28,7 @@ function harness(opts: { beat?: string | null; refs?: WorkRef[]; preamble?: stri
   const bus = new ConversationBus();
   const seen: UIMessage[] = [];
   bus.subscribe((m) => seen.push(m));
-  const s = new SessionManager(cfg, bus, {} as any, {} as any, {} as any, {} as any, {} as any);
+  const s = new SessionManager(cfg, bus, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, new Suggestion());
   const sent: string[] = [];
   // The model's copy, taken where it enters the SDK rather than where it is built.
   (s as any).input = { push: (m: any) => sent.push(m.message.content), end() {} };

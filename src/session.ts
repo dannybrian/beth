@@ -23,6 +23,7 @@ import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
 import { WireTap } from './wireTap.ts';
 import type { Workbench } from './workbench.ts';
+import type { Suggestion } from './suggestion.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
@@ -85,6 +86,9 @@ const PERSONA = [
   // three things waiting" lands better with the queue on screen.
   'You also have a SCREEN: `show` puts an image from the repo into the conversation, or opens his pending queue full-size (`surface: "pending"`) when you are telling him what waits on him. Reach for it whenever a picture answers better than prose — especially when he is listening rather than reading. Add `pop: true` only when he should look right now; it opens over the page he is looking at, so it is "look at this", not decoration. The tool makes no sound — say what you are showing.',
   'Use `queue_decision` for anything Danny should decide but that does not block you. Reserve AskUserQuestion for decisions that genuinely block the work — it pauses the turn.',
+  // The ghost reply. Its whole value is being RIGHT: one wrong "yes, go ahead"
+  // under an answer he disagrees with and he stops reading them.
+  'When you end a turn where his next line is obvious and short — "yes, commit it", "run the tests", "go ahead" — offer it with `suggest_reply` so it is already in his composer, a Tab away. Only when it is genuinely obvious; an open question or a queued decision gets nothing.',
   // The queue is only worth looking at if everything in it is still waiting.
   'The queue is YOURS TO KEEP CLEAN. When he answers a queued decision in conversation, or it stops mattering because the work moved, close it with `close_decision` in the same turn — an item he has already dealt with, still sitting there, is how a queue stops being worth a glance. When you offer candidate answers, give them as `options`: they are buttons he can press, not a list to read out.',
   'Answer "what\'s pending?" from the `pending` tool, and anything about plans — what is in flight, a plan\'s status, how far along it is, what its tasks are — from the `plans` tool. Never from memory, and never by grepping plan files: the index and the panel Danny is looking at are the same source, and a hand-rolled count will disagree with what he can see.',
@@ -149,6 +153,7 @@ export class SessionManager {
   private work: WorkIndex;
   private speech: SpeechControl;
   private bench: Workbench;
+  private suggestion: Suggestion;
 
   constructor(
     cfg: HarnessConfig,
@@ -158,7 +163,8 @@ export class SessionManager {
     gate: AskGate,
     work: WorkIndex,
     speech: SpeechControl,
-    bench: Workbench
+    bench: Workbench,
+    suggestion: Suggestion
   ) {
     this.cfg = cfg;
     this.bus = bus;
@@ -168,6 +174,7 @@ export class SessionManager {
     this.work = work;
     this.speech = speech;
     this.bench = bench;
+    this.suggestion = suggestion;
     this.role = assessRole(cfg.repo, cfg.directorPlan);
     this.personaChoice = new PersonaChoice(cfg.stateDir);
     const persona = this.personaChoice.current();
@@ -301,6 +308,7 @@ export class SessionManager {
             personal: this.personal.enabled ? this.personal : null,
             speech: this.speech,
             bench: this.bench,
+            suggestion: this.suggestion,
           }),
         },
         canUseTool: this.gate.canUseTool,
@@ -342,8 +350,21 @@ export class SessionManager {
     if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs });
     this.thinking = true;
     this.bus.publish({ type: 'status', state: 'thinking', turn });
+    this.turnBegan();
     this.input.push(userMsg(text));
     return turn;
+  }
+
+  /**
+   * A turn is under way, whoever started it. The suggested reply is an answer
+   * to the PREVIOUS turn's last line, so every page drops it now — silent
+   * turns included: the handoff FYI and a worker's report both give her a new
+   * turn to write, and the old ghost text under it would be a reply to
+   * something she is about to move on from. Published only on change.
+   */
+  private turnBegan() {
+    const m = this.suggestion.turnStarted();
+    if (m) this.bus.publish(m);
   }
 
   /**
@@ -395,6 +416,8 @@ export class SessionManager {
     const receipt = await this.q.interrupt();
     this.thinking = false;
     this.bus.publish({ type: 'status', state: 'idle', detail: 'stopped', turn: this.turnSeq });
+    // Whatever she offered was for a turn he just cut off.
+    this.suggestion.turnEnded(false);
     return receipt;
   }
 
@@ -581,6 +604,9 @@ export class SessionManager {
     this.publishPending();
     this.bus.clear();
     this.bus.publish({ type: 'cleared' });
+    // The page drops the ghost on `cleared` too, but the server's copy is what
+    // the next connection is sent.
+    this.suggestion.reset();
     this.thinking = false;
     this.bus.publish({ type: 'status', state: 'idle' });
   }
@@ -607,6 +633,7 @@ export class SessionManager {
     if ((m.type === 'stream_event' || m.type === 'assistant') && !this.thinking) {
       this.thinking = true;
       this.bus.publish({ type: 'status', state: 'thinking', turn: this.turnSeq });
+      this.turnBegan();
     }
     switch (m.type) {
       case 'system':
@@ -750,5 +777,9 @@ export class SessionManager {
       turn: this.turnSeq,
       detail: wasStopped ? 'stopped' : m.is_error ? (m.errors ?? []).join('; ').slice(0, 200) : undefined,
     });
+    // AFTER the idle status, so the page has closed the turn (bell, spinner)
+    // before the ghost reply lands in its composer. Only a clean end shows it.
+    const suggested = this.suggestion.turnEnded(!m.is_error);
+    if (suggested) this.bus.publish(suggested);
   }
 }

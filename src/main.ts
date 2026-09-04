@@ -18,6 +18,7 @@ import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFile
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import { Workbench } from './workbench.ts';
+import { Suggestion } from './suggestion.ts';
 import { ensurePersonasDir } from './personas.ts';
 import { VoiceRoom } from './voiceRoom.ts';
 import { CreditMeter, anyWindowExhausted } from './creditMeter.ts';
@@ -67,6 +68,9 @@ const pins = new Pins(cfg);
 // The url being iterated on, if the last run pinned one — same shelf-life
 // reasoning as pins: the dev server it points at usually outlives the harness.
 const bench = new Workbench(cfg);
+// The ghost reply in the composer. In memory only: it answers the last thing
+// she said, and a restart has nothing for it to answer.
+const suggestion = new Suggestion();
 // One builder for all three publishers (here, `hello`, and the pin endpoint), so
 // the shelf cannot be present on one and missing on another.
 work.subscribe(() => bus.publish(workMessage(work, pins)));
@@ -101,7 +105,8 @@ session = new SessionManager(
     set: (level) => speakOut.setSpeechLevel(level),
     setVoice: speakOut.setVoice,
   },
-  bench
+  bench,
+  suggestion
 );
 // A persona chosen on a previous run speaks in her own voice from the first line
 // of the greeting, not from the first switch.
@@ -184,7 +189,7 @@ const build = new BuildRunner(cfg, bus, { settings });
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, bench, room, credits });
+const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, bench, suggestion, room, credits });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
