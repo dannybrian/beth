@@ -124,7 +124,9 @@ export class StatusLine {
   }
 
   private render(): void {
-    const spin = this.handle !== null ? `${FRAMES[this.frame]} ` : '';
+    // Idle keeps the spinner's two columns as blanks: the label must not slide
+    // left when a turn ends and back when the next begins.
+    const spin = this.handle !== null ? `${FRAMES[this.frame]} ` : '  ';
     this.out.write(`${CLEAR}${spin}beth: ${this.label}`);
   }
 }

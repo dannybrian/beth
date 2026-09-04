@@ -129,7 +129,10 @@ like the feature working until the first mid-conversation reload), and the greet
 onboarding offer (a nag if it repeats, silently absent if it never fires), and
 `statusLine` (the terminal's bottom line — a log printed over it leaves half of
 it on the row, a spinner that outlives the turn reads as a hang, and off a TTY it
-must write nothing). The Scribe
+must write nothing. ⚠ Its `thinking` comes from the SDK STREAM, not from
+`send()`: a turn the SDK resumes after a worker's report has no send, and that
+turn showed no spinner anywhere — see the 2026-09-04 correction in
+`docs/status-surface.md`). The Scribe
 ear added four more in the same two shapes: `ear/pcm` (a resampler that drifts or
 warbles at chunk seams doesn't error — she just mishears him), `ear/scribeEngine`
 (driven by REAL captured frames from `src/ear/fixtures/`, including a live

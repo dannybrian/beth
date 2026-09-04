@@ -114,6 +114,14 @@ export class SessionManager {
   private turnSeq = 0;
   private interruptPending = false;
   /**
+   * Whether a `thinking` status is out and no `result` has closed it. Kept
+   * here rather than derived from `send()` because a turn is not always
+   * Danny's: when a worker reports back, the SDK resumes the model on its
+   * own and no send() happens — and that turn used to show NO spinner, on the
+   * page or in the terminal, while she was demonstrably mid-sentence.
+   */
+  private thinking = false;
+  /**
    * What she remembers about the PERSON. Null-behaviour lives inside the store.
    *
    * Not readonly: a persona switch re-points it, because the memory belongs to
@@ -332,6 +340,7 @@ export class SessionManager {
     // is precisely to show what the transcript does not.
     this.wire.userTurn(turn, text);
     if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs });
+    this.thinking = true;
     this.bus.publish({ type: 'status', state: 'thinking', turn });
     this.input.push(userMsg(text));
     return turn;
@@ -384,6 +393,7 @@ export class SessionManager {
     if (!this.q) return undefined;
     this.interruptPending = true;
     const receipt = await this.q.interrupt();
+    this.thinking = false;
     this.bus.publish({ type: 'status', state: 'idle', detail: 'stopped', turn: this.turnSeq });
     return receipt;
   }
@@ -571,6 +581,7 @@ export class SessionManager {
     this.publishPending();
     this.bus.clear();
     this.bus.publish({ type: 'cleared' });
+    this.thinking = false;
     this.bus.publish({ type: 'status', state: 'idle' });
   }
 
@@ -589,6 +600,14 @@ export class SessionManager {
     // The tap sees EVERYTHING, including the types the switch below ignores —
     // that difference is the whole point of the wire panel.
     this.wire.record(m);
+    // The prediction itself is the proof a turn is running, whoever started
+    // it. First sign of one — a stream event or an assistant message — with
+    // no `thinking` out means the SDK resumed her (a worker's report landed),
+    // so say so here; the `result` closes it exactly as for a sent turn.
+    if ((m.type === 'stream_event' || m.type === 'assistant') && !this.thinking) {
+      this.thinking = true;
+      this.bus.publish({ type: 'status', state: 'thinking', turn: this.turnSeq });
+    }
     switch (m.type) {
       case 'system':
         return this.handleSystem(m);
@@ -724,6 +743,7 @@ export class SessionManager {
     // expected shape of a deliberate stop, not a failure worth alarming about.
     const wasStopped = m.is_error && this.interruptPending;
     this.interruptPending = false;
+    this.thinking = false;
     this.bus.publish({
       type: 'status',
       state: m.is_error && !wasStopped ? 'error' : 'idle',

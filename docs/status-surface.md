@@ -194,3 +194,18 @@ same place — two doors, one room. The strip's meter row grew a third bar for
 session context, which unlike the two plan windows is never hidden: every session
 has a context, so it is what keeps the meter button on screen when there is no
 plan to report.
+
+## Dated correction — 2026-09-04
+
+`turnInFlight` is only as true as the `thinking` status that feeds it, and that
+status used to be published in ONE place: the session's `send()`. A turn is not
+always Danny's. When a worker reports back, the SDK resumes the model on its own,
+nothing calls `send()`, and for the whole of that turn the spinner stayed hidden —
+on the page and on the terminal's status line, which reads the same message.
+Seen from use with three harnesses mid-turn and one spinner between them.
+
+The session now treats the prediction itself as the proof: the first
+`stream_event` or `assistant` message with no `thinking` outstanding publishes
+one, whoever started the turn, and the `result` closes it as before
+(`session.ts`, the `thinking` flag). The dot/spinner split above is unchanged;
+what changed is that the spinner's input is now the stream, not the send.

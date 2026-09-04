@@ -23,11 +23,11 @@ function stub(isTTY = true) {
   return { writes, out, timers, con, ticks, unrefs: () => unrefs };
 }
 
-test('idle: the label, redrawn in place, no newline', () => {
+test('idle: the label behind two blanks where the spinner sits, redrawn in place, no newline', () => {
   const s = stub();
   const line = new StatusLine({ label: 'beadgame', out: s.out, timers: s.timers });
   line.show();
-  assert.deepEqual(s.writes, [`${CLEAR}beth: beadgame`]);
+  assert.deepEqual(s.writes, [`${CLEAR}  beth: beadgame`]);
   assert.ok(!s.writes.join('').includes('\n'));
 });
 
@@ -40,7 +40,7 @@ test('busy: a spinner frame appears, advances on tick, and goes when the turn en
   s.ticks[0]();
   assert.match(s.writes.at(-1)!, /⠙ beth: beadgame$/);
   line.setBusy(false);
-  assert.equal(s.writes.at(-1), `${CLEAR}beth: beadgame`);
+  assert.equal(s.writes.at(-1), `${CLEAR}  beth: beadgame`, 'the label does not move when the spinner goes');
   assert.equal(s.ticks.length, 0, 'interval cleared');
   assert.equal(line.busy, false);
 });
@@ -64,7 +64,7 @@ test('a console line lands ABOVE the status line, which is redrawn after it', ()
   line.show();
   s.writes.length = 0;
   s.con.log('  work: 3 items');
-  assert.deepEqual(s.writes, [CLEAR, 'LOG   work: 3 items\n', `${CLEAR}beth: beadgame`]);
+  assert.deepEqual(s.writes, [CLEAR, 'LOG   work: 3 items\n', `${CLEAR}  beth: beadgame`]);
   undo();
   s.writes.length = 0;
   s.con.log('plain');
