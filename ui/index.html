@@ -154,6 +154,14 @@
       <h3>Commands</h3>
       <div id="gear-commands"></div>
       <div class="snote">Split on whitespace and run directly — no shell, so a pipeline belongs in a script the project has.</div>
+      <h3>Transcript</h3>
+      <!-- Her working — commands, edits, tool calls — is hidden by default so the
+           transcript reads as a conversation. A page preference (localStorage),
+           in the gear because this is where you look for a switch. -->
+      <label class="setcheck" title="Show every command, edit and tool call as she makes it. Off, the transcript is what she says; the wire panel always has the rest.">
+        <input type="checkbox" id="show-activity" />
+        show what she runs — commands, edits, tool calls
+      </label>
     </div>
 
     <!-- The wire: what actually happened on the API. Opened from the status

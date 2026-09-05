@@ -196,8 +196,11 @@ const renderSay = (m) =>
 // A verb and a subject, not the JSON. The full input is one hover away, because
 // the summary is lossy on purpose and the moment you need the arguments you need
 // all of them.
+// `tool` marks HER working — the class the gear's transcript box hides. The
+// other activity entries (a setting changed, stopped, reconnected, the bench)
+// are notes to Danny about the page and stay whatever the box says.
 const renderActivity = (m) =>
-  entry('activity', (n) => {
+  entry('activity tool', (n) => {
     n.textContent = `⚙ ${m.summary || `${m.tool} ${m.detail}`}`;
     n.title = `${m.tool} ${m.detail}`;
   });
@@ -2325,6 +2328,27 @@ let speechOwnsInput = false;
 // One person's preference on one machine, so it lives beside the collapsed
 // sections rather than on the server.
 const AUTOSEND_KEY = 'harness.autosend';
+// --- her working, shown or hidden -------------------------------------------
+//
+// Activity lines (⚙ a command, an edit, a tool call) are the transcript's
+// working, and by default it reads as a conversation rather than a log: HIDDEN.
+// It is a class on the body rather than a filter at render, so the lines are
+// all still there — switching it on shows the history you were not watching,
+// and off loses nothing. Kept in localStorage like the bell: a preference of
+// this PAGE, not something a repo has an opinion about. The box lives in the
+// gear because that is where you look for a switch.
+let showActivity = localStorage.getItem('activity') === 'show';
+function paintActivity() {
+  document.body.classList.toggle('hide-activity', !showActivity);
+  $('show-activity').checked = showActivity;
+}
+$('show-activity').onchange = (e) => {
+  showActivity = e.target.checked;
+  localStorage.setItem('activity', showActivity ? 'show' : 'hide');
+  paintActivity();
+};
+paintActivity();
+
 let autosend = localStorage.getItem(AUTOSEND_KEY) !== '0';
 
 /**

@@ -95,7 +95,16 @@ function whereWords(path: string): string {
  */
 export function spokenCandidates(title: string, path: string): string[] {
   const full = cleanTitle(title);
-  const out = [headline(title), slugName(path), full, `${slugName(path)} in ${whereWords(path)}`];
+  // ⚠️ The filename rungs exist because Danny NAMED the file. An item with no
+  // file behind it — an inbox hand-off, whose path ends in a URL-encoded
+  // producer id — has no such name, and the rung produced
+  // "direct%3A20260904T190000" the first time two real hand-offs shared a
+  // headline. Without a `.md` there is no filename; the ladder is title-only
+  // and the counter rung below is the collision answer.
+  const named = /\.md$/i.test(path);
+  const out = named
+    ? [headline(title), slugName(path), full, `${slugName(path)} in ${whereWords(path)}`]
+    : [headline(title), full];
   return out.map((c) => capWords(c)).filter((c, i, a) => c && a.indexOf(c) === i);
 }
 

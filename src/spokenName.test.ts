@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assignSpokenNames, capWords, headline, slugName, taskSpoken } from './spokenName.ts';
+import { assignSpokenNames, capWords, headline, slugName, taskSpoken, spokenCandidates } from './spokenName.ts';
 
 test('headline keeps the name and drops the elaboration', () => {
   assert.equal(headline('Director consolidation — the archived-tabs handoff'), 'Director consolidation');
@@ -143,4 +143,26 @@ test('taskSpoken keeps the what and drops the how', () => {
   );
   // A colon must NOT be a break here, or every task becomes a bare "Step 4".
   assert.equal(taskSpoken('**Step 4: Run** `node --test` → GREEN.'), 'Step 4: Run node --test → GREEN');
+});
+
+// --- an item with no file behind it -------------------------------------------
+
+/**
+ * Real titles from the first Memobase outbox (2026-09-04). Both headline to
+ * "Memobase pipeline", and the filename rung then named one of them by its
+ * URL-encoded id — "direct%3A20260904T190000" — which cannot be said at all.
+ */
+test('an inbox path never yields its encoded id as a name — the ladder is title-only', () => {
+  const items = [
+    { path: 'inbox/handoffs/direct%3A20260904T190000', title: 'Memobase pipeline: cron cannot read Voice Memos' },
+    { path: 'inbox/handoffs/direct%3A20260904T190002', title: 'Memobase pipeline: extract: exit 2' },
+  ];
+  const named = assignSpokenNames(items);
+  for (const name of named.values()) assert.doesNotMatch(name, /%|direct/);
+  assert.equal(new Set(named.values()).size, 2, 'still unique');
+  // Both clash on the headline, so both escalate — to the full title, not a file.
+  assert.equal(named.get(items[0].path), 'Memobase pipeline: cron cannot read Voice Memos');
+  assert.equal(named.get(items[1].path), 'Memobase pipeline: extract: exit 2');
+  // A plan keeps its filename rung exactly as before.
+  assert.ok(spokenCandidates('Viz sidecar — the geo half', 'plans/2026-07-15-viz-geography-delivery.md').includes('viz geography delivery'));
 });
