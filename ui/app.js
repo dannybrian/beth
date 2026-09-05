@@ -696,6 +696,17 @@ let overlaySig = null;
 function renderPendingOverlay() {
   const sig = lastPending.decisions.map((d) => d.id).join(',');
   if (sig === overlaySig) return;
+  // Resolving the LAST item while the sheet is up dismisses the sheet: he opened
+  // it to clear the queue, and a modal saying "Nothing waiting." over the
+  // conversation is one more click to get back to it. Only the transition
+  // counts — `overlaySig` holds what was last laid out, and a non-empty one
+  // going empty is that. Opening it on an empty queue still shows the line,
+  // because then he asked to look.
+  if (pendingOverlayOpen && overlaySig && !lastPending.decisions.length) {
+    overlaySig = sig;
+    closePendingOverlay();
+    return;
+  }
   overlaySig = sig;
   const live = new Set(lastPending.decisions.map((d) => d.id));
   for (const id of overlayNodes.keys()) if (!live.has(id)) overlayNodes.delete(id);
