@@ -34,7 +34,16 @@
 
 body {
   margin: 0;
+  /* `100vh` on a tablet is the viewport with the browser's toolbar HIDDEN, so
+     while the toolbar shows the page is taller than the screen and the document
+     scrolls past the composer (seen on an iPad in Chrome). `dvh` tracks the
+     visible height; the `vh` line is the fallback for a browser without it. The
+     document itself never scrolls — the transcript and every panel scroll
+     inside — so overflow is shut off here and the rubber-band with it. */
   height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: var(--bg);
