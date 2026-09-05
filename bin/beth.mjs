@@ -29,7 +29,7 @@ if (flag('help')) {
 
   beth                 bind to the git root of the current directory
   beth --repo <path>   bind to a specific repo
-  beth --port <n>      force a port (default: first free from 4620)
+  beth --port <n>      force a port (default: HARNESS_PORT in the repo's .env, else first free from 4620)
                        everything binds to localhost — there is no public port
   beth --model <id>    claude-opus-5 (default) | claude-fable-5
   beth --fresh         ignore any previous session
@@ -98,6 +98,23 @@ if (sameRepo) {
   process.exit(1);
 }
 
+// --- config: real env, then the bound repo's .env, then machine-wide ---
+// Same three layers as src/config.ts. The machine file is where the ElevenLabs
+// credentials belong — one account for this Mac — so binding to a new repo does
+// not silently start a text-only harness.
+const readEnv = (f) => {
+  const out = {};
+  if (!fs.existsSync(f)) return out;
+  for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
+    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  }
+  return out;
+};
+const repoEnv = readEnv(path.join(repo, '.env'));
+const machineEnv = readEnv(path.join(process.env.HOME ?? '', '.director-harness', '.env'));
+const conf = (k) => process.env[k] ?? repoEnv[k] ?? machineEnv[k];
+
 // --- a free port, so a second repo does not collide with the first ---
 //
 // ⚠️ Probing 127.0.0.1 alone is NOT enough. A server that binds with `listen(port)`
@@ -118,30 +135,21 @@ const bindable = (p, host) =>
 const claimed = new Set(running.map((r) => r.port).filter(Boolean));
 const portFree = async (p) => !claimed.has(p) && (await bindable(p)) && (await bindable(p, '127.0.0.1'));
 
-const wanted = Number(value('port', process.env.HARNESS_PORT ?? 4620));
+// A port the REPO names is fixed, not a starting point. Three beths that each
+// take "the first free port from 4620" land in start order, and a tailnet
+// mapping (`tailscale serve` → 127.0.0.1:<port>) pinned to one of them silently
+// opens a different director the next morning. So `HARNESS_PORT` in the repo's
+// .env behaves like --port: that port or a loud failure, never a drift.
+const pinned = repoEnv.HARNESS_PORT ? Number(repoEnv.HARNESS_PORT) : null;
+const wanted = Number(value('port', process.env.HARNESS_PORT ?? pinned ?? 4620));
 let port = wanted;
-if (!flag('port')) for (let i = 0; i < 20 && !(await portFree(port)); i++) port = wanted + i + 1;
+const fixed = flag('port') || Boolean(process.env.HARNESS_PORT) || pinned !== null;
+if (!fixed) for (let i = 0; i < 20 && !(await portFree(port)); i++) port = wanted + i + 1;
 if (!(await portFree(port))) {
-  console.error(`Port ${port} is busy. Pass --port <n>.`);
+  console.error(`Port ${port} is busy${fixed ? ` — ${path.basename(repo)} is pinned to it (HARNESS_PORT), so nothing else may sit there` : '. Pass --port <n>'}.`);
   process.exit(1);
 }
 
-// --- config: real env, then the bound repo's .env, then machine-wide ---
-// Same three layers as src/config.ts. The machine file is where the ElevenLabs
-// credentials belong — one account for this Mac — so binding to a new repo does
-// not silently start a text-only harness.
-const readEnv = (f) => {
-  const out = {};
-  if (!fs.existsSync(f)) return out;
-  for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
-    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
-  }
-  return out;
-};
-const repoEnv = readEnv(path.join(repo, '.env'));
-const machineEnv = readEnv(path.join(process.env.HOME ?? '', '.director-harness', '.env'));
-const conf = (k) => process.env[k] ?? repoEnv[k] ?? machineEnv[k];
 const voiceConfigured = Boolean(conf('ELEVENLABS_API_KEY') && (conf('HARNESS_VOICE_ID') || conf('SPEECH_ENGINE_ID')));
 
 const env = { ...process.env, HARNESS_REPO: repo, HARNESS_PORT: String(port) };

@@ -365,7 +365,7 @@ set lives there (the test and build commands, today); secrets stay in the
 
 | Env | Default | Meaning |
 |---|---|---|
-| `HARNESS_PORT` | `4620` | Run a second instance alongside |
+| `HARNESS_PORT` | first free from `4620` | In a repo's `.env` it PINS that repo's port — a tailnet mapping needs a port that does not drift with start order |
 | `HARNESS_MODEL` | `claude-opus-5` | Director session model — the dominant cost lever |
 | `HARNESS_PERMISSION_MODE` | `auto` | The SDK permission mode the session starts in |
 | `HARNESS_CLAUDE_BIN` | `~/.local/bin/claude` | Native CLI (see gotcha below) |
