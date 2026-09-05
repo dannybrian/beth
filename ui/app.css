@@ -1182,8 +1182,12 @@ body.hide-activity .entry.activity.tool { display: none; }
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 3px 5px;
-  pointer-events: none;
+  /* A target, not a label: on an iPad there is no Tab to press, so the badge
+     itself accepts. It used to be pointer-events: none, and a tap on it merely
+     focused the field underneath. */
+  cursor: pointer;
 }
+.composer .suggest-hint:hover { color: var(--text); border-color: var(--accent); }
 .composer .suggest-hint[hidden] { display: none; }
 /* Speech in flight — provisional, and sent by stopping, not by Enter. Styled
    distinctly so it never reads as text he typed and is waiting to send. */

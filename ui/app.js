@@ -3036,6 +3036,14 @@ document.addEventListener('keydown', (e) => {
   if (e.target !== input && e.target !== document.body) return;
   if (acceptSuggestion()) e.preventDefault();
 });
+// The badge is the same key for a finger. An iPad's on-screen keyboard has no
+// Tab, and tapping the badge used to do nothing but focus the field under it.
+// pointerdown rather than click: it fires before the tap moves focus, so the
+// insertion lands in a box that was never blurred.
+suggestHint.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  acceptSuggestion();
+});
 
 /**
  * The one button, and what it is really for.
