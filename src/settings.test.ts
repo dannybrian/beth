@@ -8,6 +8,8 @@ import { BuildRunner } from './buildRunner.ts';
 import { TestMonitor } from './testRunner.ts';
 import { ConversationBus } from './bus.ts';
 import type { HarnessConfig } from './config.ts';
+import { SessionManager } from './session.ts';
+import { Suggestion } from './suggestion.ts';
 
 const dir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'settings-'));
 
@@ -141,4 +143,25 @@ test('a new test command drops the failures the old one found', async () => {
   // Those failures name tests the replaced command was running; clicking one
   // would point her at something nothing here can reproduce.
   assert.equal(t.state().last, null);
+});
+
+// --- the model select is sticky per repo -------------------------------------
+
+/**
+ * A select that reverted on every restart to HARNESS_MODEL would be a control
+ * that lies about what the next turn runs on. The choice is seeded into the
+ * session before its query is built, so nothing has to switch a live session.
+ */
+test('the model he picked is the model the next session starts on, and beats HARNESS_MODEL', async () => {
+  const repo = repoWith({});
+  const settings = new Settings({ stateDir: repo });
+  const cfg = { stateDir: repo, repo, directorPlan: 'x.md', personal: false, model: 'claude-opus-5' } as any;
+  const mk = (st: Settings) =>
+    new SessionManager(cfg, new ConversationBus(), {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, new Suggestion(), {} as any, st);
+  const first = mk(settings);
+  assert.equal(first.chosenModel(), 'claude-opus-5', 'nothing chosen yet: the env layer answers');
+  await first.setModel('claude-sonnet-5');
+  // A fresh store over the same state dir is what a restart looks like.
+  const second = mk(new Settings({ stateDir: repo }));
+  assert.equal(second.chosenModel(), 'claude-sonnet-5');
 });

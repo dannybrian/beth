@@ -149,3 +149,32 @@ test('volume clamps at both ends and zero still plays', () => {
   s.enqueue('s1');
   assert.match(audio.src, /say\/s1$/, 'mute is a volume, not a gate — the line still fetches (and bills)');
 });
+
+/**
+ * The cost bug. Assigning `src` starts the load, the load requests the stream,
+ * and the stream is billed on request — so a line the browser would refuse to
+ * play was generated and paid for anyway. Nothing may touch `src` until the
+ * page can play; the line still ends (reported, queue advances, ear untouched).
+ */
+test('a line the browser would refuse is never fetched — and still reports and advances', async () => {
+  const { audio, notes, ear, reports, s } = rig({ mayPlay: () => false });
+  s.enqueue('a');
+  s.enqueue('b');
+  await flush();
+  assert.equal(audio.src, '', 'no src, no load, no bill');
+  assert.equal(notes.filter((n) => /not spoken/.test(n)).length, 2);
+  assert.deepEqual(reports, [['a'], ['b']], 'the stick is still released for each');
+  assert.deepEqual(ear, [], 'never parked for a line that never played');
+});
+
+test('once the page has been touched, lines fetch and play as before', async () => {
+  let touched = false;
+  const { audio, s } = rig({ mayPlay: () => touched });
+  s.enqueue('a');
+  await flush();
+  assert.equal(audio.src, '');
+  touched = true;
+  s.enqueue('b');
+  await flush();
+  assert.match(audio.src, /\/api\/voice\/say\/b$/);
+});

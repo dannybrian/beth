@@ -27,9 +27,11 @@
  *                    on the machine quiet until the backstop.
  * @param opts.initialVolume 0..1. Persistence is the caller's business.
  */
-export function createSpeaker({ audio, park, unpark, note, report, initialVolume = 1 }) {
+export function createSpeaker({ audio, park, unpark, note, report, initialVolume = 1, mayPlay = () => true }) {
   const backlog = [];
   let speakingId = null;
+  /** Whether WE closed the ear — a line that was never fetched never parked it. */
+  let parked = false;
   audio.volume = clamp(initialVolume);
 
   function playNext() {
@@ -37,11 +39,24 @@ export function createSpeaker({ audio, park, unpark, note, report, initialVolume
     const id = backlog.shift();
     if (id === undefined) return;
     speakingId = id;
+    // ⚠️ Decided BEFORE `src` is assigned. Assigning it starts the load, the load
+    // is what asks the harness for the ElevenLabs stream, and the stream is
+    // billed when it is requested — so a line the browser was never going to
+    // play (no gesture on the page yet) used to be generated, streamed and paid
+    // for, and then refused by play(). Nothing is fetched now; the line is
+    // reported ended so the machine's talking stick moves on, and it is not
+    // replayed after the tap — news that has passed, the same rule as the mute.
+    if (!mayPlay()) {
+      note?.('🔇 not spoken — tap the page once to allow audio (nothing was fetched or billed)');
+      done(id);
+      return;
+    }
     // HALF DUPLEX. The ear closes while she talks, because echo cancellation
     // cannot reach the recogniser's own capture — it opens its own microphone
     // and takes no constraints. Parking it is what stops her hearing herself
     // and answering it.
     park?.();
+    parked = true;
     audio.src = `/api/voice/say/${encodeURIComponent(id)}`;
     audio.play().catch((e) => {
       // A pause() while play() is still resolving rejects it with AbortError —
@@ -63,7 +78,10 @@ export function createSpeaker({ audio, park, unpark, note, report, initialVolume
     if (id != null) report?.([id]);
     if (backlog.length) return void playNext();
     // Only reopen when she has genuinely finished — between two queued lines
-    // the ear would otherwise open into the gap and hear the second one.
+    // the ear would otherwise open into the gap and hear the second one. And
+    // only what was closed here: a run of refused lines never touched the ear.
+    if (!parked) return;
+    parked = false;
     unpark?.();
   }
 

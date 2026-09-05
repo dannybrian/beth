@@ -22,6 +22,7 @@ import { assessRole, roleInstruction, type RoleAssessment } from './directorRole
 import { PersonalStore, PERSONAL_PROMPT, GAP_MS } from './personal.ts';
 import { PersonaChoice, personaStateDir, readPersona, seedMemory } from './personas.ts';
 import type { InboxAcks } from './inbox.ts';
+import type { Settings } from './settings.ts';
 import { WireTap } from './wireTap.ts';
 import type { Workbench } from './workbench.ts';
 import { bootSuggestion, type Suggestion } from './suggestion.ts';
@@ -165,6 +166,7 @@ export class SessionManager {
   private bench: Workbench;
   private suggestion: Suggestion;
   private inbox: InboxAcks;
+  private settings?: Settings;
 
   constructor(
     cfg: HarnessConfig,
@@ -176,9 +178,15 @@ export class SessionManager {
     speech: SpeechControl,
     bench: Workbench,
     suggestion: Suggestion,
-    inbox: InboxAcks
+    inbox: InboxAcks,
+    settings?: Settings
   ) {
     this.inbox = inbox;
+    this.settings = settings;
+    // The model he picked last time, for this repo. Seeded HERE rather than
+    // applied after boot, so the first query is built on it and nothing has to
+    // switch a live session to a model it should have started on.
+    this.modelChoice = settings?.get('model') ?? '';
     this.cfg = cfg;
     this.bus = bus;
     this.events = events;
@@ -535,6 +543,8 @@ export class SessionManager {
    */
   async setModel(model: string) {
     this.modelChoice = model;
+    // Sticky per repo (settings.ts): the same select tomorrow shows the same model.
+    this.settings?.set('model', model);
     await this.q?.setModel(model);
     this.modelValue = model;
     this.bus.publish({ type: 'model', model });

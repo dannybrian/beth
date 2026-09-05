@@ -105,6 +105,11 @@ room.watch((s) => bus.publish({ type: 'room', ...s }));
 // is said out loud, to her, and she needs a way to actually do it.
 const speakOut = new SpeakOut(cfg, bus, room);
 
+// Set from the page and kept in the state dir, winning over the env layers —
+// see settings.ts for why that way round. Built before the session because the
+// model he chose last time has to be in hand when the query is constructed.
+const settings = new Settings(cfg);
+
 let session: SessionManager;
 const gate = new AskGate(bus, events, () => session.sessionId(), () => session.directorName());
 session = new SessionManager(
@@ -121,7 +126,8 @@ session = new SessionManager(
   },
   bench,
   suggestion,
-  inbox
+  inbox,
+  settings
 );
 // A persona chosen on a previous run speaks in her own voice from the first line
 // of the greeting, not from the first switch.
@@ -233,9 +239,6 @@ bus.subscribe((m) => {
   if (m.type === 'usage' && m.usage.turnCost > 0) void credits.noteTurn(m.usage.turnCost);
 });
 
-// Set from the page and kept in the state dir, winning over the env layers —
-// see settings.ts for why that way round.
-const settings = new Settings(cfg);
 const tests = new TestMonitor(cfg, bus, settings);
 const build = new BuildRunner(cfg, bus, { settings });
 // The repo's own nouns, walked ONCE — the page gets this plus whatever is live on

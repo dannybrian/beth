@@ -1472,6 +1472,11 @@ const spk = createSpeaker({
   // The real volume arrives in the `room` message, which the server sends
   // before the replay — and `speak` never replays, so nothing can play first.
   initialVolume: 1,
+  // Whether the browser would let audio play at all: it refuses until the page
+  // has been touched once, and the speaker must know BEFORE it fetches, or the
+  // refused line is billed anyway. A browser without the API is assumed willing
+  // — the old behaviour, and play() still reports the refusal.
+  mayPlay: () => navigator.userActivation?.hasBeenActive ?? true,
 });
 
 function applyRoom(m) {
