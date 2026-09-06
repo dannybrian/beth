@@ -2981,6 +2981,12 @@ const send = () => {
   refs = [];
   renderRefs();
 };
+// The button is Enter for a finger. pointerdown, like the Tab badge: a tap
+// would otherwise blur the field first, and the send reads the box.
+$('send').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  send();
+});
 /**
  * Empty the composer without destroying the undo stack.
  *

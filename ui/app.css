@@ -1209,10 +1209,12 @@ body.hide-activity .entry.activity.tool { display: none; }
   font-weight: 600;
 }
 /* Stop is the last button in the row, and it is an ESCAPE HATCH rather than an
-   action: Send and Clear went because Enter and `/clear` already did their jobs
-   and two accent-coloured buttons made the row read as a form. So this one is
-   sized like the test light — small, quiet, centred rather than stretched to the
-   height of the textarea — and only goes loud on hover. */
+   action: the accent-coloured Send and Clear went because Enter and `/clear`
+   already did their jobs and two loud buttons made the row read as a form. So
+   this one is sized like the test light — small, quiet, centred rather than
+   stretched to the height of the textarea — and only goes loud on hover.
+   (Send came back in 2026-09-05 as an ICON beside the field, for the iPad, in
+   the mic's quiet style rather than the filled one that left.) */
 .composer button.ghost {
   background: none;
   border: 1px solid var(--line);
@@ -1236,6 +1238,11 @@ body.hide-activity .entry.activity.tool { display: none; }
    on order, so the padding above has to be restated here or the glyph goes
    off-centre in a 12px content box. */
 .composer button.autosend { background: none; color: var(--muted); font-weight: 400; padding: 0; }
+/* Send: the mic's shape and quiet, to the right of the field where a thumb
+   lands. Accent on hover so it still says which one commits. */
+.composer button.send { background: none; color: var(--muted); font-weight: 400; padding: 0; width: 34px; }
+.composer button.send svg { width: 20px; height: 20px; display: block; }
+.composer button.send:hover { color: var(--accent); }
 .composer button.autosend.off { color: var(--say); }
 /* The meter is a gauge you can click, not a button — the composer's primary
    styling would otherwise make it look like a third action next to Send. */

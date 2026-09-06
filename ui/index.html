@@ -251,6 +251,17 @@
                be a control that does nothing. -->
           <kbd id="suggest-hint" class="suggest-hint" hidden title="Accept the suggested reply — Tab, or tap here">Tab</kbd>
         </div>
+        <!-- Send, back (2026-09-05) for the iPad: Enter on an on-screen keyboard
+             is a newline you reach for, not a send, and there was no other way to
+             commit the box by touch. An icon like the mic's rather than the
+             accent-filled button that left — the row must not read as a form. -->
+        <button id="send" class="send" title="Send (Enter)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21.3 2.7 2.9 9.7l7.6 3.8 3.8 7.6z" />
+            <path d="M21.3 2.7 10.5 13.5" />
+          </svg>
+        </button>
         <!-- Visible only while something is actually running for her. A turn with
              no outward sign is indistinguishable from a hang — which is the same
              reason she narrates before a long operation. -->
@@ -262,10 +273,10 @@
         <!-- The context meter is a GAUGE, not an activity light, so it does not
              come and go with the work. Clicking it is where the numbers live. -->
         <button id="ctx-meter" class="ctx" title="Context used — click for the numbers"><i></i></button>
-        <!-- The only button left in the row. Enter sends, `/clear` clears, and
-             what this is FOR is the thing neither of those covers: throwing away
-             a bad transcription before it becomes a turn. Small on purpose — it
-             is an escape hatch, not the primary action. -->
+        <!-- Enter sends, `/clear` clears, and what this is FOR is the thing
+             neither of those covers: throwing away a bad transcription before it
+             becomes a turn. Small on purpose — it is an escape hatch, not the
+             primary action. -->
         <button id="interrupt" class="ghost" title="Escape — drop what is in the box and stop the in-flight turn. The conversation continues.">Stop</button>
       </div>
     </footer>
