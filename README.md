@@ -298,6 +298,11 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   by Beth with `close_inbox`; the acknowledgement lives in the state dir, and the
   producer's file is never touched. Arrival is a summons — spoken, once — and the
   backlog at boot is not. `docs/inbox.md` has the record shape and the reasoning.
+- **`/restart`** in the composer: the harness exits cleanly and the `beth`
+  wrapper starts it again on the same port, picking up whatever code is on
+  disk; the page reconnects by itself and the session resumes. Refused while a
+  turn or a worker is running, because both would die with the process. Not
+  hers to call, on purpose.
 - **A bell**: a soft synthesised tone when a turn finishes, toggled beside the
   volume. Deliberately *not* governed by the voice mute — that one is about her
   voice and about not being billed, and the bell matters most when she is silent.

@@ -27,6 +27,7 @@ import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import type { InboxAcks } from './inbox.ts';
+import { restartVerdict } from './restart.ts';
 import type { Workbench } from './workbench.ts';
 import type { Suggestion } from './suggestion.ts';
 import { setPlanName } from './planName.ts';
@@ -75,6 +76,8 @@ export function createServer(deps: {
   pins: Pins;
   /** The inbox acks — his ✓ and × on a hand-off. See inbox.ts. */
   inbox: InboxAcks;
+  /** Exit for a relaunch by the wrapper. See restart.ts. */
+  restart: () => void;
   bench: Workbench;
   suggestion: Suggestion;
   /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
@@ -530,6 +533,18 @@ export function createServer(deps: {
             await session.clear();
             return json(200, { ok: true });
           }
+          case '/api/restart': {
+            // The page's /restart. Hers is deliberately NOT offered: a session
+            // that runs shells ending its own process is a door kept shut.
+            const verdict = restartVerdict({ busy: session.busy(), workers: pending.runningWorkers().length });
+            if (!verdict.ok) return json(409, { ok: false, reason: verdict.reason });
+            // Every tab, not only the one that asked: the others see their
+            // stream drop and should know why. Then a beat, so this response
+            // and that line both leave before the socket goes.
+            bus.publish({ type: 'activity', tool: 'restart', detail: 'restarting — the page reconnects on its own' });
+            setTimeout(deps.restart, 200);
+            return json(200, { ok: true });
+          }
           case '/api/interrupt': {
             const receipt = await session.interrupt();
             return json(200, { ok: true, receipt });
@@ -750,6 +765,16 @@ export function createServer(deps: {
         // .env or .git/config. Read-only by construction; the preview never PUTs.
         const rel = url.searchParams.get('path') ?? '';
         const item = work.byPath(rel);
+        // A hand-off has no file: the reader is answered from the item itself,
+        // and nothing on disk is named or read. The producer's reference rides
+        // along as text — shown, never opened (inbox.ts).
+        if (item?.inbox) {
+          const h = item.inbox;
+          const meta = [`from **${h.from}**`, new Date(h.at).toLocaleString(), h.ref ? `\`${h.ref}\`` : '', h.ack ? `_${h.ack.state}_` : '']
+            .filter(Boolean)
+            .join(' · ');
+          return json(200, { path: rel, title: item.title, known: true, item, text: `${h.text}\n\n---\n\n${meta}` });
+        }
         // Index membership grants the ACTIONS; being real markdown inside the
         // repo is what grants the read. She links ordinary docs too, and those
         // used to fall through to a vscode:// prompt — the exact thing this

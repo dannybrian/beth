@@ -15,6 +15,7 @@ import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
 import { createPlansReader } from './plansReader.ts';
 import { InboxAcks, createInboxReader } from './inbox.ts';
+import { RESTART_EXIT } from './restart.ts';
 import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFiles } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
@@ -245,7 +246,12 @@ const build = new BuildRunner(cfg, bus, { settings });
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
-const server = createServer({ cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, inbox, bench, suggestion, room, credits });
+const server = createServer({
+  cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, inbox, bench, suggestion, room, credits,
+  // /restart: the same clean shutdown as Ctrl-C, with the exit code that tells
+  // the wrapper to start us again. See restart.ts.
+  restart: () => shutdown(RESTART_EXIT),
+});
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     // Instances are per-repo, so a busy port usually means another instance.
@@ -294,7 +300,7 @@ server.listen(cfg.port, cfg.bind, () => {
   statusLine.show();
 });
 
-const shutdown = () => {
+const shutdown = (code = 0) => {
   // First, so the line is gone before anything below prints a farewell.
   statusLine.stop();
   events.stop();
@@ -306,7 +312,7 @@ const shutdown = () => {
   // have to wait out the TTL because this one exited cleanly.
   room.close();
   server.close();
-  process.exit(0);
+  process.exit(code);
 };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());

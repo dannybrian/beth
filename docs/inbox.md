@@ -101,9 +101,11 @@ Rules, and each is a test:
 that has consequences the plans machinery must be made to refuse rather than left to
 find out:
 
-- `/api/plan` already refuses (`resolveMarkdown` allows only real markdown inside the
-  repo), so the reader modal cannot open it. The panel renders `text` inline instead;
-  that IS the content, there is no file behind it.
+- `/api/plan` answers a hand-off from the ITEM — its text, with the producer, time
+  and reference as a trailing line — before it ever reaches `resolveMarkdown`, so
+  the reader opens it like a plan and nothing on disk is named or read (2026-09-06;
+  the first build unfolded the text in the row instead, and the caret still does).
+  The producer's reference is shown as text, never opened.
 - `/api/handoff` must refuse a synthetic path (`canHandOff`), tested — the alternative
   is Claude Code spawned at a path that does not exist.
 - Rename (`planName.ts`, the one writer) must refuse it: there is no frontmatter and

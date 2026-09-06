@@ -171,8 +171,29 @@ if (!voiceConfigured) {
 }
 
 // --- start the harness ---
+//
+// And start it AGAIN when it asks. `/restart` on the page makes the harness
+// exit with RESTART_EXIT (src/restart.ts — the constant is mirrored here, and a
+// test checks the two agree), and this is the only place that can relaunch it
+// without losing the terminal, the port or the instance record. Any other exit
+// code is a stop, exactly as before — so a boot that fails on new code does not
+// loop; it exits and says so here.
+const RESTART_EXIT = 75;
 console.log(`· ${path.basename(repo)} → http://localhost:${port}`);
-const harness = spawn(process.execPath, [path.join(HARNESS, 'src', 'main.ts')], { env, stdio: 'inherit' });
+const launch = () => {
+  const child = spawn(process.execPath, [path.join(HARNESS, 'src', 'main.ts')], { env, stdio: 'inherit' });
+  child.on('exit', (code) => {
+    if (code === RESTART_EXIT && !stopping) {
+      console.log(`· restarting ${path.basename(repo)} → http://localhost:${port}`);
+      harness = launch();
+      return;
+    }
+    releaseInstance();
+    process.exit(code ?? 0);
+  });
+  return child;
+};
+let harness = launch();
 
 if (!flag('no-open') && process.platform === 'darwin') {
   spawn('open', [`http://localhost:${port}`], { stdio: 'ignore' }).unref();
@@ -193,7 +214,3 @@ const stop = () => {
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
-harness.on('exit', (code) => {
-  releaseInstance();
-  process.exit(code ?? 0);
-});

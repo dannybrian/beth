@@ -553,6 +553,9 @@ export class SessionManager {
   /** The model this conversation is running on. */
   chosenModel = () => this.modelChoice || this.cfg.model;
 
+  /** A turn in flight. What /restart must not cut. */
+  busy = () => this.thinking;
+
   /** How this conversation resolves tool permissions. */
   chosenPermissionMode = (): HarnessConfig['permissionMode'] => this.permissionChoice || this.cfg.permissionMode;
 

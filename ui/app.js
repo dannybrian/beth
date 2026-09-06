@@ -1012,16 +1012,10 @@ function renderWorkItem(item, depth = 0, orphanParent = null, childCount = 0) {
   // and pointing moved to the → beside it.
   name.title = `Read "${item.spoken}" — ${item.path}`;
   name.onclick = () => openPlanPreview(item.path);
-  if (item.inbox) {
-    // No file behind a hand-off (the path is synthetic — inbox.ts), so the
-    // content IS the row: the name unfolds the text in place instead of
-    // opening a reader that would 404.
-    name.title = `From ${item.inbox.from} — show the hand-off`;
-    name.onclick = () => {
-      expanded.has(item.path) ? expanded.delete(item.path) : expanded.add(item.path);
-      renderWork();
-    };
-  }
+  // A hand-off opens in the same reader (2026-09-06): /api/plan answers it
+  // from the item's own text, since there is no file behind the path. The
+  // caret still unfolds it in place for a glance without the sheet.
+  if (item.inbox) name.title = `Read "${item.spoken}" — a hand-off from ${item.inbox.from}`;
   head.append(name);
 
   head.append(...planActions(item));
@@ -2976,6 +2970,7 @@ const send = () => {
   // Muscle memory from Claude Code — these never reach the model.
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
+  if (text === '/restart') return void restartHarness();
   post('/api/turn', { text, refs, seq: ++pointSeq });
   expectEcho();
   refs = [];
@@ -2987,6 +2982,18 @@ $('send').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   send();
 });
+/**
+ * /restart. The server refuses while a turn or a worker is running and says
+ * why; otherwise it announces on the bus and exits, the wrapper starts it
+ * again, and the stream watchdog brings this page back on its own. Hers is
+ * not offered — see /api/restart.
+ */
+async function restartHarness() {
+  const res = await post('/api/restart');
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  entry('activity', (n) => (n.textContent = `⟳ not restarted — ${body.reason ?? res.status}`));
+}
 /**
  * Empty the composer without destroying the undo stack.
  *

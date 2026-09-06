@@ -571,6 +571,14 @@ These cost hours. Don't rediscover them.
   Every way a line ends on the page (played, refused, errored, stopped) must reach
   `report` in `speaker.js`; an unreported ending holds every other beth quiet with no
   symptom on the page that caused it.
+- **`/restart` is the WRAPPER's to do, on an exit code** (2026-09-06, `src/restart.ts`).
+  The harness is a child of `bin/beth.mjs`, so it never replaces itself: it exits with
+  `RESTART_EXIT` (75) and the wrapper relaunches on exactly that code; any other exit
+  is a stop, which is why a boot broken by new code does not loop. The constant is
+  mirrored in the wrapper (plain JS) and a test checks the two agree. ⚠ Refused while
+  a turn is in flight or a worker runs — both die with the process, and the second is
+  invisible from the page. ⚠ Deliberately NOT a tool of hers: a session that runs
+  shells ending its own process is a door kept shut.
 - **The director's NAME comes from the bound repo** (`directorName.ts` reads "You are
   **X**" out of `.claude/DIRECTOR.md`). It is not decoration: a card reading "Claude
   wants to use Bash" is a stranger interrupting a conversation with someone else.
@@ -689,8 +697,9 @@ the conversation that produced it. Where things stand:
   announced like a queued decision and never a turn. ⚠ The harness defines the
   record shape and never learns the producer — the first (Memobase) is named
   only by `HARNESS_INBOX` in the machine `.env`. ⚠ An inbox item's path is
-  SYNTHETIC (`inbox/<file>/<id>`): the reader modal, the handoff and rename all
-  refuse it, and the panel unfolds the text in place instead. ⚠ The summons is
+  SYNTHETIC (`inbox/<file>/<id>`): the handoff and rename refuse it, and the
+  reader is answered from the item's own text before `resolveMarkdown` is
+  consulted — nothing on disk is named or read. ⚠ The summons is
   published ONCE per new id from a seen-set seeded at boot (`main.ts`), so a
   restart never reads the backlog aloud; and the reader keeps a 30s poll beside
   the watcher because hand-offs arrive while the Mac was asleep. Read the doc
