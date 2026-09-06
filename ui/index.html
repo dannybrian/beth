@@ -77,6 +77,24 @@
         <button id="bench-clear" title="Clear — the work moved on">×</button>
       </div>
       <div class="strip-right">
+        <!-- Model and effort sit BEFORE the meters (2026-09-05): the three bars
+             then read as one instrument beside the lights and the gear, and the
+             two selects are not wedged between gauges. -->
+        <select id="model-select" title="Model for this conversation — switches live, context is kept">
+          <option value="claude-opus-5">Opus 5</option>
+          <option value="claude-fable-5">Fable 5</option>
+        </select>
+        <!-- How hard she thinks. The unset option is labelled with the field name
+             rather than "default", so the strip says what the control IS while
+             nothing is chosen and says the level once something is. -->
+        <select id="effort-select" title="Reasoning effort — switches live. Unset leaves it to the model; the mic ducks it while you are talking.">
+          <option value="">effort</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+          <option value="xhigh">xhigh</option>
+          <option value="max">max</option>
+        </select>
         <!-- The plan windows, in the strip rather than behind the meter, because
              the five-hour reaching 100% is the exact moment usage credits start
              to drain (creditMeter.ts arms there) — a number worth having already
@@ -93,21 +111,6 @@
                absent — every session has a context, plan or no plan. -->
           <span class="um" id="um-ctx"><b>ctx</b><span class="sbar"><i></i></span></span>
         </button>
-        <select id="model-select" title="Model for this conversation — switches live, context is kept">
-          <option value="claude-opus-5">Opus 5</option>
-          <option value="claude-fable-5">Fable 5</option>
-        </select>
-        <!-- How hard she thinks. The unset option is labelled with the field name
-             rather than "default", so the strip says what the control IS while
-             nothing is chosen and says the level once something is. -->
-        <select id="effort-select" title="Reasoning effort — switches live. Unset leaves it to the model; the mic ducks it while you are talking.">
-          <option value="">effort</option>
-          <option value="low">low</option>
-          <option value="medium">medium</option>
-          <option value="high">high</option>
-          <option value="xhigh">xhigh</option>
-          <option value="max">max</option>
-        </select>
         <!-- Build it. Unlike the test light beside it this is a TRIGGER: the
              click runs the command, because "quickly kick one off" is the whole
              ask, and a build is the one command that is safe to repeat — it is
