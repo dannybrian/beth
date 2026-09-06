@@ -93,12 +93,12 @@ export function buildCommand(opts: { repo: string; claudeBin: string; prompt: st
   return `cd ${shq(opts.repo)} && ${shq(opts.claudeBin)} ${shq(opts.prompt)}`;
 }
 
-export function handOffToClaude(opts: {
-  repo: string;
-  claudeBin: string;
-  prompt: string;
-}): { command: string } {
-  const inner = buildCommand(opts);
+/**
+ * Open a Terminal window running `inner`. Shared by the plan hand-off and the
+ * strip's plain "terminal here" button — one launcher, so a fix to quoting or
+ * to which app answers lands in both.
+ */
+function openTerminal(inner: string): void {
   if (process.platform === 'darwin') {
     spawn('osascript', ['-e', `tell application "Terminal" to do script "${osaq(inner)}"`, '-e', 'tell application "Terminal" to activate'], {
       stdio: 'ignore',
@@ -109,5 +109,27 @@ export function handOffToClaude(opts: {
     // let the caller see the command rather than guessing at x-terminal-emulator.
     spawn('sh', ['-c', inner], { stdio: 'ignore', detached: true }).unref();
   }
+}
+
+export function handOffToClaude(opts: {
+  repo: string;
+  claudeBin: string;
+  prompt: string;
+}): { command: string } {
+  const inner = buildCommand(opts);
+  openTerminal(inner);
+  return { command: inner };
+}
+
+/**
+ * A terminal sitting in the repo and nothing else — the strip's `>_` button.
+ * The same shell-spawning caveat as the hand-off applies, and the same
+ * loopback bind is what makes it safe. Opens on the MACHINE the harness runs
+ * on, which is the only place "a terminal in the CWD" can mean anything; a
+ * page reached over the tailnet gets a window on the Mac at home.
+ */
+export function openTerminalAt(repo: string): { command: string } {
+  const inner = `cd ${shq(repo)}`;
+  openTerminal(inner);
   return { command: inner };
 }

@@ -468,6 +468,15 @@ These cost hours. Don't rediscover them.
   the machine. If a web link ever comes back, re-read this entry in git history —
   the ref must be resolved at the CLICK (Danny switches branches mid-session) and
   the host's URL SHAPE cannot be assumed from the remote.
+  ⚠ Correction (2026-09-06): a link DID come back, and it is the narrower thing
+  both objections allow — the strip's project name opens the repo's HOME page
+  (`src/repoWeb.ts`, `repoWeb` on `hello`, '' with no remote). No ref in the
+  url, and `https://host/owner/repo` is the one shape every forge agrees on,
+  so any dotted host is accepted and the tooltip names it. Per-file links stay
+  gone for the reasons above. Beside it, `>_` (`/api/terminal`) opens a
+  Terminal in the repo through the hand-off's launcher — on the MACHINE, so
+  from the iPad it is a window on the Mac; a shell spawn, loopback-only like
+  the hand-off.
 
 - **Becoming someone else is a NEW SESSION, and that is structural.** Model, permission
   mode and effort all have setters on a running query; the system prompt does not — it is

@@ -1260,7 +1260,18 @@ const handlers = {
     repoPath = m.repo;
     setPersonas(m.personas ?? [], m.persona ?? '');
     projectName = m.repo.split('/').pop();
-    $('repo-label').textContent = projectName;
+    const label = $('repo-label');
+    label.textContent = projectName;
+    // A link only when the repo has a page to open. An anchor with no href is
+    // plain text to the browser (no cursor, no focus), which is exactly the
+    // no-remote case — and a server that predates `repoWeb` lands here too.
+    if (m.repoWeb) {
+      label.href = m.repoWeb;
+      label.title = `Open on ${new URL(m.repoWeb).host}`;
+    } else {
+      label.removeAttribute('href');
+      label.removeAttribute('title');
+    }
     // Several instances run side by side, one per repo — the tab title is the
     // only way to tell them apart from the window switcher. The name comes from
     // the bound repo, so a different project's director is called what it calls
@@ -2894,6 +2905,15 @@ $('usage-meters').onclick = toggleStats;
 $('test-light').onclick = toggleTestPanel;
 $('build-light').onclick = () => toggleBuildPanel();
 $('gear').onclick = () => toggleGear();
+// The strip's terminal. The click is answered in the transcript by the
+// server's own activity line, so success needs nothing here; a refusal — an
+// old server without the route, most likely — is written the way /restart's is.
+$('term-open').onclick = async () => {
+  const res = await post('/api/terminal');
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  entry('activity', (n) => (n.textContent = `>_ no terminal — ${body.error ?? body.reason ?? res.status}`));
+};
 void loadGearSettings();
 // The windows move once a TURN, which is why the usage handler re-reads them;
 // this interval is for the long quiet stretches — another beth on the same

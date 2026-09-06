@@ -12,7 +12,24 @@
     <header class="strip">
       <div class="strip-left">
         <span class="dot" id="status-dot"></span>
-        <span id="repo-label">…</span>
+        <!-- The project's name links to its forge (github.com for every repo of
+             Danny's) when the origin remote names one — `hello` carries the
+             url or '' — and is plain text otherwise. The repo's HOME page, not
+             a file: the per-plan blob button that left on 2026-09-01 needed a
+             ref and a url shape the remote does not reveal; the root needs
+             neither. See src/repoWeb.ts. -->
+        <a id="repo-label" target="_blank" rel="noopener noreferrer">…</a>
+        <!-- A terminal in the repo, on the MACHINE — the harness opens it, so
+             from an iPad on the tailnet this is a window on the Mac at home.
+             Beside the name because that is what it opens: this directory. -->
+        <button id="term-open" title="Open a terminal in this repo (on the machine running the harness)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.5" y="4" width="19" height="16" rx="2" />
+            <path d="M6.5 9l3.5 3-3.5 3" />
+            <path d="M12.5 15h5" />
+          </svg>
+        </button>
         <!-- WHO, not a setting — which is why it sits by the repo rather than
              with the dials on the right. Hidden entirely on a machine with no
              personas, because the bound repo's own DIRECTOR.md is the default

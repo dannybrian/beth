@@ -69,7 +69,8 @@ export type UIMessage =
       speechLevel: string;
       /** Chosen reasoning effort; '' is the model's own default. */
       effort: string;
-      /** This repo has a github.com origin, so a plan can be opened there. */
+      /** The repo's home page on its forge (from the origin remote), or '' — the strip's name links there. */
+      repoWeb: string;
       /** Every director on this machine, and which one is in force ('' = the repo's own). */
       personas: { slug: string; name: string }[];
       persona: string;

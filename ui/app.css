@@ -64,6 +64,21 @@ body {
   color: var(--muted);
 }
 .strip-left { display: flex; align-items: center; gap: 10px; }
+/* The name is text first and a link second: same colour as the rest of the
+   strip, and the underline appears only on hover, only when there is an href —
+   an anchor without one is the no-remote case and must not invite a click. */
+#repo-label { color: inherit; text-decoration: none; }
+#repo-label[href]:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+#term-open {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+#term-open svg { width: 16px; height: 16px; display: block; }
+#term-open:hover { color: var(--text); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 /* Pulsing means SOMETHING is running for her — a turn, a worker, or a decision
    queued against you. Whether she is mid-thought is the composer's spinner. */

@@ -23,7 +23,8 @@ import type { WorkIndex } from './workIndex.ts';
 import type { WorkRef } from './workItems.ts';
 import { canPromote } from './directorRole.ts';
 import { SPEECH_LEVELS, type SpeechLevel } from './spoken.ts';
-import { canHandOff, handOffToClaude, seedPrompt } from './handoff.ts';
+import { canHandOff, handOffToClaude, openTerminalAt, seedPrompt } from './handoff.ts';
+import { repoHome } from './repoWeb.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
 import type { InboxAcks } from './inbox.ts';
@@ -148,6 +149,10 @@ export function createServer(deps: {
     usdPerHour: cfg.sttUsdPerHour,
   });
 
+  // Where the repo lives on the web, for the strip's name to link to. Read at
+  // boot, not per connection: `hello` is written inside the stream handler.
+  const repoWeb = repoHome(cfg.repo) ?? '';
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${cfg.port}`);
     const json = (code: number, body: unknown) => {
@@ -191,8 +196,9 @@ export function createServer(deps: {
         permissionMode: session.chosenPermissionMode(),
         speechLevel: deps.speakOut.speechLevel(),
         effort: session.chosenEffort() ?? '',
-        // Draw the "open on GitHub" button, or do not. False is the ordinary
+        // Link the project name to its forge, or do not. '' is the ordinary
         // case for a repo with no remote, not an error.
+        repoWeb,
         // Read per connection, not at boot: he adds a persona by dropping a file
         // in a directory, and a list fixed at startup would not have it until the
         // harness was restarted — which is the opposite of how that should feel.
@@ -532,6 +538,13 @@ export function createServer(deps: {
           case '/api/clear': {
             await session.clear();
             return json(200, { ok: true });
+          }
+          case '/api/terminal': {
+            // A terminal in the repo, nothing seeded. Local-only by the same
+            // construction as the hand-off above — this spawns a shell.
+            const { command } = openTerminalAt(cfg.repo);
+            bus.publish({ type: 'activity', tool: 'terminal', detail: `opened a terminal in ${cfg.repo}` });
+            return json(200, { ok: true, command });
           }
           case '/api/restart': {
             // The page's /restart. Hers is deliberately NOT offered: a session
