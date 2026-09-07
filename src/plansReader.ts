@@ -40,7 +40,7 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'tmp', 'logs
 
 /** Files inside a plans directory that are not plans. Exported so the greeting's
  * "files you cannot read" count excludes exactly what this reader excludes. */
-export const NOT_A_PLAN = /^(INDEX|README|CONTINUE|EVENTS|ONBOARDING|TEMPLATE)\.md$/i;
+export const NOT_A_PLAN = /^(INDEX|README|CONTINUE|EVENTS|ONBOARDING|STARTHERE|TEMPLATE)\.md$/i;
 
 /**
  * THE HARNESS IS A READER, NOT AN AUTHORITY.
