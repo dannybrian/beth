@@ -10,12 +10,11 @@
 //
 // ⚠️ Which is also the line to hold if this ever grows one: the moment anything
 // here fires on its own, it needs that gate back.
-import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus } from './bus.ts';
-import { runCommand, treeFingerprint, type CommandResult } from './runCommand.ts';
+import { runCommand, treeFingerprint, type CommandResult, type RunningCommand } from './runCommand.ts';
 import type { Settings } from './settings.ts';
 
 /** A finished build. `cancelled` is a stop you asked for, not a failure. */
@@ -104,7 +103,7 @@ export class BuildRunner {
   private settings?: Settings;
   private running = false;
   private cancelling = false;
-  private child: ChildProcess | null = null;
+  private child: RunningCommand | null = null;
   private last: BuildRun | null = null;
   /** The tree as it was when the last build STARTED, and whether it has moved. */
   private ranFingerprint = '';
@@ -166,14 +165,14 @@ export class BuildRunner {
 
   stop() {
     this.stopWatch();
-    this.child?.kill('SIGKILL');
+    this.child?.stop('SIGKILL');
   }
 
   /** A build you no longer want. Not a failure — see `light`. */
   cancel() {
     if (!this.running) return;
     this.cancelling = true;
-    this.child?.kill('SIGTERM');
+    this.child?.stop('SIGTERM');
   }
 
   state(): BuildState {
@@ -221,7 +220,7 @@ export class BuildRunner {
       command: this.detected.command,
       cwd: this.cfg.repo,
       timeoutMs: this.cfg.buildTimeoutMs,
-      onStart: (child) => (this.child = child),
+      onStart: (run) => (this.child = run),
     });
 
     this.child = null;

@@ -1718,15 +1718,17 @@ function renderTests(state) {
       ? `Tests not enabled here — click to see ${state.command.join(' ')}`
       : state.running
         ? 'Running…'
-        : !state.last
-          ? 'No run yet'
-          : state.last.timedOut
-            ? 'Timed out'
-            : (state.last.exitCode ?? 1) !== 0
-              ? `${n || 'some'} failing${state.stale ? ' — and the tree has changed since' : ''}`
-              : state.stale
-                ? 'Passed, but the tree has changed since'
-                : 'Green';
+        : state.held
+          ? `Waiting to run: ${state.held}`
+          : !state.last
+            ? 'No run yet'
+            : state.last.timedOut
+              ? 'Timed out'
+              : (state.last.exitCode ?? 1) !== 0
+                ? `${n || 'some'} failing${state.stale ? ' — and the tree has changed since' : ''}`
+                : state.stale
+                  ? 'Passed, but the tree has changed since'
+                  : 'Green';
   if (testPanelOpen) renderTestPanel();
   if (gearOpen) renderGear();
   // The tab carries the light too — it is the only part of this page visible
@@ -1768,6 +1770,10 @@ function renderTestPanel() {
   if (!s.enabled) {
     box.append(el('div', 'snote', 'Off here. Enabling runs this command whenever the tree changes, settles, and she is idle.'));
   }
+  // A due run that is waiting on the machine says so — otherwise a yellow
+  // "tree changed" light that never turns reads as a runner that broke.
+  // `held` is absent from an older server, which is the same as not waiting.
+  if (s.held) box.append(el('div', 'snote', `Waiting to run: ${s.held}. Run now ignores this.`));
 
   const r = s.last;
   if (!r) return void (s.enabled && box.append(el('div', 'snote', 'no run yet')));

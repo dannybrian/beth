@@ -87,7 +87,7 @@ pnpm test        # node --test src/*.test.ts
 Tests are thin and concentrated where behaviour is subtle (`audioTags`, `markdown`,
 `spokenName`, the `plansReader` parsers, the `workIndex` watcher, `mouth` — the speech-out
 core, billing included — and `speakOut`, its bus adapter (⚠ whose `setVoice`/`speechLevel`
-are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers, `settings` (the write layer: that
+are passed around DETACHED by main.ts, so they stay arrow properties; the test pins it), the `testRunner` detectors and failure parsers, `runCommand` (REAL process trees: a stop, a timeout and a clean exit must each leave no worker behind — killing only the direct child orphaned beadgame's vitest pool and took the machine down on 2026-09-13 — and plan churn must not count as a tree change, or a repo whose hooks heartbeat plans re-runs its suite every interval forever; and in `testRunner`, that a due run WAITS on a busy machine and says so, while Run now does not), `settings` (the write layer: that
 what the page set beats the env layer, that clearing hands the command back, and
 that changing a command drops the light the OLD one earned — a green kept across
 that change reads exactly like the new command having passed), `buildRunner` (the other half of

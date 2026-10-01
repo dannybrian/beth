@@ -226,6 +226,8 @@ export type HarnessConfig = {
   testMinIntervalMs: number;
   /** After this the run is killed and REPORTED as timed out, not left hanging. */
   testTimeoutMs: number;
+  /** 1-minute load average PER CORE above which a scheduled run waits. 0 = never. */
+  testMaxLoad: number;
   /** Same for a build, and longer by default: a cold build is not a test run. */
   buildTimeoutMs: number;
 };
@@ -356,5 +358,6 @@ export function loadConfig(): HarnessConfig {
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),
     testMinIntervalMs: Number(conf('HARNESS_TEST_MIN_INTERVAL_MS') ?? 120_000),
     testTimeoutMs: Number(conf('HARNESS_TEST_TIMEOUT_MS') ?? 300_000),
+    testMaxLoad: Number(conf('HARNESS_TEST_MAX_LOAD') ?? 0.75),
   };
 }

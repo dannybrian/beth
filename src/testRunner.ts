@@ -9,12 +9,12 @@
 // real hazard — a suite that touches the network, spins a container, or costs
 // money must not start because you happened to save a file. So it is OFF until
 // enabled once per repo, and the detected command is shown before you enable it.
-import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { HarnessConfig } from './config.ts';
 import type { ConversationBus, UIMessage } from './bus.ts';
-import { MAX_OUTPUT, runCommand, treeFingerprint, type CommandResult } from './runCommand.ts';
+import { MAX_OUTPUT, runCommand, treeFingerprint, type CommandResult, type RunningCommand } from './runCommand.ts';
 import type { Settings } from './settings.ts';
 
 export type TestFailure = {
@@ -39,8 +39,33 @@ export type TestState = {
   light: 'green' | 'yellow' | 'red' | 'grey';
   /** The tree changed since the last run, so the light is about stale news. */
   stale: boolean;
+  /** Why a run that is due has not started — said, so a wait is not a silence. */
+  held: string | null;
   last: TestRun | null;
 };
+
+export type Load = { avg: number; cores: number };
+
+const machineLoad = (): Load => ({ avg: os.loadavg()[0], cores: os.availableParallelism() });
+
+/**
+ * Whether the machine is too busy for a run nobody asked for, and if so the
+ * sentence that says so.
+ *
+ * ⚠️ A full suite is a lot of machine, and on 2026-09-13 one landed on a Mac
+ * already carrying Docker, Unity and a stranded vitest pool and took it down.
+ * The schedule is the only part of this that nobody authorised at the moment
+ * it fires, so it is the part that has to look first. Per CORE, so the same
+ * setting means the same thing on a laptop and a Studio. The 1-minute average
+ * trails a run by about a minute, and the min interval is longer than that, so
+ * a run does not hold back the next one on its own echo.
+ */
+export function machineBusy(load: Load, maxPerCore: number): string | null {
+  if (!(maxPerCore > 0) || !(load.cores > 0)) return null;
+  // Written as NOT-greater so a NaN reading lets the run go rather than holding it forever.
+  if (!(load.avg / load.cores > maxPerCore)) return null;
+  return `machine busy — load ${load.avg.toFixed(1)} on ${load.cores} cores`;
+}
 
 // --- detection ---------------------------------------------------------------
 
@@ -273,7 +298,7 @@ export class TestMonitor {
   private detected: { command: string[]; why: string } | null;
   private enabled = false;
   private running = false;
-  private child: ChildProcess | null = null;
+  private child: RunningCommand | null = null;
   private last: TestRun | null = null;
   /** Fingerprint of the tree at the last run, so "unchanged" is a real answer. */
   private ranAt = 0;
@@ -283,11 +308,22 @@ export class TestMonitor {
   private directorBusy = false;
   private timer: NodeJS.Timeout | null = null;
   private settings?: Settings;
+  /** Directories whose churn is not a change — see `treeFingerprint`. */
+  private quiet: () => string[];
+  private load: () => Load;
+  private held: string | null = null;
 
-  constructor(cfg: HarnessConfig, bus: ConversationBus, settings?: Settings) {
+  constructor(
+    cfg: HarnessConfig,
+    bus: ConversationBus,
+    settings?: Settings,
+    opts: { quiet?: () => string[]; load?: () => Load } = {}
+  ) {
     this.cfg = cfg;
     this.bus = bus;
     this.settings = settings;
+    this.quiet = opts.quiet ?? (() => []);
+    this.load = opts.load ?? machineLoad;
     this.stateFile = path.join(cfg.stateDir, 'tests.json');
     this.detected = this.detect();
     try {
@@ -325,7 +361,7 @@ export class TestMonitor {
   }
 
   start() {
-    this.fingerprint = treeFingerprint(this.cfg.repo);
+    this.fingerprint = this.tree();
     this.changedAt = Date.now();
     // Polling rather than watching: `git status` already knows what changed, and
     // a recursive watch over a whole repo fires on every build artefact.
@@ -344,7 +380,7 @@ export class TestMonitor {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.child?.kill('SIGKILL');
+    this.child?.stop('SIGKILL');
   }
 
   setEnabled(on: boolean) {
@@ -354,7 +390,8 @@ export class TestMonitor {
     } catch {
       /* a state dir we cannot write is not worth failing a toggle over */
     }
-    if (!on) this.child?.kill('SIGTERM');
+    if (!on) this.child?.stop('SIGTERM');
+    this.held = null;
     this.publish();
   }
 
@@ -366,6 +403,7 @@ export class TestMonitor {
       running: this.running,
       light: this.light(),
       stale: Boolean(this.last) && this.fingerprint !== this.ranFingerprint,
+      held: this.held,
       last: this.last,
     };
   }
@@ -384,10 +422,14 @@ export class TestMonitor {
     this.bus.publish({ type: 'tests', state: this.state() });
   }
 
+  private tree() {
+    return treeFingerprint(this.cfg.repo, this.quiet());
+  }
+
   /** Changed, settled, and idle — all three, or nothing happens. */
   private tick() {
     if (!this.enabled || !this.detected || this.running) return;
-    const fp = treeFingerprint(this.cfg.repo);
+    const fp = this.tree();
     if (!fp) return;
     if (fp !== this.fingerprint) {
       this.fingerprint = fp;
@@ -395,10 +437,28 @@ export class TestMonitor {
       this.publish(); // the light goes stale the moment the tree moves
       return;
     }
-    if (fp === this.ranFingerprint) return; // nothing new since the last run
+    if (fp === this.ranFingerprint) {
+      // Nothing new since the last run — so nothing is being held back either.
+      if (this.held) {
+        this.held = null;
+        this.publish();
+      }
+      return;
+    }
     if (Date.now() - this.changedAt < this.cfg.testSettleMs) return; // still typing
     if (Date.now() - this.ranAt < this.cfg.testMinIntervalMs) return; // too soon
     if (this.directorBusy) return; // her suite wins
+    // Last, so `held` is only ever said about a run that was otherwise due.
+    const busy = machineBusy(this.load(), this.cfg.testMaxLoad);
+    if (busy) {
+      // Published on CHANGE only: the number moves every tick, and a wait that
+      // re-rendered every tab every four seconds is noise about nothing.
+      if (!this.held) {
+        this.held = busy;
+        this.publish();
+      }
+      return;
+    }
     void this.run();
   }
 
@@ -406,13 +466,14 @@ export class TestMonitor {
   async run(): Promise<void> {
     if (this.running || !this.detected) return;
     this.running = true;
+    this.held = null;
     // The previous run goes the moment a new one starts, failures and all: a
     // failure row still showing under "Running…" is one nothing has confirmed
     // yet, and pasting it to her would hand over last time's reasons as this
     // run's. Same rule as `setCommand`, and done on the server so every tab
     // clears at once.
     this.last = null;
-    const startedFingerprint = this.fingerprint || treeFingerprint(this.cfg.repo);
+    const startedFingerprint = this.fingerprint || this.tree();
     this.publish();
 
     const result = await runCommand({
@@ -420,7 +481,7 @@ export class TestMonitor {
       cwd: this.cfg.repo,
       timeoutMs: this.cfg.testTimeoutMs,
       maxOutput: MAX_OUTPUT,
-      onStart: (child) => (this.child = child),
+      onStart: (run) => (this.child = run),
     });
 
     this.child = null;

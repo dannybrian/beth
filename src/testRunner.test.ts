@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { detectRunner, parseFailures } from './testRunner.ts';
+import { execFileSync } from 'node:child_process';
+import { detectRunner, machineBusy, parseFailures, TestMonitor, type Load } from './testRunner.ts';
+import { ConversationBus } from './bus.ts';
+import type { HarnessConfig } from './config.ts';
 
 /** A throwaway repo containing exactly the files a detector should key on. */
 function repoWith(files: Record<string, string>): string {
@@ -236,4 +239,66 @@ test('the RICHEST parser wins, so a wrapper command cannot mislead us', () => {
   const f = parseFailures(out, REPO);
   assert.equal(f.length, 2);
   assert.deepEqual(f.map((x) => x.path), ['tests/a.py', 'tests/b.py']);
+});
+
+// --- the busy machine ------------------------------------------------------------
+
+test('busy is judged PER CORE, so one setting means the same on any Mac', () => {
+  assert.equal(machineBusy({ avg: 6, cores: 10 }, 0.75), null);
+  assert.match(machineBusy({ avg: 8.2, cores: 10 }, 0.75)!, /load 8\.2 on 10 cores/);
+  assert.match(machineBusy({ avg: 4, cores: 4 }, 0.75)!, /busy/);
+});
+
+test('a max of 0 turns the check off, and a broken reading never holds a run', () => {
+  assert.equal(machineBusy({ avg: 99, cores: 10 }, 0), null);
+  assert.equal(machineBusy({ avg: 99, cores: 0 }, 0.75), null);
+  assert.equal(machineBusy({ avg: NaN, cores: 10 }, 0.75), null);
+});
+
+/** A monitor over a real repo, with the schedule's gates opened and the load injected. */
+function monitor(load: { now: Load }) {
+  const repo = fs.realpathSync(repoWith({ 'a.ts': 'export {}\n' }));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const cfg = {
+    repo,
+    stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'harness-state-')),
+    testCmd: `${process.execPath} -e 0`,
+    testSettleMs: 0,
+    testMinIntervalMs: 0,
+    testTimeoutMs: 10_000,
+    testMaxLoad: 0.75,
+  } as HarnessConfig;
+  const bus = new ConversationBus();
+  const m = new TestMonitor(cfg, bus, undefined, { load: () => load.now });
+  m.setEnabled(true);
+  // `tick` is the schedule itself; driving it directly is what makes the gate testable.
+  const tick = () => (m as unknown as { tick(): void }).tick();
+  return { m, tick };
+}
+
+/**
+ * 2026-09-13: a scheduled full suite landed on a Mac already carrying Docker and
+ * Unity. The schedule has to look first — and SAY it is waiting, or a yellow
+ * light that never turns reads as a runner that broke.
+ */
+test('a due run waits while the machine is busy, says why, and goes once it is not', async () => {
+  const load = { now: { avg: 9, cores: 10 } };
+  const { m, tick } = monitor(load);
+  tick(); // first sight of the tree
+  tick(); // due — but busy
+  assert.equal(m.state().running, false);
+  assert.match(m.state().held ?? '', /machine busy/);
+
+  load.now = { avg: 2, cores: 10 };
+  tick();
+  assert.equal(m.state().running, true);
+  assert.equal(m.state().held, null, 'the wait note outlived the wait');
+  while (m.state().running) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(m.state().light, 'green');
+});
+
+test('Run now is a press, not the schedule — it ignores the load', async () => {
+  const { m } = monitor({ now: { avg: 99, cores: 10 } });
+  await m.run();
+  assert.equal(m.state().last?.exitCode, 0);
 });

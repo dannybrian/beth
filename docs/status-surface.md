@@ -80,6 +80,20 @@ Plus a floor (`HARNESS_TEST_MIN_INTERVAL_MS`, default 2 min) so a rapid series o
 does not queue a run per keystroke, and a ceiling on runtime after which the run is killed
 and reported as timed out rather than left hanging.
 
+⚠ Correction (2026-09-13), after a scheduled `pnpm -r run test` in beadgame took the
+Mac down. Three changes, all in `runCommand.ts` and `testRunner.ts`:
+- **A stop kills the whole process tree.** The command leads its own process group
+  and every signal goes to the group. Before this, a timeout killed `pnpm` and
+  left its vitest pool running under launchd, and the next run stacked a second
+  pool on top.
+- **Plan churn is not a change.** The fingerprint skips the plans reader's roots
+  and hashes the filtered index instead of HEAD. beadgame's plans-tick hook
+  heartbeats frontmatter every turn, so the tree never looked settled for long.
+- **A fifth condition: the machine is not already busy.** The 1-minute load
+  average per core must be at or under `HARNESS_TEST_MAX_LOAD` (default 0.75,
+  0 = off). A due run that waits says so on the light and in the panel. "Run now"
+  ignores the check, since the press is the authorisation.
+
 ⚠️ This executes project code on a schedule without anyone asking. That is a real hazard —
 a suite that touches the network, spins a container, or costs money must not start because
 you happened to save a file. So it is **off until enabled once per repo**, persisted in

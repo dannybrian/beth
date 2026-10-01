@@ -10,6 +10,7 @@ import { SessionManager } from './session.ts';
 import { SpeakOut } from './speakOut.ts';
 import { TestMonitor } from './testRunner.ts';
 import { BuildRunner } from './buildRunner.ts';
+import { treeFingerprint } from './runCommand.ts';
 import { Settings } from './settings.ts';
 import { createServer } from './server.ts';
 import { WorkIndex } from './workIndex.ts';
@@ -68,9 +69,10 @@ const inbox = new InboxAcks(cfg);
 // persona it restores) is built after the index, and a persona switch changes
 // the name mid-run. Until the session exists, the repo's own director.
 let directorNow: () => string = () => cfg.directorName;
+const plans = createPlansReader({ repo: cfg.repo, roots: cfg.planRoots });
 const work = new WorkIndex(
   [
-    createPlansReader({ repo: cfg.repo, roots: cfg.planRoots }),
+    plans,
     createInboxReader({ dir: cfg.inboxDir, files: cfg.inboxFiles, director: () => directorNow(), acks: inbox }),
   ],
   {
@@ -240,8 +242,12 @@ bus.subscribe((m) => {
   if (m.type === 'usage' && m.usage.turnCost > 0) void credits.noteTurn(m.usage.turnCost);
 });
 
-const tests = new TestMonitor(cfg, bus, settings);
-const build = new BuildRunner(cfg, bus, { settings });
+// Plan churn is not a change to anything a suite or a build reads, and a repo
+// whose hooks heartbeat plans every turn otherwise never sits still — which is
+// how beadgame ran its whole monorepo suite every two minutes (runCommand.ts).
+const quiet = () => plans.watchRoots();
+const tests = new TestMonitor(cfg, bus, settings, { quiet });
+const build = new BuildRunner(cfg, bus, { settings, fingerprint: () => treeFingerprint(cfg.repo, quiet()) });
 // The repo's own nouns, walked ONCE — the page gets this plus whatever is live on
 // the board. Mined even when biasing is off, because the count is worth printing:
 // it is how you find out the list is empty before wondering why nothing improved.
