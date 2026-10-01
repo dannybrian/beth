@@ -97,8 +97,20 @@
         <!-- Model and effort sit BEFORE the meters (2026-09-05): the three bars
              then read as one instrument beside the lights and the gear, and the
              two selects are not wedged between gauges. -->
+        <!-- ⚠ Exact model IDs, never the CLI's `opus`/`sonnet` aliases: an alias
+             re-points itself when a version rolls, and the strip would go on
+             naming the version it no longer runs. Her WORKERS still get aliases
+             (session.ts) — that is a different call, made per dispatch.
+             ⚠ Opus 5.5's own effort default is `medium`, one level under Opus 5's
+             `high`, so the blank "effort" option means something quieter now that
+             5.5 is the harness default. -->
         <select id="model-select" title="Model for this conversation — switches live, context is kept">
+          <!-- `selected` marks the HARNESS DEFAULT (config.ts), which is what a
+               page shows until `hello` lands. Keep the two in step: a strip
+               naming a model she is not running is the one thing it must not do. -->
+          <option value="claude-opus-5-5" selected>Opus 5.5</option>
           <option value="claude-opus-5">Opus 5</option>
+          <option value="claude-fable-5-1">Fable 5.1</option>
           <option value="claude-fable-5">Fable 5</option>
         </select>
         <!-- How hard she thinks. The unset option is labelled with the field name

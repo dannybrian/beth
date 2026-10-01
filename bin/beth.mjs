@@ -31,7 +31,7 @@ if (flag('help')) {
   beth --repo <path>   bind to a specific repo
   beth --port <n>      force a port (default: HARNESS_PORT in the repo's .env, else first free from 4620)
                        everything binds to localhost — there is no public port
-  beth --model <id>    claude-opus-5 (default) | claude-fable-5
+  beth --model <id>    claude-opus-5-5 (default) | claude-opus-5 | claude-fable-5-1 | claude-fable-5
   beth --fresh         ignore any previous session
   beth --no-open       do not open a browser
 `);

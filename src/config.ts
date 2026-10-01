@@ -235,7 +235,12 @@ export type HarnessConfig = {
 // The director session runs all day and every turn carries full repo context, so
 // the model choice is the dominant cost lever. Opus is the deliberate default;
 // override with HARNESS_MODEL when a turn genuinely needs more.
-const DEFAULT_MODEL = 'claude-opus-5';
+//
+// ⚠ An exact id, never the `opus` alias — an alias re-points itself when a
+// version rolls, and the strip would go on naming a version it no longer runs.
+// Keep the `selected` option in ui/index.html on whatever this says: that is
+// what a page shows until `hello` lands.
+const DEFAULT_MODEL = 'claude-opus-5-5';
 
 const slug = (p: string) => p.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 
