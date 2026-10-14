@@ -15,7 +15,16 @@
 // travels as spans over the stripped text — the same shape links already use. One
 // canonical string, two overlays that agree by construction. The voice path takes
 // that string and never learns spans exist.
-export type SpanKind = 'bold' | 'italic' | 'code' | 'strike' | 'heading';
+//
+// Tables ride the same overlay (2026-10-04). A table is BLOCK structure, which
+// looks like the case for a renderer in the page — but its cells are still
+// ranges of one string, so it fits: the canonical text is the cells, tab between
+// columns and newline between rows (what a copied table pastes as), and
+// `table`/`row`/`th`/`td` spans TILE it. Each range owns its trailing separator,
+// which is what keeps the page's DOM text equal to this string character for
+// character — reread.js counts on that — and links inside a cell are ordinary
+// links, detected after the fact like any other.
+export type SpanKind = 'bold' | 'italic' | 'code' | 'strike' | 'heading' | 'table' | 'row' | 'th' | 'td';
 
 /** A formatting range, in the same coordinates as a TextLink. */
 export type TextSpan = { start: number; end: number; kind: SpanKind };
@@ -26,6 +35,20 @@ export type Rendered = { text: string; spans: TextSpan[] };
 const HEADING = /^(#{1,6})[ \t]+/;
 /** `- `, `* `, `+ ` at the head of a line. Indent survives; the marker becomes a bullet. */
 const BULLET = /^([ \t]*)[-*+][ \t]+/;
+
+/** A fence line. Nothing inside one is a table, however many pipes it has. */
+const FENCE = /^\s*(`{3,}|~{3,})/;
+/**
+ * The row under a table's header: `|---|:--:|`. Requiring it on the NEXT line is
+ * what stops a prose line with a pipe in it becoming a one-column table.
+ */
+const TABLE_SEP = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+
+/** One row's cells. `\|` is a literal pipe, which is the only way GFM has to write one. */
+function tableCells(line: string): string[] {
+  const body = line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '');
+  return body.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+}
 
 type Rule = {
   /** null = consume the match and emit its text with no formatting (an escape). */
@@ -94,17 +117,67 @@ function scanInline(src: string): Rendered {
  * Strip markdown markers from `src`, returning the plain text and the formatting
  * that was carried by the markers. Offsets index the RETURNED text.
  *
- * Block handling is deliberately thin — headings and bullets only. Beth is told
- * to write like someone speaking, so anything more (tables, fenced blocks) is a
- * prompt problem, not a rendering one.
+ * Block handling is deliberately thin — headings, bullets and tables. Beth is
+ * told to write like someone speaking, and a table is still the wrong answer to
+ * a spoken question; but a comparison of nine models IS a table, and it arrived
+ * as rows of pipes. Fenced blocks are still left exactly as written.
  */
 export function renderInline(src: string): Rendered {
   const spans: TextSpan[] = [];
   let out = '';
+  const lines = src.split('\n');
+  let fence: string | null = null;
+  // A table swallows the newline that ends it, so the next line must not add one.
+  let glued = false;
 
-  src.split('\n').forEach((line, i) => {
-    if (i) out += '\n';
-    let body = line;
+  for (let i = 0; i < lines.length; i++) {
+    if (i && !glued) out += '\n';
+    glued = false;
+    let body = lines[i];
+
+    const f = FENCE.exec(body);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+    }
+
+    // Same column count on both lines, as GFM requires: `a | b` over a `---`
+    // rule is a sentence and a divider, not a table with one column missing.
+    const sep = lines[i + 1] ?? '';
+    const isTable =
+      !fence && !f && body.includes('|') && TABLE_SEP.test(sep) && tableCells(sep).length === tableCells(body).length;
+    if (isTable) {
+      let end = i + 2;
+      while (end < lines.length && lines[end].trim() && lines[end].includes('|')) end++;
+      const rows = [lines[i], ...lines.slice(i + 2, end)].map(tableCells);
+      const more = end < lines.length;
+
+      const table: TextSpan = { start: out.length, end: 0, kind: 'table' };
+      spans.push(table);
+      rows.forEach((cells, r) => {
+        const row: TextSpan = { start: out.length, end: 0, kind: 'row' };
+        spans.push(row);
+        cells.forEach((cell, c) => {
+          const base = out.length;
+          const inner = scanInline(cell);
+          out += inner.text;
+          // The separator belongs to the cell BEFORE it. Without that an empty
+          // cell is a zero-width range, which the page cannot place.
+          if (c < cells.length - 1) out += '\t';
+          else if (r < rows.length - 1 || more) out += '\n';
+          // The one cell that can still be empty: the last of a table that ends
+          // the message. It gets no span — a row one cell short, not a stray.
+          if (out.length === base) return;
+          spans.push({ start: base, end: out.length, kind: r ? 'td' : 'th' });
+          for (const s of inner.spans) spans.push({ start: base + s.start, end: base + s.end, kind: s.kind });
+        });
+        row.end = out.length;
+      });
+      table.end = out.length;
+      i = end - 1;
+      glued = more;
+      continue;
+    }
 
     const h = HEADING.exec(body);
     if (h) {
@@ -124,7 +197,7 @@ export function renderInline(src: string): Rendered {
     out += inner.text;
     for (const s of inner.spans) spans.push({ start: base + s.start, end: base + s.end, kind: s.kind });
     if (h && inner.text) spans.push({ start: base, end: base + inner.text.length, kind: 'heading' });
-  });
+  }
 
   return { text: out, spans };
 }

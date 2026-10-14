@@ -120,7 +120,15 @@ function linkNode(link, label) {
  * a path inside a bold clause is one range inside another. Never innerHTML —
  * every node here is built, so nothing she writes can become markup.
  */
-const SPAN_TAG = { bold: 'strong', italic: 'em', code: 'code', strike: 's', heading: 'strong' };
+const SPAN_TAG = {
+  bold: 'strong', italic: 'em', code: 'code', strike: 's', heading: 'strong',
+  table: 'table', row: 'tr', th: 'th', td: 'td',
+};
+// A table's ranges nest by construction but can be the SAME width — one row, one
+// column — and width is all the sort below has. This is the tie-break: structure
+// outside formatting, formatting outside a link.
+const SPAN_RANK = { table: 0, row: 1, th: 2, td: 2 };
+const rank = (r) => (r.link ? 4 : SPAN_RANK[r.kind] ?? 3);
 
 function rangeTree(text, links, spans) {
   const ranges = [
@@ -129,7 +137,7 @@ function rangeTree(text, links, spans) {
   ]
     // Outermost first, and a link inside an equal-width span rather than around
     // it — `**plans/foo.md**` should be a bold link, not a link containing bold.
-    .sort((a, b) => a.start - b.start || b.end - a.end || (a.link ? 1 : -1));
+    .sort((a, b) => a.start - b.start || b.end - a.end || rank(a) - rank(b));
 
   const root = { start: 0, end: text.length, children: [] };
   const stack = [root];

@@ -721,6 +721,25 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
 .entry .body em { font-style: italic; color: #e6ebf2; }
 .entry .body s { color: var(--muted); }
 .entry .body .heading { display: inline-block; margin-top: 2px; letter-spacing: 0.01em; }
+/* A table she wrote. Its cells are ranges of the message text and each one ends
+   in the tab or newline that separated it (markdown.ts) — so cells go back to
+   normal white-space, or the body's pre-wrap would draw every separator. */
+.entry .body table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 0.9em;
+}
+.entry .body th, .entry .body td {
+  white-space: normal;
+  border: 1px solid var(--line);
+  padding: 5px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+.entry .body th { background: #1b1f26; color: #eef2f8; font-weight: 600; }
 
 /* The re-read speaker: after every paragraph, quiet until wanted. The glyph is
    ::before rather than text so the body's textContent stays the canonical

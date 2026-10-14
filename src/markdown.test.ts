@@ -82,3 +82,79 @@ test('the spoken form carries no markers', () => {
 test('audio tags pass straight through — they are the voice layer, not markdown', () => {
   assert.equal(stripMarkdown('[laughs] **got it**'), '[laughs] got it');
 });
+
+// --- tables ------------------------------------------------------------------
+
+const TABLE = [
+  'Figures first.',
+  '',
+  '| Model | Offline? | Size |',
+  '|---|---|---|',
+  '| **Opus** | No. Cloud only | n/a |',
+  '| Gemma 3 | Yes | ~8 GB |',
+  '',
+  'The pattern: small ones fit.',
+].join('\n');
+
+test('a table becomes tab-and-newline text, with the separator row gone', () => {
+  const { text } = renderInline(TABLE);
+  assert.equal(
+    text,
+    'Figures first.\n\nModel\tOffline?\tSize\nOpus\tNo. Cloud only\tn/a\nGemma 3\tYes\t~8 GB\n\nThe pattern: small ones fit.'
+  );
+});
+
+test('table, rows and cells TILE the text — every character in exactly one cell', () => {
+  const { text, spans } = renderInline(TABLE);
+  const [table] = spans.filter((s) => s.kind === 'table');
+  const rows = spans.filter((s) => s.kind === 'row');
+  const cells = spans.filter((s) => s.kind === 'th' || s.kind === 'td');
+  assert.equal(rows.length, 3);
+  assert.equal(cells.length, 9);
+  assert.deepEqual(cells.slice(0, 4).map((c) => c.kind), ['th', 'th', 'th', 'td']);
+  // Contiguous: the page builds its DOM from these and reread.js counts text
+  // characters through it, so a gap or an overlap lands the speaker mid-word.
+  for (const set of [rows, cells]) {
+    assert.equal(set[0].start, table.start);
+    assert.equal(set.at(-1)!.end, table.end);
+    for (let i = 1; i < set.length; i++) assert.equal(set[i].start, set[i - 1].end);
+  }
+  assert.equal(text.slice(cells[4].start, cells[4].end), 'No. Cloud only\t');
+  // The table owns the newline that ends it, and not the blank line after.
+  assert.equal(text.slice(table.end), '\nThe pattern: small ones fit.');
+});
+
+test('formatting inside a cell is a span inside that cell', () => {
+  assert.deepEqual(kindsOver(TABLE, 'Opus'), ['bold', 'row', 'table', 'td']);
+});
+
+test('an empty cell keeps its width; an escaped pipe is a pipe', () => {
+  const { text, spans } = renderInline('| a | b |\n|---|---|\n|  | x \\| y |');
+  assert.equal(text, 'a\tb\n\tx | y');
+  const cells = spans.filter((s) => s.kind === 'td');
+  assert.deepEqual(cells.map((c) => text.slice(c.start, c.end)), ['\t', 'x | y']);
+});
+
+test('a table that ends the message with an empty cell emits no zero-width span', () => {
+  const { spans } = renderInline('| a | b |\n|---|---|\n| x |  |');
+  assert.ok(spans.every((s) => s.end > s.start));
+});
+
+test('a pipe in prose is not a table, and neither is one inside a fence', () => {
+  const prose = 'run `a | b` and see\nwhat comes back';
+  assert.equal(renderInline(prose).spans.some((s) => s.kind === 'table'), false);
+  const fenced = '```\n| a | b |\n|---|---|\n| 1 | 2 |\n```';
+  const r = renderInline(fenced);
+  assert.equal(r.spans.some((s) => s.kind === 'table'), false);
+  assert.equal(r.text, fenced);
+});
+
+test('a bullet list under a line with a pipe is not a table', () => {
+  // `- item` would satisfy a careless separator pattern.
+  const r = renderInline('a | b\n- item');
+  assert.equal(r.spans.some((s) => s.kind === 'table'), false);
+});
+
+test('a rule under a line with a pipe is not a table — the columns must agree', () => {
+  assert.equal(renderInline('a | b\n---').spans.some((s) => s.kind === 'table'), false);
+});

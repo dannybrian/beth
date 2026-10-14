@@ -598,6 +598,14 @@ These cost hours. Don't rediscover them.
   BEFORE links are detected, and the formatting they carried travels as spans in the
   same coordinates. One canonical string, two overlays that cannot disagree. The voice
   path takes that string too, which is what stops TTS pronouncing asterisks.
+  ⚠ TABLES ride the same overlay (2026-10-04) — not a renderer in the page. The
+  canonical text is the cells, tab between columns and newline between rows, and
+  `table`/`row`/`th`/`td` spans TILE it; each range owns its trailing separator, so
+  the DOM's text is still that string character for character (`reread.js` counts
+  on it) and an empty cell is never a zero-width range the page cannot place. The
+  cells go back to `white-space: normal` in CSS, or the body's `pre-wrap` draws
+  every separator. An old tab draws the new kinds as plain spans: tab-separated
+  text, which is the degrade. Fences are still left as written.
 - **The API key needs the Text to Speech permission**, and only that. The old dial-in
   path needed the row labelled "ElevenAgents" instead (there is no "Speech Engine" or
   "Conversational AI" entry), which is why a key that worked for years produced a 502
