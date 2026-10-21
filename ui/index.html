@@ -239,6 +239,8 @@
       <!-- What Danny is pointing at. Each chip carries a spoken name he can read
            and a path Beth can resolve — the pair is the whole point. -->
       <div id="composer-refs" class="refs" hidden></div>
+      <!-- Pictures going with the next turn: pasted, dropped, or picked. -->
+      <div id="composer-images" class="attached" hidden></div>
       <div class="composer-row">
         <!-- Inline SVG rather than the 🎙 emoji: the emoji renders as a chunky
              colour glyph that ignores the button's state colour entirely. -->
@@ -284,6 +286,15 @@
              is a newline you reach for, not a send, and there was no other way to
              commit the box by touch. An icon like the mic's rather than the
              accent-filled button that left — the row must not read as a form. -->
+        <!-- Paste and drop are the quick ways; this is the one an iPad has.
+             Hidden until hello says the harness takes pictures. -->
+        <button id="attach" class="send attach" title="Attach an image — or paste or drop one" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m20.5 11.6-8.3 8.3a5.3 5.3 0 0 1-7.5-7.5l8.3-8.3a3.5 3.5 0 0 1 5 5l-8.3 8.3a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6" />
+          </svg>
+        </button>
+        <input id="attach-file" type="file" accept="image/*" multiple hidden />
         <button id="send" class="send" title="Send (Enter)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

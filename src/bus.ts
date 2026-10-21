@@ -82,13 +82,16 @@ export type UIMessage =
       keytermBoost: number;
       /** Which ear this harness offers: the browser recogniser, or Scribe. */
       ear: 'browser' | 'scribe';
+      /** /api/turn accepts `images` — absent on a server that predates them. */
+      images?: boolean;
       // Which connection this is, so a page can claim the mouth when it is the
       // one you are looking at. See the speaker election in server.ts.
       streamId: number;
     }
   // `refs` are what Danny POINTED at for this turn — rendered as chips in the
   // transcript so a turn stays readable next to what he actually typed.
-  | { type: 'user'; text: string; refs?: WorkRef[] }
+  // `images` are pasted.ts ids, served by /api/pasted — never the bytes.
+  | { type: 'user'; text: string; refs?: WorkRef[]; images?: string[] }
   // `text` is what Danny READS (audio tags and markdown markers stripped);
   // `voiceText` is the raw form the speech path re-derives from. `links` and
   // `spans` are both offset overlays on `text` — file references and the

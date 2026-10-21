@@ -48,6 +48,22 @@ const renderUser = (m) =>
       for (const r of m.refs) row.append(el('span', `chip ${r.kind}`, r.spoken));
       n.append(row);
     }
+    // ...and what he showed her. An old id the sweep has taken says so rather
+    // than leaving a broken-image glyph.
+    if (m.images?.length) {
+      const row = el('div', 'sent-images');
+      for (const id of m.images) {
+        const img = el('img');
+        const src = `/api/pasted?id=${encodeURIComponent(id)}`;
+        img.src = src;
+        img.alt = 'an image he sent';
+        img.loading = 'lazy';
+        img.onclick = () => openLightbox(null, '', src);
+        img.onerror = () => img.replaceWith(el('span', 'meta', '⚠ image no longer kept'));
+        row.append(img);
+      }
+      n.append(row);
+    }
     n.append(el('div', 'body', m.text));
   });
 // --- file links in what Beth writes ------------------------------------------
@@ -514,11 +530,12 @@ const imageUrl = (path) => `/api/image?path=${encodeURIComponent(path)}`;
 
 let lightboxOpen = false;
 
-function openLightbox(path, caption) {
+/** `src` for a picture that is not a repo path — one he pasted. */
+function openLightbox(path, caption, src) {
   const img = $('lightbox').querySelector('img');
-  img.src = imageUrl(path);
-  img.alt = caption || path;
-  $('lightbox').querySelector('figcaption').textContent = caption || path;
+  img.src = src ?? imageUrl(path);
+  img.alt = caption || path || 'image';
+  $('lightbox').querySelector('figcaption').textContent = caption || path || '';
   $('lightbox').hidden = false;
   lightboxOpen = true;
 }
@@ -1266,6 +1283,8 @@ function feedEvent(e) {
 const handlers = {
   hello: (m) => {
     repoPath = m.repo;
+    imagesOk = Boolean(m.images);
+    $('attach').hidden = !imagesOk;
     setPersonas(m.personas ?? [], m.persona ?? '');
     projectName = m.repo.split('/').pop();
     const label = $('repo-label');
@@ -2990,10 +3009,164 @@ paintMeter();
 // --- composer --------------------------------------------------------------
 
 const input = $('input');
+
+// --- pictures for the next turn ----------------------------------------------
+//
+// Pasted, dropped or picked; held as thumbnails until the turn goes, like the
+// chips. Shrunk HERE, before they leave the page, for a reason that is not
+// bandwidth: an image the API refuses does not fail one turn, it fails every
+// turn after it, because the history it sits in is re-sent each time. Past
+// twenty images in a conversation the API refuses any over 2000px a side, so
+// that is the ceiling from the first one. pasted.ts re-checks the bytes.
+
+/** Whether this harness takes pictures (hello). False on one that predates it. */
+let imagesOk = false;
+/** { url: thumbnail object URL, data: base64 data URL once ready, or null } */
+let attached = [];
+const IMAGE_EDGE = 2000;
+const IMAGE_BYTES = 1_500_000;
+
+async function shrinkImage(file) {
+  const fits = /^image\/(png|jpeg|gif|webp)$/.test(file.type) && file.size <= IMAGE_BYTES;
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, IMAGE_EDGE / Math.max(bmp.width, bmp.height));
+  if (fits && scale === 1) {
+    bmp.close();
+    return file;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
+  const encode = (type, q) => new Promise((r) => canvas.toBlob(r, type, q));
+  // PNG first: screenshots are text, and text is what JPEG smears.
+  let blob = await encode('image/png');
+  if (!blob || blob.size > IMAGE_BYTES) {
+    // JPEG has no alpha and paints transparency BLACK — put white behind it.
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    blob = await encode('image/jpeg', 0.85);
+  }
+  return blob;
+}
+
+const readDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+
+function attachImages(files) {
+  if (!imagesOk) return;
+  for (const file of files) {
+    const a = { url: URL.createObjectURL(file), data: null };
+    attached.push(a);
+    shrinkImage(file)
+      .then(readDataUrl)
+      .then((data) => {
+        a.data = data;
+        renderAttached();
+      })
+      .catch(() => {
+        // HEIC in Chrome, a truncated file: say so rather than send a turn
+        // that silently lost its picture.
+        dropAttached(a);
+        entry('activity', (n) => (n.textContent = `📎 could not read ${file.name || 'that image'}`));
+      });
+  }
+  renderAttached();
+  input.focus();
+}
+
+function dropAttached(a) {
+  attached = attached.filter((o) => o !== a);
+  URL.revokeObjectURL(a.url);
+  renderAttached();
+}
+
+function renderAttached() {
+  const box = $('composer-images');
+  box.hidden = attached.length === 0;
+  box.replaceChildren(
+    ...attached.map((a) => {
+      const t = el('span', a.data ? 'thumb' : 'thumb busy');
+      const img = el('img');
+      img.src = a.url;
+      img.alt = 'attached image';
+      const x = el('button', 'chip-x', '×');
+      x.title = 'Remove this image';
+      x.onclick = () => dropAttached(a);
+      t.append(img, x);
+      return t;
+    })
+  );
+}
+
+$('attach').onclick = () => $('attach-file').click();
+$('attach-file').onchange = (e) => {
+  attachImages([...e.target.files]);
+  e.target.value = '';
+};
+
+// Paste anywhere that is not some other field — the composer, or the page with
+// nothing focused. ⚠ Office apps and Numbers put a PNG RENDERING of the copied
+// cells beside their text, so a paste with text in it means the text. Finder is
+// the exception that looks the same: its text is just the file's name.
+document.addEventListener('paste', (e) => {
+  if (!imagesOk) return;
+  const t = e.target;
+  if (t !== input && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const dt = e.clipboardData;
+  const files = [...(dt?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (!files.length) return;
+  const text = dt.getData('text/plain').trim();
+  if (text && !text.split(/\r?\n/).every((line) => files.some((f) => f.name === line.trim().split('/').pop()))) return;
+  e.preventDefault();
+  attachImages(files);
+});
+
+// Drop onto the page. ⚠ The dragover preventDefault is not optional: without
+// it the browser's default for a dropped image is to NAVIGATE the tab to it,
+// which takes the conversation with it.
+const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+let dragDepth = 0;
+document.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth++;
+  if (imagesOk) document.querySelector('footer.composer').classList.add('dropping');
+});
+document.addEventListener('dragleave', (e) => {
+  if (!hasFiles(e)) return;
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    document.querySelector('footer.composer').classList.remove('dropping');
+  }
+});
+document.addEventListener('dragover', (e) => {
+  if (hasFiles(e)) e.preventDefault();
+});
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  document.querySelector('footer.composer').classList.remove('dropping');
+  attachImages([...e.dataTransfer.files].filter((f) => f.type.startsWith('image/')));
+});
 const send = () => {
   const text = input.value.trim();
   // A turn can be pure gesture: click a plan, hit send, "tell me about this".
-  if (!text && !refs.length) return;
+  if (!text && !refs.length && !attached.length) return;
+  // A picture still being shrunk would be silently left behind, and the turn
+  // would ask about something she was never shown. Wait for it instead.
+  if (attached.some((a) => !a.data)) {
+    entry('activity', (n) => (n.textContent = '📎 still preparing the image — send again in a moment'));
+    return;
+  }
   input.value = '';
   input.style.height = 'auto';
   releaseComposer();
@@ -3005,10 +3178,22 @@ const send = () => {
   if (text === '/clear') return void post('/api/clear');
   if (text === '/stop') return void post('/api/interrupt');
   if (text === '/restart') return void restartHarness();
-  post('/api/turn', { text, refs, seq: ++pointSeq });
+  const going = attached;
+  const images = going.map((a) => a.data);
+  post('/api/turn', images.length ? { text, refs, seq: ++pointSeq, images } : { text, refs, seq: ++pointSeq }).then(async (res) => {
+    if (res.ok || !going.length) return;
+    // Refused pictures come back to the composer rather than vanishing — the
+    // words went nowhere either, so nothing was half-sent.
+    const body = await res.json().catch(() => ({}));
+    entry('activity', (n) => (n.textContent = `📎 not sent — ${body.error ?? res.status}`));
+    attached = [...going, ...attached];
+    renderAttached();
+  });
   expectEcho();
   refs = [];
   renderRefs();
+  attached = [];
+  renderAttached();
 };
 // The button is Enter for a finger. pointerdown, like the Tab badge: a tap
 // would otherwise blur the field first, and the send reads the box.

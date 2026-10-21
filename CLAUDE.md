@@ -119,7 +119,11 @@ leaving the roster when nothing will ever report it), `keyterms`, `greeting`, an
 `stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
 `sendPointed` (harness scaffolding rendered as words Danny typed), `personas`, `showImage` (the
 /api/image allowlist — a wrong refusal is a broken figure, a wrong acceptance is a
-query string reading files off the machine), `workbench` (the bench-url vetting —
+query string reading files off the machine), `pasted` (images sent with a turn: the
+media type is read off the BYTES and the size capped, because an image the API refuses
+fails not one turn but every turn after it — the history it sits in is re-sent each time;
+the page also caps the long edge at 2000px for the same reason, since past twenty images
+a request refuses anything larger), `workbench` (the bench-url vetting —
 the page hands it straight to an `<a href>` in every open tab, so a `javascript:`
 url pinned by a confused tool call would be an executable link in the boldest spot
 on the page; and `localhost:3000` parses with scheme `localhost:`, so the most

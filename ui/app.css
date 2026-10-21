@@ -702,6 +702,16 @@ main { display: grid; grid-template-columns: 1fr max(300px, 30%); min-height: 0;
    column is what you size by sizing the window. */
 .entry { margin-bottom: 14px; }
 .entry.user { margin-left: auto; text-align: right; }
+.entry.user .sent-images { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 5px; }
+.entry.user .sent-images img {
+  display: block;
+  max-height: 160px;
+  max-width: min(320px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: zoom-in;
+}
+.entry.user .body:empty { display: none; }
 .entry.user .body {
   display: inline-block;
   text-align: left;
@@ -1277,6 +1287,36 @@ body.hide-activity .entry.activity.tool { display: none; }
 .composer button.send { background: none; color: var(--muted); font-weight: 400; padding: 0; width: 34px; }
 .composer button.send svg { width: 20px; height: 20px; display: block; }
 .composer button.send:hover { color: var(--accent); }
+.composer button.attach[hidden] { display: none; }
+/* Pictures waiting to go — the chip row's sibling, as thumbnails rather than
+   names, because a screenshot's name is "image.png" and says nothing. */
+.attached { display: flex; flex-wrap: wrap; gap: 6px; }
+.attached[hidden] { display: none; }
+.attached .thumb { position: relative; }
+.attached .thumb img {
+  display: block;
+  height: 56px;
+  max-width: 120px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.attached .thumb.busy img { opacity: 0.45; }
+.composer .attached .chip-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 400;
+}
+.composer .attached .chip-x:hover { color: var(--err); }
+/* Something droppable is over the page: say where it will land. */
+.composer.dropping textarea { border-color: var(--accent); border-style: dashed; }
 .composer button.autosend.off { color: var(--say); }
 /* The meter is a gauge you can click, not a button — the composer's primary
    styling would otherwise make it look like a third action next to Send. */

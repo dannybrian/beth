@@ -29,6 +29,7 @@ import { bootSuggestion, type Suggestion } from './suggestion.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
 import { summarizeTool } from './activity.ts';
+import type { Pasted } from './pasted.ts';
 
 type InputStream = AsyncIterable<SDKUserMessage> & { push(m: SDKUserMessage): void; end(): void };
 
@@ -64,8 +65,20 @@ function makeInputStream(): InputStream {
   };
 }
 
-const userMsg = (text: string): SDKUserMessage =>
-  ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '' }) as SDKUserMessage;
+/**
+ * A plain turn stays a plain string. With images it becomes blocks, pictures
+ * first (the API's own advice), and a text block only when there is text — an
+ * empty one is a 400, and a picture alone is a legitimate turn.
+ */
+const userMsg = (text: string, images: Pasted[] = []): SDKUserMessage => {
+  const content = images.length
+    ? [
+        ...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })),
+        ...(text ? [{ type: 'text', text }] : []),
+      ]
+    : text;
+  return { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, session_id: '' } as SDKUserMessage;
+};
 
 // The GENERIC director. Identity — name, voice, who they work with, repo-specific
 // standing orders — is supplied by the bound repo in .claude/DIRECTOR.md, so the
@@ -364,16 +377,18 @@ export class SessionManager {
    * carrying references is prefixed with a block naming what Danny pointed at;
    * showing him that block back would bury the sentence he actually typed.
    */
-  send(text: string, opts: { silent?: boolean; display?: string; refs?: WorkRef[] } = {}): number {
+  send(text: string, opts: { silent?: boolean; display?: string; refs?: WorkRef[]; images?: Pasted[] } = {}): number {
     const turn = ++this.turnSeq;
     // What Danny actually sent — scaffolding included, because the panel's job
     // is precisely to show what the transcript does not.
     this.wire.userTurn(turn, text);
-    if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs });
+    // The transcript gets ids, never bytes — the replay rides to every tab.
+    const images = opts.images?.length ? opts.images.map((i) => i.id) : undefined;
+    if (!opts.silent) this.bus.publish({ type: 'user', text: opts.display ?? text, refs: opts.refs, images });
     this.thinking = true;
     this.bus.publish({ type: 'status', state: 'thinking', turn });
     this.turnBegan();
-    this.input.push(userMsg(text));
+    this.input.push(userMsg(text, opts.images));
     return turn;
   }
 
@@ -423,7 +438,7 @@ export class SessionManager {
     ].join('\n');
   }
 
-  sendPointed(text: string): number {
+  sendPointed(text: string, images: Pasted[] = []): number {
     // The two moments a personal beat is allowed are the boot greeting and the
     // first turn after a LONG GAP — he is arriving, not returning mid-task. Any
     // other turn is work in progress, and interrupting that to ask how his week
@@ -443,11 +458,19 @@ export class SessionManager {
     if (preamble) forModel = `${preamble}\n${forModel}`;
     const arrived = this.arrivalsPreamble();
     if (arrived) forModel = `${arrived}\n${forModel}`;
+    // The picture rides as a block; the PATH rides as words, because a block is
+    // something she can look at and a path is something she can hand on — a
+    // worker never sees her context, but it can Read a file.
+    if (images.length) {
+      const where = images.map((i) => i.abs).join(', ');
+      forModel = `${forModel}\n\n[harness: the attached image${images.length === 1 ? ' is' : 's are'} saved at ${where} — pass the path on if a worker needs to see it]`.trimStart();
+    }
     return this.send(forModel, {
       // Falls back to the pointing line only when he genuinely said nothing —
       // which a beat glued onto an empty string used to make impossible.
-      display: text || `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})`,
+      display: text || (refs.length ? `(pointing at ${refs.map((r) => `"${r.spoken}"`).join(', ')})` : ''),
       refs,
+      images,
     });
   }
 

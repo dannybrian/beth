@@ -37,6 +37,7 @@ import { EarHost } from './earHost.ts';
 import { ScribeEngine } from './ear/scribeEngine.ts';
 import { resolveImage, resolveMarkdown } from './showImage.ts';
 import { listPersonas } from './personas.ts';
+import { savePasted, resolvePasted, type Pasted } from './pasted.ts';
 import type { VoiceRoom } from './voiceRoom.ts';
 import type { CreditMeter } from './creditMeter.ts';
 
@@ -87,6 +88,8 @@ export function createServer(deps: {
   credits: CreditMeter;
 }) {
   const { cfg, bus, events, pending, gate, session, work } = deps;
+  /** Images sent with a turn — per repo, beside the rest of its state (pasted.ts). */
+  const pastedDir = path.join(cfg.stateDir, 'pasted');
 
 
   /**
@@ -212,6 +215,10 @@ export function createServer(deps: {
         // button that fails on the first click, which is worse than the
         // browser path it would have had.
         ear: cfg.ear === 'scribe' && cfg.elevenLabsApiKey ? 'scribe' : 'browser',
+        // That /api/turn takes pictures. A page reloaded against a harness
+        // that predates it must not offer them: the old server would drop
+        // the picture and send the words, answering about nothing shown.
+        images: true,
         streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
@@ -313,10 +320,20 @@ export function createServer(deps: {
             // The page sends its chips with the turn as well as mirroring them,
             // so a typed turn cannot race its own /api/point.
             if (Array.isArray(body.refs)) work.point(body.refs as WorkRef[], Number(body.seq) || undefined);
+            // Every image is proved before any is kept or sent: one bad picture
+            // refuses the whole turn, because sending the rest would answer a
+            // question about something she was never shown.
+            const images: Pasted[] = [];
+            for (const data of Array.isArray(body.images) ? body.images : []) {
+              const r = savePasted(pastedDir, String(data));
+              if (!r.ok) return json(400, { error: r.reason });
+              images.push(r.image);
+            }
             // A turn may be nothing BUT a pointing gesture — clicking a plan and
-            // hitting send is a legitimate "tell me about this".
-            if (!text && !work.pointed().length) return json(400, { error: 'empty turn' });
-            session.sendPointed(text);
+            // hitting send is a legitimate "tell me about this". A picture alone
+            // is the same gesture.
+            if (!text && !work.pointed().length && !images.length) return json(400, { error: 'empty turn' });
+            session.sendPointed(text, images);
             return json(200, { ok: true });
           }
           case '/api/handoff': {
@@ -764,6 +781,19 @@ export function createServer(deps: {
           // show what the repo holds now, not what it held this morning.
           'cache-control': 'no-store',
         });
+        const file = fs.createReadStream(img.abs);
+        file.on('error', () => res.destroy());
+        req.on('close', () => file.destroy());
+        return void file.pipe(res);
+      }
+      if (url.pathname === '/api/pasted') {
+        // A picture he sent, for the transcript. Answers only an id pasted.ts
+        // could have minted — the shape is the allowlist. No SVG ever lands
+        // here (the API takes none), so no sandbox header is needed; nosniff
+        // still is. Cacheable: an id is never reused.
+        const img = resolvePasted(pastedDir, url.searchParams.get('id') ?? '');
+        if (!img.ok) return json(404, { error: img.reason });
+        res.writeHead(200, { 'content-type': img.mime, 'x-content-type-options': 'nosniff', 'cache-control': 'private, max-age=86400' });
         const file = fs.createReadStream(img.abs);
         file.on('error', () => res.destroy());
         req.on('close', () => file.destroy());
