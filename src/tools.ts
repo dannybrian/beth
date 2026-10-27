@@ -20,6 +20,7 @@ import { detectLinks } from './links.ts';
 import { resolveImage } from './showImage.ts';
 import type { Workbench } from './workbench.ts';
 import type { Suggestion } from './suggestion.ts';
+import type { AppRunner } from './appRunner.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -66,6 +67,8 @@ export function createHarnessTools(deps: {
   bench: Workbench;
   /** The reply she expects, held until her turn ends. See suggestion.ts. */
   suggestion: Suggestion;
+  /** The project's app — the run button's other hand. Absent, the tool is not registered. */
+  run?: AppRunner;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -188,6 +191,39 @@ export function createHarnessTools(deps: {
         text: result.state.label ? `bench → ${result.state.url} (${result.state.label})` : `bench → ${result.state.url}`,
       });
       return ok({ pinned: true, url: result.state.url });
+    },
+    { alwaysLoad: true }
+  );
+
+  /**
+   * The run button, as something she can do when asked out loud. "Restart the
+   * app now the fix is in" is said, not clicked. It grants nothing her shell
+   * did not — what it adds is the button's proof: a listener is signalled only
+   * when its process group is provably this repo's (appRunner.ts), instead of a
+   * `pkill` she improvises.
+   */
+  const runApp = tool(
+    'run',
+    "Start, stop or restart the project's app (its dev server) — the same thing as the run button at the top of Danny's page — or read its status or the tail of its output. Its url goes on the workbench by itself while it is up; do not pin it as well. Use it when he asks (\"restart the app\", \"is it running?\", \"why did it die?\"), and `restart` after a change the running app will not pick up by itself. A stop is refused when the port belongs to something that is not this project; say who holds it rather than killing it another way. Nothing is spoken — say what happened yourself.",
+    {
+      action: z.enum(['start', 'stop', 'restart', 'status', 'log']).describe('`log` returns the tail of what a start made here printed.'),
+    },
+    async (raw) => {
+      const { action } = repaired('run', raw);
+      const r = deps.run!;
+      if (action === 'status') return ok(await r.refresh());
+      if (action === 'log') {
+        const log = r.log(16 * 1024);
+        return ok(log ? { since: new Date(log.at).toISOString(), tail: log.text } : { tail: null, why: 'no start has been made from this harness' });
+      }
+      const result = action === 'start' ? await r.startApp() : action === 'stop' ? await r.stopApp() : await r.restartApp();
+      deps.events.append({
+        source: 'harness',
+        session: deps.sessionId(),
+        kind: 'run',
+        text: result.ok ? `app ${action} → ${result.state.phase} (by her)` : `app ${action} refused — ${result.reason}`,
+      });
+      return ok(result);
     },
     { alwaysLoad: true }
   );
@@ -507,6 +543,7 @@ export function createHarnessTools(deps: {
       pending,
       plans,
       speech,
+      ...(deps.run ? [runApp] : []),
       ...(deps.personal ? [remember, recall] : []),
     ],
   });

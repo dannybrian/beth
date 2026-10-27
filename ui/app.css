@@ -1362,6 +1362,23 @@ button.tlight.running .ticon { animation: pulse 1.4s ease-in-out infinite; }
 button.tlight.red .ticon { fill: var(--err); }
 button.tlight.red { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
 
+/* The run button: an action plus a ▾ for its panel, joined into one pill.
+   `color` drives the ring and the glyph together (currentColor / fill). */
+.runbox { display: flex; }
+.runbox[hidden] { display: none; }
+.runbox #run-light { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.runbox #run-more { border-left: none; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 2px 5px; font-size: 9px; }
+#run-light .ticon { width: 13px; height: 13px; fill: currentColor; }
+#run-light .i-stop { display: none; }
+#run-light.up .i-stop { display: block; }
+#run-light.up .i-start { display: none; }
+#run-light.green { color: var(--ok); }
+#run-light.yellow { color: var(--warn); }
+#run-light.taken { color: var(--warn); }
+#run-port:empty { display: none; }
+.rurl { display: flex; gap: 8px; align-items: baseline; margin: 4px 0 8px; }
+.rurl a { color: var(--accent); font-family: var(--mono); font-size: 12px; word-break: break-all; }
+
 .stats.wide { width: 400px; }
 .tcmd {
   font-family: var(--mono);

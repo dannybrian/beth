@@ -1,0 +1,14 @@
+
+> dev
+> npm --prefix app run dev
+
+
+> dev
+> node $(node server/watch-paths.ts) --watch-preserve-output server/dev.ts
+
+elvidrio editor:   http://127.0.0.1:5178/
+inbox:             ON — programs on this Mac may drop into a workspace inbox (ELVIDRIO_INBOX=on)
+documents:         /Users/dbrian/Sources/pdocs/elvidrio
+intent backend:    replicate  (deepseek-ai/deepseek-v3.1)
+offered models:    6 of 7 servable here  (GET /api/models)
+  not servable:    ollama:gpt-oss:20b — Ollama is running at http://127.0.0.1:11434 and does not have gpt-oss:20b — `ollama pull gpt-oss:20b` fetches it. Nothing was sent.

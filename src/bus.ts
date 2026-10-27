@@ -7,6 +7,7 @@ import type { TextLink } from './links.ts';
 import type { TextSpan } from './markdown.ts';
 import type { TestState } from './testRunner.ts';
 import type { BuildState } from './buildRunner.ts';
+import type { RunState } from './appRunner.ts';
 
 export type UsageSnapshot = {
   contextPct: number;
@@ -84,6 +85,8 @@ export type UIMessage =
       ear: 'browser' | 'scribe';
       /** /api/turn accepts `images` — absent on a server that predates them. */
       images?: boolean;
+      /** There is a run button (appRunner.ts) — absent on a server that predates it. */
+      run?: boolean;
       // Which connection this is, so a page can claim the mouth when it is the
       // one you are looking at. See the speaker election in server.ts.
       streamId: number;
@@ -155,7 +158,7 @@ export type UIMessage =
    * because the server sends the live bench on every connect, the same way it
    * sends `pending` and `tests`.
    */
-  | { type: 'workbench'; url: string | null; label?: string }
+  | { type: 'workbench'; url: string | null; label?: string; source?: 'pin' | 'run' }
   /**
    * The reply she thinks he is about to type (suggestion.ts): ghost text in
    * the composer, accepted with Tab. Null clears it. Current state like the
@@ -195,6 +198,9 @@ export type UIMessage =
   // The other light. Published only when a build starts, ends, or goes stale —
   // nothing here runs on a schedule, so there is nothing else to report.
   | { type: 'build'; state: BuildState }
+  // The run button: is the project's app up, and where. Published on change only
+  // — the poll behind it (appRunner.ts) runs every few seconds and is quiet.
+  | { type: 'run'; state: RunState }
   | { type: 'event'; event: HarnessEvent };
 
 export class ConversationBus {
@@ -232,6 +238,7 @@ export class ConversationBus {
       m.type !== 'speak' &&
       m.type !== 'tests' &&
       m.type !== 'build' &&
+      m.type !== 'run' &&
       m.type !== 'workbench' &&
       m.type !== 'suggestion' &&
       m.type !== 'room' &&

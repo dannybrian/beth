@@ -219,6 +219,18 @@ export type HarnessConfig = {
    * a command that never exits is the one thing that does not belong here.
    */
   buildCmd?: string;
+  /**
+   * The project's app, for the run button (appRunner.ts). Unlike buildCmd this
+   * is EXPECTED not to exit — a dev server is exactly what belongs here.
+   */
+  runCmd?: string;
+  /**
+   * Where that app answers. Its port is how the harness knows whether the app
+   * is up, so a declared one keeps the button true across a restart and for an
+   * app started from a terminal. Without it, the url is read off the app's own
+   * output for that run only.
+   */
+  runUrl?: string;
   /** How still the tree must be first — a suite run against a half-finished edit
    * is a red light that means nothing. */
   testSettleMs: number;
@@ -359,6 +371,8 @@ export function loadConfig(): HarnessConfig {
     personal: conf('HARNESS_PERSONAL') !== 'off',
     testCmd: conf('HARNESS_TEST_CMD'),
     buildCmd: conf('HARNESS_BUILD_CMD'),
+    runCmd: conf('HARNESS_RUN_CMD'),
+    runUrl: conf('HARNESS_RUN_URL'),
     buildTimeoutMs: Number(conf('HARNESS_BUILD_TIMEOUT_MS') ?? 600_000),
     testSettleMs: Number(conf('HARNESS_TEST_SETTLE_MS') ?? 5000),
     testMinIntervalMs: Number(conf('HARNESS_TEST_MIN_INTERVAL_MS') ?? 120_000),

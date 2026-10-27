@@ -10,6 +10,7 @@ import { SessionManager } from './session.ts';
 import { SpeakOut } from './speakOut.ts';
 import { TestMonitor } from './testRunner.ts';
 import { BuildRunner } from './buildRunner.ts';
+import { AppRunner } from './appRunner.ts';
 import { treeFingerprint } from './runCommand.ts';
 import { Settings } from './settings.ts';
 import { createServer } from './server.ts';
@@ -113,6 +114,10 @@ const speakOut = new SpeakOut(cfg, bus, room);
 // model he chose last time has to be in hand when the query is constructed.
 const settings = new Settings(cfg);
 
+// The project's app. Built before the session because it is hers to start and
+// stop too, and it puts its url on the same bench her `workbench` tool does.
+const run = new AppRunner(cfg, bus, { bench, settings });
+
 let session: SessionManager;
 const gate = new AskGate(bus, events, () => session.sessionId(), () => session.directorName());
 session = new SessionManager(
@@ -130,7 +135,8 @@ session = new SessionManager(
   bench,
   suggestion,
   inbox,
-  settings
+  settings,
+  run
 );
 // A persona chosen on a previous run speaks in her own voice from the first line
 // of the greeting, not from the first switch.
@@ -253,7 +259,7 @@ const build = new BuildRunner(cfg, bus, { settings, fingerprint: () => treeFinge
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
 const server = createServer({
-  cfg, bus, events, pending, gate, session, speakOut, tests, build, settings, work, mined, pins, inbox, bench, suggestion, room, credits,
+  cfg, bus, events, pending, gate, session, speakOut, tests, build, run, settings, work, mined, pins, inbox, bench, suggestion, room, credits,
   // /restart: the same clean shutdown as Ctrl-C, with the exit code that tells
   // the wrapper to start us again. See restart.ts.
   restart: () => shutdown(RESTART_EXIT),
@@ -291,6 +297,7 @@ server.listen(cfg.port, cfg.bind, () => {
   console.log(`  session: ${resumed ? 'resumed' : 'new'}`);
   tests.start();
   build.start();
+  run.start();
   console.log(`  voice: ${speakOut.configured ? `${cfg.ttsModel}, browser ear — nothing billed idle` : `text-only — ${speakOut.unavailableReason}`}`);
   // No silent caps: say how many terms are in play and how many fell off the end,
   // because a list that is quietly empty looks exactly like biasing that does not
@@ -313,6 +320,9 @@ const shutdown = (code = 0) => {
   work.stop();
   tests.stop();
   build.stop();
+  // Stops WATCHING, not the app: it runs in a session of its own precisely so
+  // a /restart does not take it down, and the next harness finds it on the port.
+  run.close();
   session.stop();
   // Frees a held talking stick on the way out — the other beths should not
   // have to wait out the TTL because this one exited cleanly.

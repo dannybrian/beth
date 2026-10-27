@@ -6,7 +6,7 @@ import { createSpeaker } from '/speaker.js';
 import { createWirePanel } from '/wire.js';
 import { addRereadButtons } from '/reread.js';
 import { tabTitle } from '/title.js';
-import { testFailureText, commandOutputText, sizeLabel } from '/paste.js';
+import { testFailureText, commandOutputText, sizeLabel, fenced, inlineCode } from '/paste.js';
 import { parseBlocks, renderBlocks } from '/md.js';
 import { createBell } from '/bell.js';
 const $ = (id) => document.getElementById(id);
@@ -677,7 +677,7 @@ function renderBench(m) {
   const short = m.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const a = $('bench-link');
   a.href = m.url;
-  a.title = `${m.url} — opens in a new tab`;
+  a.title = `${m.url} — opens in a new tab${m.source === 'run' ? '\nPut here by the run button; it comes down when the app stops' : ''}`;
   const label = $('bench-label');
   label.textContent = m.label ?? '';
   label.hidden = !m.label;
@@ -1284,6 +1284,7 @@ const handlers = {
   hello: (m) => {
     repoPath = m.repo;
     imagesOk = Boolean(m.images);
+    $('run-box').hidden = !m.run;
     $('attach').hidden = !imagesOk;
     setPersonas(m.personas ?? [], m.persona ?? '');
     projectName = m.repo.split('/').pop();
@@ -1394,6 +1395,7 @@ const handlers = {
   approval: renderApproval,
   approval_resolved: (m) => resolveApprovalCard(m.id, m.allowed, m.always),
   build: (m) => renderBuild(m.state),
+  run: (m) => renderRun(m.state),
   usage: (m) => {
     renderUsage(m.usage);
     ctxPct = m.usage.contextPct;
@@ -1899,9 +1901,16 @@ let gearSettings = {};
 function renderGear() {
   const box = $('gear-commands');
   box.replaceChildren();
-  for (const [key, label, state, note] of [
-    ['testCmd', 'test', testState, 'What answers “is the tree green”.'],
-    ['buildCmd', 'build', buildState, 'Must terminate — a dev server here sticks the light on yellow.'],
+  // `inherited` is what the box falls back to when empty, and where that came
+  // from — the one rule that makes a written layer over read-only ones liveable.
+  const cmdOf = (state) => (state?.command ? { text: state.command.join(' '), why: state.why } : null);
+  const runUrlOf = () =>
+    runState?.url && runState.urlWhy !== 'set here' ? { text: runState.url, why: runState.urlWhy } : null;
+  for (const [key, label, inherited, note] of [
+    ['testCmd', 'test', cmdOf(testState), 'What answers “is the tree green”.'],
+    ['buildCmd', 'build', cmdOf(buildState), 'Must terminate — a dev server here sticks the light on yellow.'],
+    ['runCmd', 'run', cmdOf(runState), 'The app — a dev server belongs here. It keeps running after a harness restart.'],
+    ['runUrl', 'run url', runUrlOf(), 'Where the app answers. Its port is how the button knows it is up, even after a restart or when started elsewhere.'],
   ]) {
     const row = el('div', 'setrow');
     row.append(el('label', null, label));
@@ -1910,7 +1919,7 @@ function renderGear() {
     input.value = gearSettings[key] ?? '';
     // The placeholder is the INHERITED answer, so an empty box shows what it is
     // falling back to rather than looking like nothing is configured.
-    input.placeholder = state?.command?.join(' ') ?? 'nothing detected';
+    input.placeholder = inherited?.text ?? (key === 'runUrl' ? 'read from the app’s output' : 'nothing detected');
     input.title = note;
     const commit = () => {
       if ((gearSettings[key] ?? '') === input.value.trim()) return;
@@ -1929,10 +1938,14 @@ function renderGear() {
     input.onblur = commit;
     row.append(input);
     const why = el('div', 'setwhy');
-    if (!state?.command) why.textContent = 'nothing detected here';
+    const set = gearSettings[key];
+    if (set) {
+      why.append(el('b', null, set));
+      why.append(document.createTextNode(' — set here'));
+    } else if (!inherited) why.textContent = key === 'runUrl' ? 'none declared — learned per run, forgotten on restart' : 'nothing detected here';
     else {
-      why.append(el('b', null, state.command.join(' ')));
-      why.append(document.createTextNode(` — ${state.why}`));
+      why.append(el('b', null, inherited.text));
+      why.append(document.createTextNode(` — ${inherited.why}`));
     }
     row.append(why);
     box.append(row);
@@ -2071,6 +2084,162 @@ function toggleBuildPanel(open = !buildPanelOpen) {
 function buildNow() {
   if (buildState?.command && !buildState.running) post('/api/build/run');
   toggleBuildPanel(true);
+}
+
+// --- the run button ------------------------------------------------------------
+//
+// The project's app (appRunner.ts, docs/run.md). The main button is the ACTION —
+// ▶ starts, ■ stops — and ▾ opens the panel. The server owns every fact here and
+// reads them off the port, so this page only paints what arrives and posts
+// presses; it never decides the app is up because a press came back 200.
+
+let runState = null;
+let runPanelOpen = false;
+let runLog = null;
+let runLogTimer = null;
+
+const RUN_LIGHT = { stopped: 'grey', starting: 'yellow running', running: 'green', stopping: 'yellow running', crashed: 'red', taken: 'taken' };
+
+function renderRun(state) {
+  runState = state;
+  const btn = $('run-light');
+  const up = ['starting', 'running', 'stopping'].includes(state.phase);
+  btn.className = `tlight ${RUN_LIGHT[state.phase] ?? 'grey'}${up ? ' up' : ''}`;
+  btn.disabled = state.phase === 'stopping';
+  // The port in the strip, so the address is still on screen when a pin holds
+  // the bench — the run never displaces one (workbench.ts).
+  const port = state.phase === 'running' && state.url ? new URL(state.url).port : '';
+  $('run-port').textContent = port ? `:${port}` : '';
+  const cmd = state.command?.join(' ');
+  btn.title = !state.command
+    ? 'Nothing to run — set HARNESS_RUN_CMD, or the run command in the gear'
+    : {
+        stopped: `Start the app — ${cmd}`,
+        starting: `Starting… — click to stop${state.note ? `\n${state.note}` : ''}`,
+        running: `Running${state.url ? ` at ${state.url}` : ''} — click to stop${state.owned ? '' : '\n(started outside this harness)'}${state.note ? `\n${state.note}` : ''}`,
+        stopping: 'Stopping…',
+        crashed: `Stopped by itself — ${state.note ?? 'exited'}. Click to start again; ▾ for its output.`,
+        taken: `${state.note} — ▾ for details`,
+      }[state.phase];
+  if (runPanelOpen) renderRunPanel();
+  if (gearOpen) renderGear();
+}
+
+async function runAct(act) {
+  const res = await post(`/api/run/${act}`);
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  entry('activity', (n) => (n.textContent = `⏵ app not ${act === 'stop' ? 'stopped' : act === 'start' ? 'started' : 'restarted'} — ${body.reason ?? res.status}`));
+}
+
+function runPress() {
+  const s = runState;
+  if (!s?.command) return toggleRunPanel(true);
+  if (s.phase === 'stopped' || s.phase === 'crashed') return void runAct('start');
+  if (s.phase === 'running' || s.phase === 'starting') return void runAct('stop');
+  // `taken` has nothing a press could safely do; the panel says who holds it.
+  toggleRunPanel(true);
+}
+
+const runPhaseText = (s) =>
+  ({ stopped: 'stopped', starting: 'starting', running: 'running', stopping: 'stopping', crashed: 'stopped by itself', taken: 'port taken' })[s.phase];
+
+/** Her copy of what the app printed, headed by how it stands — the crash is the usual reason. */
+function runOutputText(s, log) {
+  const how = s.phase === 'crashed' ? `crashed, ${s.note}` : runPhaseText(s);
+  return `App output — ${inlineCode(s.command.join(' '))} — ${how}\n\n${fenced(log.text)}`;
+}
+
+function renderRunPanel() {
+  const box = $('run-panel');
+  // The log re-renders every two seconds. Follow the tail only if he was AT the
+  // tail — scrolled up to read a stack trace, the pane must not yank him away.
+  const old = box.querySelector('.tlog');
+  const follow = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 4;
+  const keep = old?.scrollTop ?? 0;
+  box.replaceChildren();
+  const s = runState;
+  if (!s) return;
+  box.append(el('h3', null, 'Run'));
+  if (!s.command) {
+    box.append(
+      el('div', 'snote', 'Nothing detected here. Set HARNESS_RUN_CMD in the repo’s .env, or the run command in the gear — a dev server is exactly what belongs here.')
+    );
+    return;
+  }
+  const cmd = el('div', 'tcmd', s.command.join(' '));
+  cmd.title = `from ${s.why}`;
+  box.append(cmd);
+
+  box.append(el('div', 'snote', [runPhaseText(s), s.note].filter(Boolean).join(' — ')));
+  if (s.url) {
+    const row = el('div', 'rurl');
+    const a = el('a', null, s.url);
+    a.href = s.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    row.append(a);
+    row.append(el('span', 'snote', s.urlWhy ?? ''));
+    // A url learned from the output is gone after a restart, and then the
+    // button cannot see the app at all. One click makes it a declaration.
+    if (/printed/.test(s.urlWhy ?? '')) {
+      const keep = el('button', 'topt ghost', 'Keep');
+      keep.title = 'Remember this url (a gear setting) so the button still sees the app after a restart';
+      keep.onclick = () => void post('/api/settings', { runUrl: s.url }).then(loadGearSettings);
+      row.append(keep);
+    }
+    box.append(row);
+  }
+
+  // Only what applies, with the filled button the likely press: Start while it
+  // is down, Restart while it is up (the act after a fix). A disabled primary
+  // read as the thing to click.
+  const up = s.phase === 'running' || s.phase === 'starting';
+  if (up) {
+    const restart = el('button', 'topt', 'Restart');
+    restart.onclick = () => void runAct('restart');
+    const stop = el('button', 'topt ghost', 'Stop');
+    stop.onclick = () => void runAct('stop');
+    box.append(restart, stop);
+  } else {
+    const start = el('button', 'topt', s.phase === 'stopping' ? 'Stopping…' : 'Start');
+    start.disabled = s.phase === 'stopping' || s.phase === 'taken';
+    start.onclick = () => void runAct('start');
+    box.append(start);
+  }
+
+  const log = runLog;
+  if (!log?.text?.trim()) {
+    if (s.phase === 'running' && !s.owned) box.append(el('div', 'snote', 'started outside this harness — no output here'));
+    return;
+  }
+  const head = el('div', 'thead');
+  head.append(el('h3', null, s.owned ? 'Output' : `Output from the start at ${new Date(log.at).toLocaleTimeString()}`));
+  head.append(pasteButton(() => runOutputText(s, log), 'Paste the app’s output into the composer', () => toggleRunPanel(false)));
+  box.append(head);
+  const pre = el('pre', 'tlog', log.text.slice(-8000));
+  box.append(pre);
+  pre.scrollTop = follow ? pre.scrollHeight : keep;
+}
+
+/** The log is PULLED while the panel is open — an app's output is a stream, not bus traffic. */
+async function loadRunLog() {
+  runLog = await fetch('/api/run/log')
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => runLog);
+  if (runPanelOpen) renderRunPanel();
+}
+
+function toggleRunPanel(open = !runPanelOpen) {
+  runPanelOpen = open;
+  $('run-panel').hidden = !runPanelOpen;
+  $('run-more').classList.toggle('open', runPanelOpen);
+  clearInterval(runLogTimer);
+  runLogTimer = null;
+  if (!runPanelOpen) return;
+  renderRunPanel();
+  void loadRunLog();
+  runLogTimer = setInterval(loadRunLog, 2000);
 }
 
 // --- the numbers, behind the meter ------------------------------------------
@@ -2937,6 +3106,8 @@ $('ctx-meter').onclick = toggleStats;
 $('usage-meters').onclick = toggleStats;
 $('test-light').onclick = toggleTestPanel;
 $('build-light').onclick = () => toggleBuildPanel();
+$('run-light').onclick = () => runPress();
+$('run-more').onclick = () => toggleRunPanel();
 $('gear').onclick = () => toggleGear();
 // The strip's terminal. The click is answered in the transcript by the
 // server's own activity line, so success needs nothing here; a refusal — an
@@ -2974,6 +3145,7 @@ document.addEventListener('click', (e) => {
   }
   if (testPanelOpen && !e.target.closest('#test-panel') && !e.target.closest('#test-light')) toggleTestPanel();
   if (buildPanelOpen && !e.target.closest('#build-panel') && !e.target.closest('#build-light')) toggleBuildPanel(false);
+  if (runPanelOpen && !e.target.closest('#run-panel') && !e.target.closest('#run-box')) toggleRunPanel(false);
   if (gearOpen && !e.target.closest('#gear-panel') && !e.target.closest('#gear')) toggleGear(false);
 });
 document.addEventListener('keydown', (e) => {
@@ -2988,10 +3160,11 @@ document.addEventListener('keydown', (e) => {
     if (planOverlayOpen) closePlanPreview();
     return;
   }
-  if (statsOpen || testPanelOpen || buildPanelOpen || gearOpen) {
+  if (statsOpen || testPanelOpen || buildPanelOpen || runPanelOpen || gearOpen) {
     if (statsOpen) toggleStats();
     if (testPanelOpen) toggleTestPanel();
     if (buildPanelOpen) toggleBuildPanel(false);
+    if (runPanelOpen) toggleRunPanel(false);
     if (gearOpen) toggleGear(false);
     return;
   }

@@ -25,6 +25,7 @@ import type { InboxAcks } from './inbox.ts';
 import type { Settings } from './settings.ts';
 import { WireTap } from './wireTap.ts';
 import type { Workbench } from './workbench.ts';
+import type { AppRunner } from './appRunner.ts';
 import { bootSuggestion, type Suggestion } from './suggestion.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
@@ -180,6 +181,7 @@ export class SessionManager {
   private suggestion: Suggestion;
   private inbox: InboxAcks;
   private settings?: Settings;
+  private run?: AppRunner;
 
   constructor(
     cfg: HarnessConfig,
@@ -192,10 +194,12 @@ export class SessionManager {
     bench: Workbench,
     suggestion: Suggestion,
     inbox: InboxAcks,
-    settings?: Settings
+    settings?: Settings,
+    run?: AppRunner
   ) {
     this.inbox = inbox;
     this.settings = settings;
+    this.run = run;
     // The model he picked last time, for this repo. Seeded HERE rather than
     // applied after boot, so the first query is built on it and nothing has to
     // switch a live session to a model it should have started on.
@@ -344,6 +348,7 @@ export class SessionManager {
             speech: this.speech,
             bench: this.bench,
             suggestion: this.suggestion,
+            run: this.run,
           }),
         },
         canUseTool: this.gate.canUseTool,

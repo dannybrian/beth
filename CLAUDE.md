@@ -147,7 +147,14 @@ room half of `speakOut` follow: a stick nobody can break is a beth who went quie
 reason, a wrong steal cuts a live sentence, and a page ending a line without reporting it
 (`speaker`'s report tests) holds every other harness mute with no symptom here.
 `creditMeter` too: cycle math that drifts a day reads as a refund, and a meter counting
-plan-covered turns bills money never drawn.
+plan-covered turns bills money never drawn. `appRunner` drives REAL process trees like
+`runCommand`: a `node --watch` app stopped by a FRESH runner (the restart case) must
+leave neither the watcher nor its child, a listener whose cwd is outside the repo must
+never be signalled, and the url sniff is checked against the three apps' REAL banners
+in `src/fixtures/run/` — elvidrio names Ollama's url further down and appresent2 a LAN
+one, and first-local-wins is the whole rule. ⚠ The group-stop test was mutation-checked
+and its failure LEFT the watcher running, which is why the tests now kill every group
+they start in an `after` hook.
 
 ⚠️ A test-output fixture you INVENTED is worth very little. The node-`--test` fixture here
 passed green while real output produced three entries for one failure, because real output
@@ -726,6 +733,15 @@ the conversation that produced it. Where things stand:
   the watcher because hand-offs arrive while the Mac was asleep. Read the doc
   for why it is a reader and not an API, and for what is set aside (a broker,
   retraction, a channel back).
+
+- **`run.md`** — BUILT (2026-10-27, `src/appRunner.ts`); only declaring the three
+  repos is left, and that is Danny's `.env`. A run button for the project's app
+  (▶/■/↻), aimed at the sporadically-opened web apps (appresent2, elvidrio, talktree).
+  ⚠ The harness REMEMBERS nothing about a run: the project declares a URL, the port is
+  probed for status, and a listener is signalled only after its cwd is proven inside
+  the repo — so a restart, or an app started from a terminal, reads true. The group is
+  stopped, not the pid (`node --watch` keeps the parent). Tulito and a script-verb
+  contract are set aside with their reopening signal.
 
 Already done from the same list, so do not re-plan them: the spoken settle window is
 2500 ms, the speech levels and last-paragraph excerpt exist (`spoken.ts`), and the

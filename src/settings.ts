@@ -28,6 +28,10 @@ export type StoredSettings = {
   testCmd?: string;
   /** Overrides HARNESS_BUILD_CMD and detection. */
   buildCmd?: string;
+  /** Overrides HARNESS_RUN_CMD and detection. */
+  runCmd?: string;
+  /** Overrides HARNESS_RUN_URL and what the app printed. */
+  runUrl?: string;
   /**
    * The strip's model choice, so it is still the model tomorrow. Same rule as
    * the commands: it wins over HARNESS_MODEL, because a select that reverted on
@@ -36,7 +40,7 @@ export type StoredSettings = {
   model?: string;
 };
 
-const KEYS: (keyof StoredSettings)[] = ['testCmd', 'buildCmd', 'model'];
+const KEYS: (keyof StoredSettings)[] = ['testCmd', 'buildCmd', 'runCmd', 'runUrl', 'model'];
 
 export class Settings {
   private file: string;

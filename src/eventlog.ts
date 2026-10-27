@@ -19,7 +19,9 @@ export type EventKind =
   /** A hand-off arrived in the inbox (inbox.ts) — the summons. */
   | 'handoff'
   /** ...and was taken or dismissed here. */
-  | 'inbox_closed';
+  | 'inbox_closed'
+  /** The project's app was started, stopped or restarted (appRunner.ts). */
+  | 'run';
 
 export type HarnessEvent = {
   ts: string;

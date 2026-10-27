@@ -65,8 +65,7 @@ export function detectBuild(
     try {
       const pkg = JSON.parse(read('package.json'));
       if (pkg?.scripts?.build) {
-        const declared = /^(pnpm|yarn|npm)/.exec(String(pkg.packageManager ?? ''))?.[1];
-        const pm = declared ?? (has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : 'npm');
+        const pm = packageManager(repo, pkg);
         // `run` explicitly: `pnpm build` happens to work and `npm build` is not a
         // command at all, so the form that is right everywhere is the one to use.
         return { command: [pm, 'run', 'build'], why: `package.json scripts.build (${pm})` };
@@ -92,6 +91,15 @@ export function detectBuild(
     return { command: ['make', 'build'], why: 'a build: target in the Makefile' };
   }
   return null;
+}
+
+/** Which package manager a repo uses: what it declares, else what its lockfile says. */
+export function packageManager(repo: string, pkg: { packageManager?: unknown }): 'pnpm' | 'yarn' | 'npm' {
+  const declared = /^(pnpm|yarn|npm)/.exec(String(pkg.packageManager ?? ''))?.[1] as 'pnpm' | 'yarn' | 'npm' | undefined;
+  if (declared) return declared;
+  if (fs.existsSync(path.join(repo, 'pnpm-lock.yaml'))) return 'pnpm';
+  if (fs.existsSync(path.join(repo, 'yarn.lock'))) return 'yarn';
+  return 'npm';
 }
 
 export class BuildRunner {

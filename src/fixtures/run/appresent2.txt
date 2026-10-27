@@ -1,0 +1,20 @@
+
+> appresent2@0.0.0 dev
+> node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/server/index.ts --dev
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+`server.hmr.protocol/host/port/path/clientPort/timeout/server` is deprecated. Use `server.ws.*` instead. Note that this option may be set by a plugin. Set VITE_DEPRECATION_TRACE=1 to see where it is called.
+1:02:14 PM [vite] (client) Re-optimizing dependencies because vite config has changed
+
+  appresent2 (dev)
+
+    display     http://localhost:5180/
+    controller  http://192.168.0.249:5180/controller   <- open this on the iPad
+    websocket   ws://192.168.0.249:5180/ws
+    build       7411dd0* 10:58:18   (also at /__build, with 55 server modules hashed)
+    deck        none (pass --deck <path>)
+    settings    /Users/dbrian/.appresent2/settings.json - engaged: 1 mode (visit)
+                visit target
+    visit       target   <- a navigation marks ONLY the step it lands on;

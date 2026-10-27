@@ -327,6 +327,12 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   gear; the gear itself turns amber
   when permissions are anything but `auto`, because that is the setting which
   decides how often a spoken conversation can be stopped dead.
+- **The run button** starts and stops the project's app — ▶, ■, and a ▾ for its
+  url, Restart and its output. The app runs in a session of its own, so it
+  outlives a harness restart, and whether it is up is read off its declared
+  port rather than remembered: an app started from a terminal shows as running
+  too. A stop signals the app's whole process group, and only once every process
+  in it is proven to be working inside the repo. See `docs/run.md`.
 - **Commands are detected, never invented**: the test and build commands come
   from what the project already declares, and a repo the detectors do not
   recognise gets nothing rather than a guess. Name one in the gear (it wins over
@@ -395,6 +401,8 @@ set lives there (the test and build commands, today); secrets stay in the
 | `HARNESS_CREDITS_RESET_DAY` | `1` | Day of month the billing cycle turns over |
 | `HARNESS_TEST_CMD` | detected | Test command override — ⚠ the gear panel wins over it |
 | `HARNESS_BUILD_CMD` | detected | Build command override, same gear caveat. ⚠ Must terminate — not a dev server |
+| `HARNESS_RUN_CMD` | detected (`dev`, then `start`) | The app the run button starts — a dev server belongs here. Gear wins |
+| `HARNESS_RUN_URL` | read from its output | Where the app answers; its port is how the button knows it is up, across restarts. Gear wins |
 | `HARNESS_PERSONAL` | on | `off` disables remembering the person entirely |
 
 Finer knobs (timeouts, settle intervals, the bind address) are enumerated in

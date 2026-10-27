@@ -78,7 +78,41 @@ test('a tampered or unreadable state file starts empty rather than trusted', () 
 
 test('the message is one shape, occupied or empty, so the page has one handler', () => {
   const b = bench();
-  assert.deepEqual(b.message(), { type: 'workbench', url: null, label: undefined });
+  assert.deepEqual(b.message(), { type: 'workbench', url: null, label: undefined, source: undefined });
   b.set('http://localhost:3000', 'game');
-  assert.deepEqual(b.message(), { type: 'workbench', url: 'http://localhost:3000/', label: 'game' });
+  assert.deepEqual(b.message(), { type: 'workbench', url: 'http://localhost:3000/', label: 'game', source: 'pin' });
+});
+
+// The run button shares the one slot, and the two rules below are what stop
+// it trampling his attention: a run never displaces a pin, and a stop only
+// takes down what a run put up.
+test('a run takes an empty bench, never a pin', () => {
+  const b = bench();
+  assert.equal(b.offerRun('http://127.0.0.1:5178/'), true);
+  assert.equal(b.current()!.source, 'run');
+  b.set('https://github.com/x/y/pull/4', 'the PR');
+  assert.equal(b.offerRun('http://127.0.0.1:5178/'), false);
+  assert.equal(b.current()!.url, 'https://github.com/x/y/pull/4');
+});
+
+test('a stop clears its own url and leaves a pin alone', () => {
+  const b = bench();
+  b.offerRun('http://127.0.0.1:5178/');
+  assert.equal(b.clearRun(), true);
+  assert.equal(b.current(), null);
+  b.set('http://localhost:3000');
+  assert.equal(b.clearRun(), false);
+  assert.equal(b.current()!.url, 'http://localhost:3000/');
+});
+
+test('a run url replaces an earlier run, and the source survives a restart', () => {
+  const dir = stateDir();
+  const b = bench(dir);
+  b.offerRun('http://127.0.0.1:5178/');
+  assert.equal(b.offerRun('http://127.0.0.1:5180/'), true);
+  assert.equal(b.offerRun('http://127.0.0.1:5180/'), false, 'no change, nothing to publish');
+  assert.equal(bench(dir).current()!.source, 'run');
+  // A file written before runs existed is a pin, so a stop never clears it.
+  fs.writeFileSync(path.join(dir, 'workbench.json'), JSON.stringify({ url: 'http://localhost:1/', setAt: '' }));
+  assert.equal(bench(dir).clearRun(), false);
 });

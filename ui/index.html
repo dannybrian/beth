@@ -146,6 +146,27 @@
              idempotent by definition and a no-op when nothing changed. The panel
              opens with it so you see what happened; while a build is in flight
              the click only opens the panel, so a second press cannot pile on. -->
+        <!-- Run it: the project's app (appRunner.ts). Unlike the two lights
+             beside it the main button is an ACTION — ▶ starts, ■ stops — because
+             "start it, I want to look" is the whole ask and the app is meant to
+             keep going, so there is no result to inspect first. The ▾ opens the
+             panel (url, restart, the log). Circled glyphs, so it never reads as
+             the build's bare triangle next door. Hidden until hello says the
+             harness has one. -->
+        <span id="run-box" class="runbox" hidden>
+          <button id="run-light" class="tlight grey" title="Run the app">
+            <svg class="ticon i-start" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M10 7.8 16.6 12 10 16.2z" />
+            </svg>
+            <svg class="ticon i-stop" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+              <rect x="8.2" y="8.2" width="7.6" height="7.6" rx="1" />
+            </svg>
+            <span id="run-port"></span>
+          </button>
+          <button id="run-more" class="tlight" title="The app — url, restart, output">▾</button>
+        </span>
         <button id="build-light" class="tlight grey" title="Build">
           <svg class="ticon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.2 20.5 12 6 20.8z" /></svg>
         </button>
@@ -168,6 +189,7 @@
 
     <div id="test-panel" class="stats wide" hidden></div>
     <div id="build-panel" class="stats wide" hidden></div>
+    <div id="run-panel" class="stats wide" hidden></div>
 
     <!-- The gear. Two dials that were never worth strip width (you change them
          about once a week) and the two commands the lights run. -->

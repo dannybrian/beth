@@ -30,6 +30,7 @@ import { Pins, workMessage } from './pins.ts';
 import type { InboxAcks } from './inbox.ts';
 import { restartVerdict } from './restart.ts';
 import type { Workbench } from './workbench.ts';
+import type { AppRunner } from './appRunner.ts';
 import type { Suggestion } from './suggestion.ts';
 import { setPlanName } from './planName.ts';
 import { originAllowed } from './origin.ts';
@@ -81,6 +82,8 @@ export function createServer(deps: {
   /** Exit for a relaunch by the wrapper. See restart.ts. */
   restart: () => void;
   bench: Workbench;
+  /** The project's app — the run button (appRunner.ts). */
+  run: AppRunner;
   suggestion: Suggestion;
   /** The machine's shared mute/volume/talking-stick. See voiceRoom.ts. */
   room: VoiceRoom;
@@ -219,6 +222,9 @@ export function createServer(deps: {
         // that predates it must not offer them: the old server would drop
         // the picture and send the words, answering about nothing shown.
         images: true,
+        // That there is a run button to draw. Absent on an older harness, where
+        // a page drawing one would get a 404 for every press.
+        run: true,
         streamId,
       });
       send({ type: 'voice', state: 'idle', status: deps.speakOut.status() });
@@ -232,6 +238,7 @@ export function createServer(deps: {
       send({ type: 'pending', decisions: pending.openDecisions(), workers: pending.runningWorkers() });
       send({ type: 'tests', state: deps.tests.state() });
       send({ type: 'build', state: deps.build.state() });
+      send({ type: 'run', state: deps.run.state() });
       // Current state, not transcript — same species as `pending` and `tests`,
       // so a reconnecting page gets the bench without it riding the replay.
       send(deps.bench.message());
@@ -469,7 +476,25 @@ export function createServer(deps: {
           case '/api/settings': {
             if (typeof body.testCmd === 'string') deps.tests.setCommand(body.testCmd);
             if (typeof body.buildCmd === 'string') deps.build.setCommand(body.buildCmd);
+            if (typeof body.runCmd === 'string') deps.run.setCommand(body.runCmd);
+            if (typeof body.runUrl === 'string') deps.run.setUrl(body.runUrl);
             return json(200, { ok: true, settings: deps.settings.all() });
+          }
+          // The run button. Like the build, a press is the authorisation; unlike
+          // it, what starts is meant to keep going, and outlives this process.
+          case '/api/run/start':
+          case '/api/run/stop':
+          case '/api/run/restart': {
+            const act = url.pathname.slice('/api/run/'.length);
+            const result =
+              act === 'start' ? await deps.run.startApp() : act === 'stop' ? await deps.run.stopApp() : await deps.run.restartApp();
+            events.append({
+              source: 'harness',
+              session: session.sessionId(),
+              kind: 'run',
+              text: result.ok ? `app ${act} → ${result.state.phase}` : `app ${act} refused — ${result.reason}`,
+            });
+            return json(result.ok ? 200 : 409, result);
           }
           case '/api/build/stop': {
             deps.build.cancel();
@@ -718,6 +743,11 @@ export function createServer(deps: {
           bus.publish({ type: 'voice', state: 'unspoken', detail: msg, status: deps.speakOut.status() });
           return json(502, { error: msg });
         }
+      }
+      if (url.pathname === '/api/run/log') {
+        // Pulled while the panel is open, never pushed: an app's output is a
+        // stream, and riding the bus it would flood every tab.
+        return json(200, deps.run.log() ?? { text: '', at: null });
       }
       if (url.pathname === '/api/settings') {
         // The RAW overrides, which is what the boxes hold. Where the live command
