@@ -518,6 +518,15 @@ These cost hours. Don't rediscover them.
   `clear()` re-applies what was in force. The select shows the CHOICE, not the duck —
   a readout that dropped to `low` every time he reached for the mic would look like the
   harness overruling him.
+- **Compaction is the USER's setting, not the harness's** (2026-10-31). The
+  session loads user settings (settingSources omitted), so
+  `modelSettings.<model>.autoCompactWindow` in `~/.claude/settings.json` sets
+  the window here too — PER MODEL, so switching the strip's model changes when
+  she compacts (Opus at 400k compacted at 367k while Fable sat at 1M/967k).
+  `/api/context` shows `autoCompactThreshold`. The harness adds no policy; it
+  only says so: a `compact` message puts start/finish/failure in the transcript,
+  because a big compaction is the longest silence a turn has, and unannounced
+  in a spoken conversation it reads as a hang.
 - **The wire panel PULLS; nothing about it rides the bus.** `wireTap.ts` records a
   compact form of every SDK message (session.ts taps `handle()` before its switch — the
   types the switch ignores are the panel's whole point) and the page fetches
@@ -660,7 +669,11 @@ the conversation that produced it. Where things stand:
   the harness adapter (one ear, newest armer steals, spend metered at forwarding),
   and `ui/pcm.js`/`capture.js`/`remoteEar.js` are the page half — `RemoteEar` wears
   the Listener's exact surface so `app.js` swaps by `hello.ear`, and `degraded`
-  swaps the browser ear back in mid-conversation. `scribe` is the DEFAULT since
+  swaps the browser ear back in mid-conversation — for THAT listening only
+  (2026-10-31): the next mic press tries Scribe again and the terminal logs why
+  it dropped, because a sticky fallback left a days-old tab on the browser ear
+  after one sleep, with the reason only in a line the next reconnect erased.
+  `scribe` is the DEFAULT since
   2026-08-29 (first real Chrome session worked; Danny called it earned):
   `HARNESS_EAR=browser` opts out, a keyless harness degrades to the browser ear at
   `hello`, and `listen.js` stays untouched as that fallback. The engine
