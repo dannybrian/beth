@@ -116,3 +116,23 @@ export function summarizeTool(name: string, input: Record<string, unknown>, repo
     return shortName(name);
   }
 }
+
+const kTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+/**
+ * The compaction line's subject, off the SDK's `compact_metadata`: how much
+ * went in, how much came out, how long it took. Every field but the trigger is
+ * optional in the SDK's own type, so each is shown only when it is there.
+ */
+export function compactNote(meta: unknown): string {
+  const m = (meta ?? {}) as { trigger?: unknown; pre_tokens?: unknown; post_tokens?: unknown; duration_ms?: unknown };
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+  const pre = num(m.pre_tokens);
+  const post = num(m.post_tokens);
+  const ms = num(m.duration_ms);
+  const parts: string[] = [];
+  if (pre !== null) parts.push(post !== null ? `${kTokens(pre)} → ${kTokens(post)} tokens` : `${kTokens(pre)} tokens before`);
+  if (ms !== null) parts.push(`${Math.round(ms / 1000)}s`);
+  if (m.trigger === 'manual') parts.push('asked for');
+  return parts.join(', ');
+}

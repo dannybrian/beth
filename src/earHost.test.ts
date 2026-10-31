@@ -40,14 +40,16 @@ function fakeEngine() {
 
 function host(engine: EarEngine | null, vocab: string[] = ['pnpm']) {
   const published: any[] = [];
+  const logged: string[] = [];
   const h = new EarHost({
     engine,
     unavailable: 'no key',
     vocabulary: () => vocab,
     publish: (m) => published.push(m),
     usdPerHour: 0.39,
+    log: (l) => logged.push(l),
   });
-  return { h, published };
+  return { h, published, logged };
 }
 
 test('no engine refuses with the reason, not a dead button', () => {
@@ -112,10 +114,12 @@ test('disarm is owner-only and ends the session', () => {
 
 test('a degraded session is dropped so the next arm starts fresh', () => {
   const { engine, sessions } = fakeEngine();
-  const { h, published } = host(engine);
+  const { h, published, logged } = host(engine);
   h.arm(1);
   sessions[0].opts.onState('degraded', 'quota_exceeded: out');
   assert.deepEqual(published.at(-1), { type: 'ear', state: 'degraded', owner: 1, detail: 'quota_exceeded: out' });
+  // The page's activity line is erased by the next reconnect; this is the trace that stays.
+  assert.match(logged.join('\n'), /quota_exceeded: out/);
   assert.equal(h.owner(), 0);
   h.arm(1);
   assert.equal(sessions.length, 2, 'the retry gets a new session, not the spent one');

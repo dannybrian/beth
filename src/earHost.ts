@@ -18,6 +18,7 @@ export class EarHost {
   private ownerId = 0;
   private seconds = 0;
   private usdPerHour: number;
+  private log: (line: string) => void;
 
   constructor(deps: {
     /** null when voice is absent — the ear degrades to "not offered". */
@@ -28,12 +29,19 @@ export class EarHost {
     vocabulary: () => string[];
     publish: (m: UIMessage) => void;
     usdPerHour: number;
+    /**
+     * The terminal. A degrade used to be said only on the page, as an activity
+     * line the next reconnect erased, so a tab that had quietly fallen back to
+     * the browser ear left no trace of why anywhere.
+     */
+    log?: (line: string) => void;
   }) {
     this.engine = deps.engine;
     this.unavailable = deps.unavailable ?? null;
     this.vocabulary = deps.vocabulary;
     this.publish = deps.publish;
     this.usdPerHour = deps.usdPerHour;
+    this.log = deps.log ?? (() => {});
   }
 
   owner(): number {
@@ -65,6 +73,7 @@ export class EarHost {
           // The session is spent; drop it so the next arm starts fresh. The
           // page hears WHY and decides what "listen another way" means.
           this.session = null;
+          this.log(`  ear: Scribe degraded — ${detail ?? 'no reason given'}; that tab falls back to browser recognition until its mic is next switched on`);
           this.publish({ type: 'ear', state: 'degraded', owner, detail });
         }
       },

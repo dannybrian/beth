@@ -1390,6 +1390,17 @@ const handlers = {
   activity: (m) => {
     renderActivity(m);
   },
+  // Not a `tool` entry, so the gear's transcript box never hides it: this is
+  // the harness telling Danny why the turn has gone quiet, not her working.
+  compact: (m) =>
+    entry('activity', (n) => {
+      n.textContent =
+        m.state === 'started'
+          ? '🗜 compacting the conversation — this turn waits on it'
+          : m.state === 'done'
+            ? `🗜 compacted${m.detail ? ` (${m.detail})` : ''}`
+            : `🗜 compaction failed — ${m.detail ?? 'no reason given'}`;
+    }),
   ask: renderAsk,
   ask_resolved: (m) => askCards.get(m.id)?.settle(m.answers ?? {}),
   approval: renderApproval,
@@ -2724,6 +2735,13 @@ function setDirectorName(name) {
 let voice = null;
 /** Which ear this page runs — 'browser' or 'scribe'. Set at `hello`. */
 let earKind = 'browser';
+/**
+ * The `hello` a degraded Scribe ear fell back from, or null. The fallback lasts
+ * for the mic that was OPEN when Scribe gave up, never longer: most degrades are
+ * a sleep or a dropped socket, and a tab kept for days stayed on the browser ear
+ * until a reload, with nothing on screen saying it ever had another.
+ */
+let scribeFallback = null;
 
 function paintVoiceButton(state, detail) {
   voiceBtn.className = `voice ${state}`;
@@ -2783,24 +2801,30 @@ function buildBrowserListener(hello) {
   });
 }
 
+function buildScribeEar(hello) {
+  return new RemoteEar({
+    streamId: () => myStreamId,
+    ...voiceCallbacks(),
+    // The engine gave up — quota, outage, a bad key, a dropped socket. The mic
+    // stays a mic: swap in the browser ear for the rest of THIS listening, and
+    // say so. The next press tries Scribe again (toggleVoice).
+    onDegraded: (detail) => {
+      entry('activity', (n) => (n.textContent = `🎙 Scribe ear degraded (${detail ?? 'unknown'}) — using browser recognition until the mic is next switched on`));
+      earKind = 'browser';
+      scribeFallback = hello;
+      const wasOn = voice?.state !== 'off';
+      voice = listenSupported ? buildBrowserListener(hello) : null;
+      if (voice && wasOn) void voice.arm().catch((e) => paintVoiceButton('error', String(e)));
+      else paintVoiceButton(voice ? 'off' : 'error', voice ? undefined : 'no fallback recogniser');
+    },
+  });
+}
+
 function buildVoice(hello) {
   if (voice) return;
   earKind = hello.ear ?? 'browser';
   if (earKind === 'scribe') {
-    voice = new RemoteEar({
-      streamId: () => myStreamId,
-      ...voiceCallbacks(),
-      // The engine gave up — quota, outage, a bad key. The mic stays a mic:
-      // swap in the browser ear mid-conversation and say so, once.
-      onDegraded: (detail) => {
-        entry('activity', (n) => (n.textContent = `🎙 Scribe ear degraded (${detail ?? 'unknown'}) — using browser recognition`));
-        earKind = 'browser';
-        const wasOn = voice?.state !== 'off';
-        voice = listenSupported ? buildBrowserListener(hello) : null;
-        if (voice && wasOn) void voice.arm().catch((e) => paintVoiceButton('error', String(e)));
-        else paintVoiceButton(voice ? 'off' : 'error', voice ? undefined : 'no fallback recogniser');
-      },
-    });
+    voice = buildScribeEar(hello);
     paintVoiceButton(voice.state);
     return;
   }
@@ -2818,6 +2842,15 @@ function buildVoice(hello) {
 
 const toggleVoice = async () => {
   // Nothing to toggle until `hello` has said which ear this harness has.
+  // Switching on after a degrade is the retry: a fresh Scribe ear, which falls
+  // back again (and says so) if whatever broke it is still broken. Checked
+  // before `!voice`, because a browser with no recogniser to fall back to
+  // leaves voice null, and that is the page that most needs the retry.
+  if (scribeFallback && (!voice || voice.state === 'off')) {
+    earKind = 'scribe';
+    voice = buildScribeEar(scribeFallback);
+    scribeFallback = null;
+  }
   if (!voice) return;
   try {
     if (voice.state === 'off') await voice.arm();

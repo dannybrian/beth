@@ -29,7 +29,7 @@ import type { AppRunner } from './appRunner.ts';
 import { bootSuggestion, type Suggestion } from './suggestion.ts';
 import { stripAudioTags, VOCALIZATION_PROMPT } from './audioTags.ts';
 import { renderInline } from './markdown.ts';
-import { summarizeTool } from './activity.ts';
+import { compactNote, summarizeTool } from './activity.ts';
 import type { Pasted } from './pasted.ts';
 
 type InputStream = AsyncIterable<SDKUserMessage> & { push(m: SDKUserMessage): void; end(): void };
@@ -720,7 +720,10 @@ export class SessionManager {
     // it. First sign of one — a stream event or an assistant message — with
     // no `thinking` out means the SDK resumed her (a worker's report landed),
     // so say so here; the `result` closes it exactly as for a sent turn.
-    if ((m.type === 'stream_event' || m.type === 'assistant') && !this.thinking) {
+    // Compaction counts: it runs before the request in a turn the SDK may have
+    // begun on its own, and it is the longest silence a turn can have.
+    const compacting = m.type === 'system' && m.subtype === 'status' && m.status === 'compacting';
+    if ((m.type === 'stream_event' || m.type === 'assistant' || compacting) && !this.thinking) {
       this.thinking = true;
       this.bus.publish({ type: 'status', state: 'thinking', turn: this.turnSeq });
       this.turnBegan();
@@ -744,6 +747,17 @@ export class SessionManager {
         this.persistSession(m.session_id);
       }
       this.modelValue = m.model ?? this.modelValue;
+      return;
+    }
+    if (m.subtype === 'status') {
+      if (m.status === 'compacting') this.bus.publish({ type: 'compact', state: 'started' });
+      if (m.compact_result === 'failed') {
+        this.bus.publish({ type: 'compact', state: 'failed', detail: String(m.compact_error ?? 'no reason given') });
+      }
+      return;
+    }
+    if (m.subtype === 'compact_boundary') {
+      this.bus.publish({ type: 'compact', state: 'done', detail: compactNote(m.compact_metadata) });
       return;
     }
     if (m.subtype === 'task_started') {

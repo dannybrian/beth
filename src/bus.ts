@@ -115,6 +115,10 @@ export type UIMessage =
   // `summary` is the glanceable line (activity.ts); `detail` is the raw input,
   // kept so the page can hang it off a title — the summary is lossy on purpose.
   | { type: 'activity'; tool: string; detail: string; summary?: string }
+  // The SDK compacting the conversation. Transcript, so it replays. A large
+  // context takes a while to summarise and nothing else on the page moves
+  // meanwhile, which in a spoken conversation reads exactly like a hang.
+  | { type: 'compact'; state: 'started' | 'done' | 'failed'; detail?: string }
   | { type: 'ask'; id: string; questions: AskQuestion[] }
   | { type: 'ask_resolved'; id: string; answers: Record<string, string> }
   // `canAlways` is false when the SDK offered no rule that would cover this call

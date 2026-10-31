@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
-import { summarizeTool } from './activity.ts';
+import { compactNote, summarizeTool } from './activity.ts';
 
 const REPO = '/Users/dbrian/Sources/beadgame';
 const sum = (name: string, input: Record<string, unknown>) => summarizeTool(name, input, REPO);
@@ -70,4 +70,12 @@ test('a malformed input is survivable', () => {
   assert.equal(sum('Read', { file_path: 42 as never }), 'read');
   assert.equal(sum('WebFetch', { url: 'not a url' }), 'fetch not a url');
   assert.equal(sum('TodoWrite', { todos: 'nope' as never }), 'todos (0)');
+});
+
+test('a compaction says what went in, what came out, and how long', () => {
+  assert.equal(compactNote({ trigger: 'auto', pre_tokens: 367_412, post_tokens: 41_020, duration_ms: 38_400 }), '367k → 41k tokens, 38s');
+  assert.equal(compactNote({ trigger: 'manual', pre_tokens: 90_000 }), '90k tokens before, asked for');
+  // The optional fields are optional; a line with nothing to say says nothing.
+  assert.equal(compactNote({ trigger: 'auto' }), '');
+  assert.equal(compactNote(undefined), '');
 });

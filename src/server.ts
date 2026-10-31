@@ -153,6 +153,7 @@ export function createServer(deps: {
       keyterms({ configured: cfg.keyterms, live: work.live().map((i) => i.spoken), mined: deps.mined }).terms,
     publish: (m) => bus.publish(m),
     usdPerHour: cfg.sttUsdPerHour,
+    log: (line) => console.log(line),
   });
 
   // Where the repo lives on the web, for the strip's name to link to. Read at
