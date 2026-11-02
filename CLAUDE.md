@@ -113,7 +113,9 @@ than the browser.
 
 The rest earn their tests by being places a mistake is INVISIBLE: `toolInput` (a malformed
 call recovered from the real payload), `planName` (the one writer — that it round-trips
-through the real reader, and that nothing else in the file moves), `pins` (that a shelved
+through the real reader, and that nothing else in the file moves), `findings` (the read state: a first boot that reads the backlog out as news, a restart that
+forgets what was read) and `parseFindings` beside the task parser (real 305 prose, the
+legacy near-misses refused), `pins` (that a shelved
 plan survives a restart and still shows when it is not in flight), `state` (a worker
 leaving the roster when nothing will ever report it), `keyterms`, `greeting`, and
 `stylesheet`, which exists because a stray `*/` drops CSS rules with no error anywhere,
@@ -746,6 +748,15 @@ the conversation that produced it. Where things stand:
   the watcher because hand-offs arrive while the Mac was asleep. Read the doc
   for why it is a reader and not an API, and for what is set aside (a broker,
   retraction, a channel back).
+
+- **`findings.md`** — BUILT (2026-11-02, `parseFindings` in `plansReader.ts`,
+  `src/findings.ts`). Findings that widened the work, marked in done notes as
+  `**Finding YYYY-MM-DD:**` + `**Adds:**`, collected into an unread digest at the
+  top of the plans panel. ⚠ STRICT on purpose: the legacy `**Found…**` leads are
+  never parsed (too varied to read without guessing). ⚠ Computed over `work.all()`
+  — findings land on plans that are usually finished. ⚠ Read state is the state
+  dir's, seeded on the first index read, and never announced: her `say` already
+  told him when it landed.
 
 - **`run.md`** — BUILT (2026-10-27, `src/appRunner.ts`); only declaring the three
   repos is left, and that is Danny's `.env`. A run button for the project's app

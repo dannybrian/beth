@@ -19,6 +19,7 @@ import type { HarnessConfig } from './config.ts';
 import type { WorkIndex } from './workIndex.ts';
 import type { WorkItem } from './workItems.ts';
 import { isLive } from './workItems.ts';
+import type { FindingsRead } from './findings.ts';
 
 export class Pins {
   private file: string;
@@ -78,7 +79,7 @@ export class Pins {
  * quietly skipped: it stays on file in case the plan comes back, and it does not
  * get to break the panel in the meantime.
  */
-export function workMessage(work: WorkIndex, pins: Pins) {
+export function workMessage(work: WorkIndex, pins: Pins, findings?: FindingsRead) {
   const all = work.all();
   const byPath = new Map(all.map((i) => [i.path, i]));
   return {
@@ -86,5 +87,8 @@ export function workMessage(work: WorkIndex, pins: Pins) {
     items: all.filter((i) => isLive(i.status) && !i.roleLock),
     total: all.length,
     pinned: pins.all().map((p) => byPath.get(p)).filter(Boolean) as WorkItem[],
+    // The UNREAD findings, resolved here for the same reason as the shelf: the
+    // plans carrying them are mostly finished, so `items` would not have them.
+    ...(findings ? { findings: findings.rows(all, { unreadOnly: true }) } : {}),
   };
 }

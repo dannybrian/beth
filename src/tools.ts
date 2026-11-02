@@ -21,6 +21,7 @@ import { resolveImage } from './showImage.ts';
 import type { Workbench } from './workbench.ts';
 import type { Suggestion } from './suggestion.ts';
 import type { AppRunner } from './appRunner.ts';
+import type { FindingsRead } from './findings.ts';
 
 const ok = (payload: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(payload) }] });
 
@@ -69,6 +70,8 @@ export function createHarnessTools(deps: {
   suggestion: Suggestion;
   /** The project's app — the run button's other hand. Absent, the tool is not registered. */
   run?: AppRunner;
+  /** Which findings Danny has read. Absent, the plans tool has no digest. */
+  findings?: FindingsRead;
 }) {
   const links = (text: string) =>
     detectLinks(text, { repo: deps.repo, lookup: (p) => deps.work.byPath(p) });
@@ -98,7 +101,9 @@ export function createHarnessTools(deps: {
         refLink: ref ? links(ref)[0] : undefined,
       });
       // The event log is a reading surface too — store the stripped form.
-      deps.events.append({ source: 'harness', session: deps.sessionId(), kind: 'say', text: read, ref });
+      // `sayKind` keeps WHICH say it was — a finding said aloud is findable by
+      // its plan ref afterwards. `kind` stays 'say' for every existing reader.
+      deps.events.append({ source: 'harness', session: deps.sessionId(), kind: 'say', sayKind: kind, text: read, ref });
       return ok({ delivered: true, voiced: deps.voiceActive() });
     },
     { alwaysLoad: true }
@@ -426,8 +431,31 @@ export function createHarnessTools(deps: {
         .describe('in-flight = inbox (hand-offs from other agents and apps, not yet taken — close with `close_inbox`), awaiting-eyes, active, blocked and planning. Use all only when explicitly asked about parked or shipped work.'),
       match: z.string().optional().describe('Filter to plans whose spoken name, title or path contains this.'),
       tasks: z.boolean().default(false).describe('Include the full task list per plan, not just counts. Verbose — ask for it only when the tasks themselves are the question.'),
+      findings: z
+        .boolean()
+        .default(false)
+        .describe('Answer "what widened the work?": the FINDINGS marked in plans (`**Finding <date>:**` + `**Adds:**`), finished plans included. Unread only, unless scope is all. Reading them to Danny does NOT mark them read — only he does that, from the panel.'),
     },
-    async ({ scope, match, tasks }) => {
+    async ({ scope, match, tasks, findings }) => {
+      if (findings) {
+        if (!deps.findings) return ok({ findings: [], note: 'This harness has no findings digest.' });
+        const needle = match?.toLowerCase();
+        const rows = deps.findings
+          .rows(deps.work.all(), { unreadOnly: scope !== 'all' })
+          .filter((f) => !needle || [f.plan, f.path].some((x) => x.toLowerCase().includes(needle)));
+        return ok({
+          total: rows.length,
+          findings: rows.slice(0, 60).map((f) => ({
+            plan: f.plan,
+            date: f.date,
+            found: f.text,
+            adds: f.adds,
+            under: f.under,
+            read: f.read,
+          })),
+          note: 'Grouped by plan when you tell him: the finding, then what it added. Refer to plans by their spoken name.',
+        });
+      }
       const base = scope === 'all' ? deps.work.all() : deps.work.live();
       const needle = match?.toLowerCase();
       const hits = needle

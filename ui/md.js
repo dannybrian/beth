@@ -62,7 +62,7 @@ const cells = (line) =>
  * status, priority and depends_on live, and a preview that silently hid them
  * would be a worse view of the plan than `cat`.
  */
-export function parseBlocks(text) {
+export function parseBlocks(text, base = 0) {
   const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
   const out = [];
   let i = 0;
@@ -70,7 +70,7 @@ export function parseBlocks(text) {
   if (lines[0]?.trim() === '---') {
     const end = lines.indexOf('---', 1);
     if (end > 0) {
-      out.push({ t: 'frontmatter', v: lines.slice(1, end).join('\n') });
+      out.push({ t: 'frontmatter', line: base + 1, v: lines.slice(1, end).join('\n') });
       i = end + 1;
     }
   }
@@ -78,6 +78,10 @@ export function parseBlocks(text) {
   for (; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
+    // The SOURCE line this block starts on, 1-based — what lets the reader open
+    // a plan at a finding instead of at the top of 2,000 lines. `base` carries
+    // the offset into a quote's or a sub-list's re-parse.
+    const at = base + i + 1;
 
     const fence = FENCE.exec(line);
     if (fence) {
@@ -95,24 +99,24 @@ export function parseBlocks(text) {
         }
         body.push(lines[i]);
       }
-      out.push({ t: 'code', lang: fence[3].trim(), v: body.join('\n'), unclosed: !closed });
+      out.push({ t: 'code', line: at, lang: fence[3].trim(), v: body.join('\n'), unclosed: !closed });
       continue;
     }
 
     const h = H.exec(line);
     if (h) {
-      out.push({ t: 'heading', level: h[1].length, c: parseInline(h[2].trim()) });
+      out.push({ t: 'heading', line: at, level: h[1].length, c: parseInline(h[2].trim()) });
       continue;
     }
     if (HR.test(line)) {
-      out.push({ t: 'hr' });
+      out.push({ t: 'hr', line: at });
       continue;
     }
     if (QUOTE.test(line)) {
       const body = [];
       for (; i < lines.length && QUOTE.test(lines[i]); i++) body.push(QUOTE.exec(lines[i])[1]);
       i--;
-      out.push({ t: 'quote', blocks: parseBlocks(body.join('\n')) });
+      out.push({ t: 'quote', line: at, blocks: parseBlocks(body.join('\n'), at - 1) });
       continue;
     }
     // A table needs its separator row on the NEXT line, which is what stops a
@@ -124,7 +128,7 @@ export function parseBlocks(text) {
         rows.push(cells(lines[i]));
       }
       i--;
-      out.push({ t: 'table', head: head.map(parseInline), rows: rows.map((r) => r.map(parseInline)) });
+      out.push({ t: 'table', line: at, head: head.map(parseInline), rows: rows.map((r) => r.map(parseInline)) });
       continue;
     }
     if (BULLET.test(line) || ORDERED.test(line)) {
@@ -148,6 +152,7 @@ export function parseBlocks(text) {
             // A deeper marker opens a SUB-LIST: gather everything below this
             // level, dedent it, and let the parser do it again.
             const sub = [];
+            const subAt = base + i;
             for (; i < lines.length; i++) {
               if (!lines[i].trim()) {
                 sub.push('');
@@ -160,11 +165,18 @@ export function parseBlocks(text) {
             }
             i--;
             const last = items[items.length - 1];
+            // A second run of sub-lines under the same item is joined to the
+            // first, so only the FIRST run's offset can be kept.
+            last.subAt ??= subAt;
             last.sub = (last.sub ?? []).concat(sub);
-            blank = false;
+            // The gather swallows the blank lines it walks through, so the gap
+            // has to be read back off its tail: a blank line, then unindented
+            // prose, ends the list. Without this the paragraph after a nested
+            // list was glued onto the last bullet — found by the line test.
+            blank = sub.length > 0 && !sub[sub.length - 1].trim();
             continue;
           }
-          items.push({ raw: [b ? b[2] : o[3]] });
+          items.push({ raw: [b ? b[2] : o[3]], line: base + i + 1 });
           blank = false;
           continue;
         }
@@ -183,14 +195,15 @@ export function parseBlocks(text) {
       i--;
       out.push({
         t: 'list',
+        line: at,
         ordered,
         items: items.map((it) => {
           const text = it.raw.join(' ');
           const task = TASK.exec(text);
           const node = task
-            ? { done: task[1].toLowerCase() === 'x', c: parseInline(task[2]) }
-            : { c: parseInline(text) };
-          if (it.sub) node.blocks = parseBlocks(it.sub.join('\n'));
+            ? { done: task[1].toLowerCase() === 'x', c: parseInline(task[2]), line: it.line }
+            : { c: parseInline(text), line: it.line };
+          if (it.sub) node.blocks = parseBlocks(it.sub.join('\n'), it.subAt);
           return node;
         }),
       });
@@ -205,7 +218,7 @@ export function parseBlocks(text) {
       para.push(l);
     }
     i--;
-    out.push({ t: 'para', c: parseInline(para.join('\n')) });
+    out.push({ t: 'para', line: at, c: parseInline(para.join('\n')) });
   }
   return out;
 }
@@ -251,6 +264,17 @@ function inlineInto(parent, nodes, onLink) {
 export function renderBlocks(blocks, onLink) {
   const frag = document.createDocumentFragment();
   for (const b of blocks) {
+    const before = frag.childNodes.length;
+    renderBlock(frag, b, onLink);
+    // Every block says where it came from, so the reader can open AT a line.
+    const made = frag.childNodes[before];
+    if (made && b.line) made.dataset.line = String(b.line);
+  }
+  return frag;
+}
+
+function renderBlock(frag, b, onLink) {
+  {
     if (b.t === 'frontmatter') {
       const d = mk('details', 'md-fm');
       d.append(mk('summary', null, 'frontmatter'));
@@ -277,6 +301,7 @@ export function renderBlocks(blocks, onLink) {
       const list = mk(b.ordered ? 'ol' : 'ul');
       for (const item of b.items) {
         const li = mk('li');
+        if (item.line) li.dataset.line = String(item.line);
         if (item.done !== undefined) {
           li.className = item.done ? 'task done' : 'task';
           // A real disabled checkbox, so it LOOKS like state rather than text —
@@ -309,5 +334,15 @@ export function renderBlocks(blocks, onLink) {
       frag.append(table);
     }
   }
-  return frag;
+}
+
+/**
+ * The element to open the reader at: the LAST one whose source line is at or
+ * before the target — a finding inside a bullet lands on that bullet, not on
+ * the list's first line forty bullets up. Pure over (line, el) pairs.
+ */
+export function nearestLine(pairs, line) {
+  let best = null;
+  for (const p of pairs) if (p.line <= line && (!best || p.line >= best.line)) best = p;
+  return best?.el ?? null;
 }

@@ -27,6 +27,7 @@ import { canHandOff, handOffToClaude, openTerminalAt, seedPrompt } from './hando
 import { repoHome } from './repoWeb.ts';
 import { keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
+import type { FindingsRead } from './findings.ts';
 import type { InboxAcks } from './inbox.ts';
 import { restartVerdict } from './restart.ts';
 import type { Workbench } from './workbench.ts';
@@ -77,6 +78,8 @@ export function createServer(deps: {
   /** The repo's own vocabulary, mined once at boot — see keyterms.ts. */
   mined: string[];
   pins: Pins;
+  /** Which findings he has read — the digest's state. See findings.ts. */
+  findings?: FindingsRead;
   /** The inbox acks — his ✓ and × on a hand-off. See inbox.ts. */
   inbox: InboxAcks;
   /** Exit for a relaunch by the wrapper. See restart.ts. */
@@ -249,7 +252,7 @@ export function createServer(deps: {
       // Only in-flight items go down the stream — the panel shows in-progress
       // work, and shipping all 571 of beadgame's plans on every connect is waste.
       // Plus the shelf, which is not in-flight by definition.
-      send(workMessage(work, deps.pins));
+      send(workMessage(work, deps.pins, deps.findings));
       // Everything broadcasts except the instruction to make a noise.
       const unsub = bus.subscribe((m) => {
         if (m.type === 'speak' && streamId !== speakerId) return;
@@ -626,8 +629,18 @@ export function createServer(deps: {
             const target = String(body.path ?? '');
             if (!work.byPath(target)) return json(404, { ok: false, reason: 'no such plan' });
             const pinned = deps.pins.set(target, Boolean(body.pinned));
-            bus.publish(workMessage(work, deps.pins));
+            bus.publish(workMessage(work, deps.pins, deps.findings));
             return json(200, { ok: true, pinned });
+          }
+          case '/api/findings/read': {
+            // His ✓ on a finding, or "mark all read". The state dir only — the
+            // plan the finding lives in is not touched. See findings.ts.
+            if (!deps.findings) return json(404, { ok: false, reason: 'no findings store' });
+            if (body.all) deps.findings.markAll(work.all());
+            else if (Array.isArray(body.ids)) deps.findings.markRead(body.ids.filter((x: unknown) => typeof x === 'string'));
+            else return json(400, { ok: false, reason: 'ids or all' });
+            bus.publish(workMessage(work, deps.pins, deps.findings));
+            return json(200, { ok: true });
           }
           case '/api/inbox': {
             // A hand-off taken or dismissed from the panel. ⚠️ Writes the STATE
@@ -786,6 +799,10 @@ export function createServer(deps: {
         // (search over parked/shipped work, resolving a stale reference).
         const scope = url.searchParams.get('scope');
         return json(200, { items: scope === 'all' ? work.all() : work.live() });
+      }
+      if (url.pathname === '/api/findings') {
+        // Every marked finding, read ones included — the panel's "show all".
+        return json(200, { rows: deps.findings ? deps.findings.rows(work.all()) : [] });
       }
       if (url.pathname === '/api/wire') {
         // The wire panel PULLS while open, on a cursor. Deliberately not on the

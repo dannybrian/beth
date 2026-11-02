@@ -973,6 +973,63 @@ body.hide-activity .entry.activity.tool { display: none; }
 .group-head:hover { color: var(--text); }
 .group-count { margin-left: auto; }
 
+/* Findings: news, so the one group with a colour on its name. */
+.findings-head .group-name { color: var(--accent); }
+.finding-all {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.finding-all:hover { color: var(--text); }
+.finding-plan {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 8px 0;
+  cursor: pointer;
+}
+.finding-plan:hover { text-decoration: underline; }
+.finding { display: flex; align-items: flex-start; gap: 4px; padding: 2px 4px 4px 14px; }
+.finding.read { opacity: 0.55; }
+.finding-body {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 0;
+  cursor: pointer;
+}
+.finding-body:hover { color: var(--accent); }
+.finding-date { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.finding-adds { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.finding-ok {
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  padding: 0 5px;
+  cursor: pointer;
+}
+.finding-ok:hover { color: var(--text); border-color: var(--accent); }
+/* Where the reader opened a plan AT a finding. */
+#plan-body .md-at { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; }
+
 .work-item { padding: 6px 8px; }
 .work-head { display: flex; align-items: flex-start; gap: 4px; }
 .caret {

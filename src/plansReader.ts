@@ -8,11 +8,12 @@
 //
 // Written against beadgame's real corpus — 571 plans across a dozen directories —
 // not against an idea of it. The surprises that shaped it are marked below.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { liveRecords } from './directorRole.ts';
 import { stripMarkdown, taskSpoken } from './spokenName.ts';
-import type { WorkClaim, WorkItemDraft, WorkStatus, WorkTask } from './workItems.ts';
+import type { WorkClaim, WorkFinding, WorkItemDraft, WorkStatus, WorkTask } from './workItems.ts';
 
 // Union of the vocabularies across Danny's repos: beadgame's plans/README adds
 // `review`; tulito adds `awaiting-eyes`, which its own README calls "the reason
@@ -226,6 +227,78 @@ export function parseTasks(lines: string[], from: number): WorkTask[] {
   return tasks;
 }
 
+const FINDING = /^\s*(?:[-*+]\s+)?\*\*Finding (\d{4}-\d{2}-\d{2}):\*\*\s*(.*)$/;
+const ADDS = /^\s*(?:[-*+]\s+)?\*\*Adds:\*\*\s*/;
+
+/**
+ * The finding markers (docs/findings.md). A finding is ONE paragraph: the lead,
+ * its wrapped lines, and the `**Adds:**` line — which may start a line of its
+ * own or arrive mid-line after a reflow. No Adds, no finding: that line is the
+ * half Danny asked to understand, and a discovery that added nothing is
+ * ordinary done-note prose.
+ *
+ * Fences are skipped for the same reason as tasks — this doc's own example of
+ * the marker sits in one. The legacy `**Found…**` variants are NOT read.
+ *
+ * The id hashes the date and the whitespace-collapsed finding text: a rewrap
+ * keeps it, an edit makes it a new (unread) finding, which is a repeat at worst
+ * and never a silent loss.
+ */
+export function parseFindings(lines: string[], from: number, relPath: string): WorkFinding[] {
+  const out: WorkFinding[] = [];
+  const ids = new Set<string>();
+  let fence: string | null = null;
+  let heading: string | undefined;
+
+  for (let i = from; i < lines.length; i++) {
+    const line = lines[i];
+    const f = /^\s*(```+|~~~+)/.exec(line);
+    if (f) {
+      if (!fence) fence = f[1].slice(0, 3);
+      else if (line.trimStart().startsWith(fence)) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const h = /^#{1,6}\s+(.*\S)\s*$/.exec(line);
+    if (h) {
+      heading = stripMarkdown(h[1]);
+      continue;
+    }
+    const m = FINDING.exec(line);
+    if (!m) continue;
+
+    const para = [m[2]];
+    let j = i + 1;
+    for (; j < lines.length; j++) {
+      const l = lines[j];
+      if (!l.trim() || /^\s*#{1,6}\s/.test(l) || /^\s*(```|~~~)/.test(l) || FINDING.test(l)) break;
+      // Another bold-led line (`**Ruled 2026-11-01 (Danny):**`, a reviewer's
+      // `**Verdict:**`) is the next thing said ABOUT the finding, not more of it.
+      // The colon may sit inside the bold or close it; a wrapped line that merely
+      // OPENS on bold ("**no glint at all** — nothing…") has neither.
+      if (/^\s*(?:[-*+]\s+)?\*\*[A-Z][^*]*:/.test(l) && !ADDS.test(l)) break;
+      // A new list item ends the paragraph — unless it is the Adds line itself,
+      // which a finding written as a bullet pair puts in a bullet of its own.
+      if (/^\s*([-*+]|\d+\.)\s/.test(l) && !ADDS.test(l)) break;
+      para.push(ADDS.test(l) ? `**Adds:** ${l.replace(ADDS, '')}` : l.trim());
+    }
+    const joined = para.join(' ');
+    const at = joined.indexOf('**Adds:**');
+    if (at < 0) continue;
+    const text = stripMarkdown(joined.slice(0, at).trim());
+    const adds = stripMarkdown(joined.slice(at + '**Adds:**'.length).trim());
+    if (!text || !adds) continue;
+
+    let id = `${relPath}#${crypto.createHash('sha1').update(`${m[1]} ${text}`).digest('hex').slice(0, 12)}`;
+    // The same sentence twice in one plan is two findings, not one.
+    for (let n = 2; ids.has(id); n++) id = `${id.replace(/~\d+$/, '')}~${n}`;
+    ids.add(id);
+    out.push({ id, date: m[1], text, adds, line: i + 1, ...(heading ? { under: heading } : {}) });
+    i = j - 1;
+  }
+  return out;
+}
+
 /**
  * SURPRISE 4: `future/` means parked. The /plans skill infers this at read time
  * and never writes it back, so a reader that does not mirror the rule surfaces
@@ -337,6 +410,7 @@ export function createPlansReader(opts: PlansReaderOptions) {
             dependsOn: Array.isArray(fm.depends_on) ? fm.depends_on : fm.depends_on ? [String(fm.depends_on)] : [],
             claim,
             tasks: parseTasks(lines, bodyLine),
+            findings: parseFindings(lines, bodyLine, rel),
             reader: 'plans',
           });
         }

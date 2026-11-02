@@ -100,6 +100,30 @@ export type WorkClaim = {
   lastHeartbeat?: string;
 };
 
+/**
+ * A FINDING that widened the work — the two-line marker a worker writes in a
+ * done note (docs/findings.md):
+ *
+ *     **Finding 2026-11-01:** what was found
+ *     **Adds:** what it added to the work
+ *
+ * Strict on purpose. The free-form `**Found…**` leads that came before it are
+ * too varied to read without guessing, and a guessed finding renders confident,
+ * well-formed and wrong.
+ */
+export type WorkFinding = {
+  /** Stable across a rewrap, not across an edit: see parseFindings. */
+  id: string;
+  /** YYYY-MM-DD, from the lead — the only trustworthy per-paragraph date a plan has. */
+  date: string;
+  text: string;
+  adds: string;
+  /** 1-based line of the lead, for the reader to open at. */
+  line: number;
+  /** The nearest heading above it — usually the done note it was written in. */
+  under?: string;
+};
+
 export type WorkItem = {
   /** Repo-relative path. Machine identity, and what a handoff opens. */
   path: string;
@@ -137,6 +161,8 @@ export type WorkItem = {
   claim: WorkClaim | null;
   /** EMPTY MEANS NO TASKS, not zero-of-zero. See taskSummary(). */
   tasks: WorkTask[];
+  /** Marked findings, in file order. Absent from readers with no such convention. */
+  findings?: WorkFinding[];
   /** Raw relations as the project wrote them. Format varies — see resolveParents. */
   dependsOn: string[];
   /**

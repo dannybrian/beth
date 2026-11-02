@@ -21,6 +21,7 @@ import { RESTART_EXIT } from './restart.ts';
 import { Greetings, OnboardingOffer, kickoffPrompt, repoSnapshot, unreadPlanFiles } from './greeting.ts';
 import { mineRepo, keyterms } from './keyterms.ts';
 import { Pins, workMessage } from './pins.ts';
+import { FindingsRead } from './findings.ts';
 import { Workbench } from './workbench.ts';
 import { Suggestion, bootSuggestion } from './suggestion.ts';
 import { ensurePersonasDir } from './personas.ts';
@@ -83,6 +84,10 @@ const work = new WorkIndex(
   }
 );
 const pins = new Pins(cfg);
+// Which findings Danny has seen (docs/findings.md). Seeded on the index's first
+// read — inside the subscriber, because the first publish happens during
+// start() and must not carry the whole backlog as unread.
+const findings = new FindingsRead(cfg);
 // The url being iterated on, if the last run pinned one — same shelf-life
 // reasoning as pins: the dev server it points at usually outlives the harness.
 const bench = new Workbench(cfg);
@@ -91,7 +96,10 @@ const bench = new Workbench(cfg);
 const suggestion = new Suggestion();
 // One builder for all three publishers (here, `hello`, and the pin endpoint), so
 // the shelf cannot be present on one and missing on another.
-work.subscribe(() => bus.publish(workMessage(work, pins)));
+work.subscribe((items) => {
+  findings.seed(items);
+  bus.publish(workMessage(work, pins, findings));
+});
 // A spoken turn consumes pointing server-side; tell the page so its chips clear.
 work.onPointingChange((refs) => bus.publish({ type: 'pointing', refs }));
 work.start();
@@ -136,7 +144,8 @@ session = new SessionManager(
   suggestion,
   inbox,
   settings,
-  run
+  run,
+  findings
 );
 // A persona chosen on a previous run speaks in her own voice from the first line
 // of the greeting, not from the first switch.
@@ -259,7 +268,7 @@ const build = new BuildRunner(cfg, bus, { settings, fingerprint: () => treeFinge
 // it is how you find out the list is empty before wondering why nothing improved.
 const mined = mineRepo(cfg.repo);
 const server = createServer({
-  cfg, bus, events, pending, gate, session, speakOut, tests, build, run, settings, work, mined, pins, inbox, bench, suggestion, room, credits,
+  cfg, bus, events, pending, gate, session, speakOut, tests, build, run, settings, work, mined, pins, findings, inbox, bench, suggestion, room, credits,
   // /restart: the same clean shutdown as Ctrl-C, with the exit code that tells
   // the wrapper to start us again. See restart.ts.
   restart: () => shutdown(RESTART_EXIT),

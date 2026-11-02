@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error — browser module, plain JS on purpose
-import { parseBlocks, parseInline } from '../ui/md.js';
+import { nearestLine, parseBlocks, parseInline } from '../ui/md.js';
 
 const kinds = (blocks: any[]) => blocks.map((b) => b.t);
 
@@ -130,4 +130,35 @@ test('nesting survives the continuation rule', () => {
   assert.match(JSON.stringify(list.items[0].c), /wrapped on/);
   assert.equal(list.items[0].blocks[0].t, 'list');
   assert.equal(list.items[0].blocks[0].items.length, 2);
+});
+
+// The reader opens a plan AT a finding (docs/findings.md). A wrong line does not
+// throw — it opens confidently somewhere else in a 2,000-line plan.
+test('every block, and every list item, knows its source line', () => {
+  const text = [
+    '---', 'status: shipped', '---', '', // 1-4
+    '# The harness reads the clock', // 5
+    '', '### T2f — done', // 6-7
+    '- first bullet', // 8
+    '  wrapped tail', // 9
+    '- **Finding 2026-11-02:** the ribbon tails.', // 10
+    '  - nested under it', // 11
+    '', '> quoted', '> - and a quoted bullet', // 12-14
+    '', 'para', // 15-16
+  ].join('\n');
+  const b = parseBlocks(text);
+  assert.deepEqual(b.map((x) => [x.t, x.line]), [
+    ['frontmatter', 1], ['heading', 5], ['heading', 7], ['list', 8], ['quote', 13], ['para', 16],
+  ]);
+  const list = b[3];
+  assert.deepEqual(list.items.map((i) => i.line), [8, 10]);
+  assert.equal(list.items[1].blocks[0].items[0].line, 11, 'a sub-list keeps file lines');
+  assert.equal(b[4].blocks[1].items[0].line, 14, 'so does a quote');
+});
+
+test('the reader lands on the last element at or before the line', () => {
+  const pairs = [{ line: 5, el: 'h' }, { line: 8, el: 'li8' }, { line: 10, el: 'li10' }, { line: 16, el: 'p' }];
+  assert.equal(nearestLine(pairs, 10), 'li10');
+  assert.equal(nearestLine(pairs, 12), 'li10');
+  assert.equal(nearestLine(pairs, 2), null);
 });

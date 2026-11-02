@@ -30,6 +30,8 @@ export type HarnessEvent = {
   kind: EventKind;
   text: string;
   ref?: string;
+  /** On a `say`: which kind — status, finding, event, answer. */
+  sayKind?: string;
 };
 
 export class EventLog {

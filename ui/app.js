@@ -7,7 +7,7 @@ import { createWirePanel } from '/wire.js';
 import { addRereadButtons } from '/reread.js';
 import { tabTitle } from '/title.js';
 import { testFailureText, commandOutputText, sizeLabel, fenced, inlineCode } from '/paste.js';
-import { parseBlocks, renderBlocks } from '/md.js';
+import { nearestLine, parseBlocks, renderBlocks } from '/md.js';
 import { createBell } from '/bell.js';
 const $ = (id) => document.getElementById(id);
 const transcript = $('transcript');
@@ -551,7 +551,8 @@ function openLightbox(path, caption, src) {
  */
 let planOverlayOpen = false;
 
-async function openPlanPreview(path) {
+/** `line` (1-based) opens the plan AT it — a finding, not the top of the file. */
+async function openPlanPreview(path, line) {
   const box = $('plan-overlay');
   // Provisional, from whatever the panel happens to hold. ⚠ Usually NOTHING:
   // `byPathAll` is the in-flight slice and cited plans are mostly finished, so
@@ -583,6 +584,18 @@ async function openPlanPreview(path) {
     }
     body.replaceChildren(renderBlocks(parseBlocks(data.text), (href) => followPlanLink(href, path)));
     body.scrollTop = 0;
+    const at =
+      line &&
+      nearestLine(
+        [...body.querySelectorAll('[data-line]')].map((n) => ({ line: Number(n.dataset.line), el: n })),
+        line
+      );
+    if (at) {
+      // By assignment, not scrollIntoView — that drags every scrollable
+      // ancestor, the transcript behind the sheet included.
+      body.scrollTop += at.getBoundingClientRect().top - body.getBoundingClientRect().top - 16;
+      at.classList.add('md-at');
+    }
   } catch (e) {
     body.replaceChildren(el('div', 'snote', `⚠ could not read ${path} — ${String(e.message ?? e)}`));
   }
@@ -1116,6 +1129,14 @@ let workTotal = 0;
 /** Danny's shelf, resolved server-side and persisted across restarts. See pins.ts. */
 let pinnedItems = [];
 let pinnedPaths = new Set();
+/**
+ * Findings that widened the work (docs/findings.md). The stream carries the
+ * UNREAD ones, resolved server-side because the plans holding them are mostly
+ * finished; "show all" pulls every one, read included. Null from a server that
+ * predates them, which draws nothing.
+ */
+let unreadFindings = [];
+let allFindings = [];
 /** path → item, for resolving a parent that lives in a different group. */
 let byPathAll = new Map();
 
@@ -1196,6 +1217,8 @@ function renderWork() {
   $('work-scope').textContent = workScope === 'all' ? 'in flight only' : 'show all';
   panel.replaceChildren();
 
+  renderFindings(panel);
+
   // The shelf, above everything. Flat and in pin order: it is HIS ordering laid
   // over the index's, so grouping or nesting it by status would be the panel
   // taking the ordering back. Every row here also appears in its status group
@@ -1250,6 +1273,62 @@ function renderWork() {
         for (const k of mine) emit(k, depth + 1);
       };
       for (const item of group) if (!item.parent || !inGroup.has(item.parent)) emit(item, 0);
+    }
+  }
+}
+
+/**
+ * What widened the work since he last looked — above the shelf, because it is
+ * the one group here that is NEWS. Grouped by plan, newest first; a row opens
+ * the plan AT the finding, and ✓ is the only thing that marks one read (her
+ * reading them aloud does not: she cannot know he heard).
+ * Under "show all" the read ones come back, dimmed, so the strip is never the
+ * only record of a finding.
+ */
+function renderFindings(panel) {
+  const rows = workScope === 'all' ? allFindings : unreadFindings;
+  if (!rows.length) return;
+  const unread = rows.filter((f) => !f.read).length;
+  const open = !collapsedGroups.has('findings');
+  const hdr = el('button', 'group-head findings-head');
+  hdr.append(el('span', 'caret', open ? '▾' : '▸'));
+  hdr.append(el('span', 'group-name', 'findings'));
+  hdr.append(el('span', 'group-count', workScope === 'all' ? `${unread} new of ${rows.length}` : `${unread} new`));
+  hdr.title = 'Findings that widened the work, marked in plans (**Finding <date>:** + **Adds:**). ✓ marks one read.';
+  hdr.onclick = () => {
+    open ? collapsedGroups.add('findings') : collapsedGroups.delete('findings');
+    renderWork();
+  };
+  panel.append(hdr);
+  if (!open) return;
+  if (unread > 1) {
+    const all = el('button', 'finding-all', '✓ mark all read');
+    all.onclick = () => post('/api/findings/read', { all: true });
+    panel.append(all);
+  }
+  const byPlan = new Map();
+  for (const f of rows) (byPlan.get(f.path) ?? byPlan.set(f.path, []).get(f.path)).push(f);
+  for (const [path, list] of byPlan) {
+    const plan = el('button', 'finding-plan', list[0].plan);
+    plan.title = path;
+    plan.onclick = () => openPlanPreview(path);
+    panel.append(plan);
+    for (const f of list) {
+      const row = el('div', f.read ? 'finding read' : 'finding');
+      const body = el('button', 'finding-body');
+      body.append(el('span', 'finding-date', f.date.slice(5)));
+      body.append(document.createTextNode(` ${f.text}`));
+      body.append(el('span', 'finding-adds', `adds: ${f.adds}`));
+      body.title = f.under ? `${f.under} — line ${f.line}` : `line ${f.line}`;
+      body.onclick = () => openPlanPreview(path, f.line);
+      row.append(body);
+      if (!f.read) {
+        const ok = el('button', 'finding-ok', '✓');
+        ok.title = 'Mark read';
+        ok.onclick = () => post('/api/findings/read', { ids: [f.id] });
+        row.append(ok);
+      }
+      panel.append(row);
     }
   }
 }
@@ -1439,6 +1518,7 @@ const handlers = {
     // plan is frequently parked or shipped, so it is not in `items` at all.
     pinnedItems = m.pinned ?? [];
     pinnedPaths = new Set(pinnedItems.map((i) => i.path));
+    unreadFindings = m.findings ?? [];
     // The stream only carries the in-flight slice; in 'all' mode re-pull so the
     // panel still reflects a file that just changed.
     if (workScope === 'all') return void loadAllWork();
@@ -2934,7 +3014,14 @@ function setSectionCounts(decisions, workers) {
 }
 
 async function loadAllWork() {
-  const r = await fetch('/api/work?scope=all').then((x) => x.json());
+  const [r, f] = await Promise.all([
+    fetch('/api/work?scope=all').then((x) => x.json()),
+    // An old server 404s this; the group then shows nothing rather than failing.
+    fetch('/api/findings')
+      .then((x) => (x.ok ? x.json() : { rows: [] }))
+      .catch(() => ({ rows: [] })),
+  ]);
+  allFindings = f.rows ?? [];
   workItems = r.items;
   workTotal = r.items.length;
   renderWork();

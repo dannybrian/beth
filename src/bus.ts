@@ -3,6 +3,7 @@
 // server is currently the only subscriber. Speech (Phase 2) subscribes alongside.
 import type { HarnessEvent } from './eventlog.ts';
 import type { WorkItem, WorkRef } from './workItems.ts';
+import type { FindingRow } from './findings.ts';
 import type { TextLink } from './links.ts';
 import type { TextSpan } from './markdown.ts';
 import type { TestState } from './testRunner.ts';
@@ -132,7 +133,8 @@ export type UIMessage =
   // panel can say "69 of 571" rather than implying 69 is all there is.
   // `pinned` is Danny's own shelf, resolved server-side because a pinned plan is
   // often NOT in `items` — parked, shipped, an idea. See pins.ts.
-  | { type: 'work'; items: WorkItem[]; total: number; pinned: WorkItem[] }
+  // `findings` is the UNREAD digest (findings.ts), absent from an old server.
+  | { type: 'work'; items: WorkItem[]; total: number; pinned: WorkItem[]; findings?: FindingRow[] }
   // Server-owned pointing state. Published when a turn CONSUMES it, so the page
   // drops chips that a spoken turn just used.
   | { type: 'pointing'; refs: WorkRef[] }

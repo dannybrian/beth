@@ -94,6 +94,21 @@ whose only home is a commit message is not landed.
 (`- [ ]`) are what the harness's progress bars count — a plan with none shows
 "no tasks", which is honest, not zero percent.
 
+**Findings that widened the work.** When something found mid-task widens the
+plan (a new cause class, a change the plan did not foresee, a new task), the
+done note that found it carries the marker, two bold-led lines together:
+
+```markdown
+**Finding 2026-11-01:** what was found, in a sentence or two.
+**Adds:** what it added to the work.
+```
+
+The harness collects these into the plans panel's findings digest and opens
+the plan AT one when clicked. The lead is exact (`**Finding YYYY-MM-DD:**`, no
+variants) and `**Adds:**` is required — a discovery that added nothing is
+ordinary done-note prose and is not marked. It is the on-file half of the
+spoken finding: the director says it when it lands, the plan keeps it.
+
 ## The `/plans` skill
 
 `.claude/skills/plans/` — claims, status changes, the board, scaffolding, and
