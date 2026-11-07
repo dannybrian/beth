@@ -758,8 +758,8 @@ the conversation that produced it. Where things stand:
   dir's, seeded on the first index read, and never announced: her `say` already
   told him when it landed.
 
-- **`run.md`** — BUILT (2026-10-27, `src/appRunner.ts`); only declaring the three
-  repos is left, and that is Danny's `.env`. A run button for the project's app
+- **`run.md`** — BUILT (2026-10-27, `src/appRunner.ts`), the three repos'
+  `.env` declarations included. A run button for the project's app
   (▶/■/↻), aimed at the sporadically-opened web apps (appresent2, elvidrio, talktree).
   ⚠ The harness REMEMBERS nothing about a run: the project declares a URL, the port is
   probed for status, and a listener is signalled only after its cwd is proven inside

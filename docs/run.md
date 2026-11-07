@@ -8,8 +8,9 @@ AGREED and BUILT 2026-10-27 (`src/appRunner.ts`, her `run` tool, the strip's ▶
 with a ▾ panel). Verified on a throwaway `node --watch` app: ▶ learned the url from
 the output, Keep made it a declaration, the harness was stopped with the app up and
 a fresh one found it running, and one ■ took npm, the watcher and the server down
-together. Her tool started it from a spoken-style request. Step 5 — declaring the
-three repos — is still Danny's. The rest of this record is the design as agreed.
+together. Her tool started it from a spoken-style request. Step 5 landed the same
+day: all three repos declare `HARNESS_RUN_URL` in their `.env`, and talktree its
+`HARNESS_RUN_CMD`. The rest of this record is the design as agreed.
 
 The projects it is for are appresent2, elvidrio and
 talktree: web apps he opens SPORADICALLY to look at something, then leaves. Tulito

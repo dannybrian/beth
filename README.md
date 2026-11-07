@@ -228,9 +228,10 @@ guessed pause. Beth's replies stream back the same way as audio
 (`src/speakOut.ts`). Nothing dials in, nothing tunnels, nothing is billed
 while idle, one listener bound to 127.0.0.1; listening meters by the second
 (~$0.39/hr, itemised in the stats panel). Without an `ELEVENLABS_API_KEY` —
-or with `HARNESS_EAR=browser`, or when Scribe degrades mid-conversation — the
-ear falls back to Chrome's free Web Speech path (`ui/listen.js`): no
-punctuation, audio to Google, Chrome only. Speech out is an *excerpt* (the
+or with `HARNESS_EAR=browser` — the ear falls back to Chrome's free Web Speech
+path (`ui/listen.js`): no punctuation, audio to Google, Chrome only. Scribe
+dropping mid-sentence falls back the same way for *that* listening, and the next
+mic press tries Scribe again. Speech out is an *excerpt* (the
 page skims in seconds what audio cannot skip), the mic ducks reasoning effort
 for latency, and an autosend toggle turns conversation into dictation when you
 want to edit before sending. `docs/ear.md` and `docs/voice-plane.md` have the
@@ -288,6 +289,20 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   pin and handoff along the top, plus `→` to point Beth at it and `⌖` to find it
   on the board. Read-only on purpose: the checkboxes are
   disabled, because the harness does not write plan files.
+- **Findings**: a worker that finds something mid-task which *widens* the work
+  — a new cause, a change the plan did not foresee, a new task — marks it in the
+  plan's done note as two lines, `**Finding YYYY-MM-DD:**` and `**Adds:**`. Beth
+  says it aloud when it lands; the harness collects the marked ones into a
+  group at the top of the plans panel, grouped by plan and unread until you ✓
+  them, finished plans included (that is where findings mostly live). Clicking
+  one opens the plan *at* that line. "What widened the work this week?" is
+  answered from the same digest. The marker is strict on purpose — free-form
+  "found while fixing" prose is not parsed, because a guessed finding reads
+  exactly like a real one. `docs/findings.md`.
+- **Pictures**: paste, drop, or pick an image and it goes with the turn —
+  shrunk on the page and capped on the server, because one image the API
+  refuses poisons every turn after it. Beth's own `show` renders figures the
+  other way.
 - **The inbox**: other agents and apps can hand the director work. A producer
   appends one JSON line per hand-off to a file — `~/.director-harness/inbox/*.jsonl`,
   or a file it keeps itself, named by `HARNESS_INBOX` — and every running
@@ -298,6 +313,10 @@ commit, what's in flight, the clock, the gap since the harness was last up.
   by Beth with `close_inbox`; the acknowledgement lives in the state dir, and the
   producer's file is never touched. Arrival is a summons — spoken, once — and the
   backlog at boot is not. `docs/inbox.md` has the record shape and the reasoning.
+- **Compaction** follows your own Claude settings (`autoCompactWindow`, per
+  model) — the harness adds no policy, but it announces the start, finish and
+  size in the transcript, because a long compaction is otherwise a silence that
+  reads as a hang.
 - **`/restart`** in the composer: the harness exits cleanly and the `beth`
   wrapper starts it again on the same port, picking up whatever code is on
   disk; the page reconnects by itself and the session resumes. Refused while a
@@ -371,8 +390,8 @@ state lives in `~/.director-harness/<repo-slug>/`; persona state in
 There is a fourth layer, and it is the only one that is *written*: what you
 type into the page's gear panel is stored in the per-repo state dir and wins
 over all three — the panel says which layer is in force. Only what a page can
-set lives there (the test and build commands, today); secrets stay in the
-`.env` layers.
+set lives there — the test, build and run commands, the run url, the model —
+and secrets stay in the `.env` layers.
 
 | Env | Default | Meaning |
 |---|---|---|
@@ -414,7 +433,7 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 |---|---|
 | `session.ts` | The one long-lived streaming `query()`; turns; model/effort/permission/persona switches |
 | `askgate.ts` | `canUseTool` — questions pend, everything else becomes an approve/deny card |
-| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `suggest_reply`, `queue_decision`, `close_decision`, `close_inbox`, `close_worker`, `pending`, `plans`, `speech`, `remember`, `recall` |
+| `tools.ts` | In-process MCP: `say`, `show`, `workbench`, `run`, `suggest_reply`, `queue_decision`, `close_decision`, `close_inbox`, `close_worker`, `pending`, `plans` (findings included), `speech`, `remember`, `recall` |
 | `toolInput.ts` | Repairs a tool call written in two formats at once |
 | `personas.ts` | Machine-level directors: reader, per-repo choice, memory seeding |
 | `mouth/mouth.ts` / `speakOut.ts` / `spoken.ts` / `audioTags.ts` | Speech out: a liftable core (held lines, TTS, the bill) and its harness adapter; what is said and excerpted |
@@ -422,13 +441,16 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 | `voiceRoom.ts` | Several harnesses, one machine: the talking stick, the mute, the volume |
 | `ui/capture.js` / `ui/remoteEar.js` / `ui/pcm.js` | The page half of the ear — mic capture, PCM, the Listener-shaped remote |
 | `ui/listen.js` / `ui/speaker.js` / `ui/wire.js` | The fallback (browser) ear, the mouth, and the wire panel — native ES modules, each tested from node with a stubbed browser object |
-| `workIndex.ts` / `workItems.ts` / `plansReader.ts` | The work contract and its built-in reader |
+| `workIndex.ts` / `workItems.ts` / `plansReader.ts` / `spokenName.ts` | The work contract, its built-in reader (tasks and findings), and the spoken names |
+| `findings.ts` | Which findings have been read — the digest's state, in the state dir |
 | `inbox.ts` | The other built-in reader: hand-offs from other agents, addressed by name; the acks, never the producer's file |
 | `statusLine.ts` | The terminal's bottom line — where she is, and whether she is thinking; nothing off a TTY |
 | `planName.ts` | ⚠ The one plan-file writer — `name:` on rename, nothing else |
 | `pins.ts` / `handoff.ts` | Shelf, and terminal handoff |
 | `personal.ts` / `greeting.ts` | Memory of the person; the boot line and the onboarding offer |
 | `testRunner.ts` / `buildRunner.ts` / `runCommand.ts` | The two lights: detect, settle, run, parse failures; the build fired from the strip |
+| `appRunner.ts` | The run button: the app in its own session, status read off its port, a stop proven before it is sent |
+| `restart.ts` / `repoWeb.ts` | `/restart`'s exit code for the wrapper; the strip's link to the repo's home page |
 | `settings.ts` | The gear's store — the one config layer the page writes, and it wins |
 | `creditMeter.ts` | The usage-credit countdown, armed only past the plan windows |
 | `workbench.ts` | The pinned bench URL — what we're working on, bold at centre top |
@@ -437,12 +459,13 @@ Finer knobs (timeouts, settle intervals, the bind address) are enumerated in
 | `server.ts` / `bus.ts` / `eventlog.ts` / `state.ts` / `origin.ts` | Transport, replay, events, queues, and the Origin check on API writes |
 | `wireTap.ts` | The compact record of every SDK message the wire panel pulls |
 | `keyterms.ts` / `links.ts` / `markdown.ts` / `activity.ts` | Vocabulary, file links as offsets, span overlays, activity lines |
-| `showImage.ts` | Proving an image path before `/api/image` serves it or `show` renders it |
+| `showImage.ts` / `pasted.ts` | Proving an image path before `/api/image` serves it or `show` renders it; images pasted into a turn, sniffed and capped |
 
 `docs/` holds design records — the reasoning behind the voice plane, the ear, the
-status surface, personal context, the plans panel, the inbox, `/director-skills`,
-and the desk (agreed, unbuilt: one page over several running directors) — written
-so a fresh session can pick the work up without the conversation that produced it.
+status surface, personal context, the plans panel, the inbox, the run button,
+findings, `/director-skills`, and the desk (agreed, unbuilt: one page over several
+running directors) — written so a fresh session can pick the work up without the
+conversation that produced it.
 
 ## Machine gotcha
 
